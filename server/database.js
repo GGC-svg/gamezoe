@@ -49,6 +49,16 @@ function initDb() {
             }
         });
 
+        // Migration: Ensure games table has displayOrder
+        db.all("PRAGMA table_info(games)", (err, cols) => {
+            if (!err && cols) {
+                if (!cols.find(c => c.name === 'displayOrder')) {
+                    console.log("Migrating: Adding displayOrder column to games...");
+                    db.run("ALTER TABLE games ADD COLUMN displayOrder INTEGER DEFAULT 0");
+                }
+            }
+        });
+
         // Games Table
         // Updated to include all frontend fields and match naming (thumbnailUrl, coverUrl)
         db.run(`CREATE TABLE IF NOT EXISTS games (
