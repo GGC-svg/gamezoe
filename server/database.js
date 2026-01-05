@@ -64,7 +64,8 @@ function initDb() {
             isFree INTEGER,
             category TEXT,
             rating REAL,
-            releaseDate TEXT
+            releaseDate TEXT,
+            displayOrder INTEGER DEFAULT 0
         )`, (err) => {
             if (!err) {
                 // Check if games exist, if not seed

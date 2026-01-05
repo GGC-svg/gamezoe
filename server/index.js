@@ -18,7 +18,8 @@ app.use(express.json({ limit: '10mb' }));
 const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:3002',
-    'https://www.gamezoe.com'
+    'https://www.gamezoe.com',
+    'http://35.201.182.136'
 ];
 app.use(cors({
     origin: function (origin, callback) {
