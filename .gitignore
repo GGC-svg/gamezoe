@@ -34,6 +34,6 @@ yarn-error.log*
 *.sw?
 
 # GameZoe Specific
-server/gamezoe.db
+# server/gamezoe.db
 server/gamezoe.db-journal
 *.log
