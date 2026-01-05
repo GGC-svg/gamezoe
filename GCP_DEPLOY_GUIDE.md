@@ -80,17 +80,26 @@ npm run build
 ## 步驟 5: 啟動伺服器
 
 我們使用 PM2 來讓伺服器在背景執行，即使關閉 SSH 視窗也不會斷線。
+我們已經準備了 `ecosystem.config.cjs` 來同時啟動網頁伺服器和遊戲 Socket 伺服器 (Fish Server)。
 
 ```bash
-# 啟動後端伺服器 (後端現在已經設定好會同時提供前端頁面)
-pm2 start server/index.js --name "gamezoe"
+# 啟動所有服務 (Web + Game Socket)
+pm2 start ecosystem.config.cjs
 
-# 設定開機自動啟動
+# 儲存當前列表 (以便重開機後還原)
+pm2 save
+
+# 設定開機自動啟動 (請複製指令執行)
 pm2 startup
-
 ```
 
-伺服器預設運行在 port `3001`。
+伺服器預設運行在 port `3002` (Web) 和 `4000/9000/4002` (Game Socket)。
+
+### 驗證部署
+如果不確定檔案是否都齊全，可以執行以下指令檢查：
+```bash
+node check_prod_readiness.cjs
+```
 
 ## 步驟 6: 設定防火牆與對外頻寬
 

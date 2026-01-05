@@ -1417,7 +1417,17 @@ app.get('/api/debug/local', (req, res) => {
     });
 });
 
-// The "catchall" handler: for any request that doesn't
+// Middleware to prevent SPA fallback for static assets
+// If a file with an extension is not found by previous static handlers, 404 immediately.
+app.use((req, res, next) => {
+    // Check for common static file extensions
+    if (/\.(js|css|png|jpg|jpeg|gif|ico|svg|json|mp3|wav|ogg)$/i.test(req.path)) {
+        return res.status(404).send('Static file not found: ' + req.path);
+    }
+    next();
+});
+
+// The "catchall" handler: for any request that doesn't match above, send React App
 app.get(/(.*)/, (req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
 });

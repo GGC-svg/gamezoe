@@ -593,32 +593,8 @@ ports.forEach(port => {
             });
         });
 
-        // --- WALLET: EXCHANGE (WITHDRAW) ---
-        socket.on('exchange', (data) => {
-            const reqData = parsePayload(data);
-            const amount = parseInt(reqData.amount);
-            if (amount > 0 && socket.userId) {
-                const room = getRoom();
-                if (room.users[socket.userId]) {
-                    const currentScore = room.users[socket.userId].score;
-                    if (currentScore >= amount) {
-                        if (currentScore - amount >= 500) {
-                            room.users[socket.userId].score -= amount;
-                            console.log(`[Wallet] User ${socket.userId} Withdrew ${amount}. New Score: ${room.users[socket.userId].score}`);
-                        } else {
-                            console.warn(`[Wallet] User ${socket.userId} Withdraw Failed. Must keep 500. Current: ${currentScore}, Withdraw: ${amount}`);
-                            // Optional: Emit error to client if needed, but for now just don't deduct
-                        }
-                    } else {
-                        console.warn(`[Wallet] User ${socket.userId} Insufficient Funds for Withdraw ${amount}`);
-                    }
-                    // Force sync
-                    socket.emit('game_sync_push', {
-                        type: "score_update", userId: socket.userId, score: room.users[socket.userId].score
-                    });
-                }
-            }
-        });
+        // --- WALLET: EXCHANGE (REMOVED LEGACY DUPLICATE) ---
+        // (Use the Secure Server-Side handler below)
 
         // --- FIRE ---
         socket.on('user_fire', (data) => {
@@ -695,6 +671,13 @@ ports.forEach(port => {
             const room = getRoom();
             const user = room.users[socket.userId];
             if (!user) return;
+
+            // Rule: Must keep 500
+            if (user.score < amount + 500) {
+                console.warn(`[Exchange] Failed. Must retain 500. Score: ${user.score}, Amount: ${amount}`);
+                socket.emit('exchange_reply', { success: false, msg: "Must keep at least 500 coins" });
+                return;
+            }
 
             if (user.score >= amount) {
                 // 1. Deduct Memory (Optimistic Lock)
