@@ -128,6 +128,21 @@ function initDb() {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE
         )`);
+
+        // Wallet Transactions Table (Added for missing logs)
+        db.run(`CREATE TABLE IF NOT EXISTS wallet_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id TEXT UNIQUE,
+            user_id TEXT,
+            amount INTEGER,
+            currency TEXT DEFAULT 'gold',
+            type TEXT,
+            description TEXT,
+            status TEXT,
+            game_id TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )`);
     });
 }
 
