@@ -473,29 +473,34 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
                   <table className="w-full text-left border-collapse">
                      <thead>
                         <tr className="bg-slate-900/50 text-slate-400 text-sm uppercase tracking-wider">
-                           <th className="p-4 border-b border-slate-700">交易時間 / 單號</th>
-                           <th className="p-4 border-b border-slate-700">帳號 ID</th>
-                           <th className="p-4 border-b border-slate-700">購買項目</th>
-                           <th className="p-4 border-b border-slate-700">金額</th>
+                           <th className="p-4 border-b border-slate-700">時間 / 單號</th>
+                           <th className="p-4 border-b border-slate-700">用戶 ID</th>
+                           <th className="p-4 border-b border-slate-700">類型 / 狀態</th>
+                           <th className="p-4 border-b border-slate-700">描述</th>
+                           <th className="p-4 border-b border-slate-700 text-right">變動金額</th>
                         </tr>
                      </thead>
                      <tbody className="divide-y divide-slate-700">
-                        {purchases.map((record: PurchaseRecord, idx: number) => (
-                           <tr key={idx} className="hover:bg-slate-700/50 transition-colors">
+                        {purchases.map((record: WalletTransaction) => (
+                           <tr key={record.id} className="hover:bg-slate-700/50 transition-colors">
                               <td className="p-4 text-slate-300">
-                                 <div>{new Date(record.purchase_date).toLocaleString()}</div>
-                                 <div className="text-xs text-slate-500 font-mono mt-1">{record.order_id || '-'}</div>
+                                 <div className="text-sm">{new Date(record.created_at).toLocaleString()}</div>
+                                 <div className="text-xs text-slate-500 font-mono mt-1">{record.order_id}</div>
                               </td>
                               <td className="p-4 text-nexus-accent font-mono text-xs">
-                                 <div>{record.user_id}</div>
-                                 <div className="text-slate-500">{record.user_name}</div>
+                                 {record.user_id}
                               </td>
-                              <td className="p-4 text-white font-bold">
-                                 <div>{record.game_title}</div>
-                                 <div className="text-xs text-slate-500">{record.description || record.type}</div>
+                              <td className="p-4">
+                                 <div className="text-white font-bold">{record.type}</div>
+                                 <div className={`text-xs font-bold ${record.status === 'COMPLETED' ? 'text-green-500' : 'text-yellow-500'}`}>
+                                    {record.status}
+                                 </div>
                               </td>
-                              <td className={`p-4 font-mono font-bold ${record.type === 'top_up' || record.type === 'game_win' ? 'text-green-400' : 'text-stone-300'}`}>
-                                 {record.type === 'transfer_out' ? '-' : '+'}${record.price}
+                              <td className="p-4 text-slate-400 text-sm">
+                                 {record.description}
+                              </td>
+                              <td className={`p-4 font-mono font-bold text-right ${record.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                 {record.amount > 0 ? '+' : ''}{record.amount}
                               </td>
                            </tr>
                         ))}

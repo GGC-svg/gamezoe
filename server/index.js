@@ -1398,6 +1398,23 @@ app.post('/api/bridge/transaction/withdraw', (req, res) => {
 });
 
 // 3. CHECK STATUS (Reconciliation)
+app.get('/api/bridge/transaction/:orderId', (req, res) => {
+    const { orderId } = req.params;
+    db.get("SELECT status FROM wallet_transactions WHERE order_id = ?", [orderId], (err, row) => {
+        if (err || !row) return res.status(404).json({ code: 404, message: "Not Found" });
+        res.json({ code: 200, data: { status: row.status } });
+    });
+});
+
+// --- ADMIN API EXTENSIONS ---
+
+// Get All Wallet Transactions (for Admin Dashboard)
+app.get('/api/admin/transactions', (req, res) => {
+    db.all("SELECT * FROM wallet_transactions ORDER BY created_at DESC LIMIT 100", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
 app.post('/api/bridge/transaction/check', (req, res) => {
     const { order_id } = req.body;
     db.get("SELECT status FROM wallet_transactions WHERE order_id = ?", [order_id], (err, row) => {
