@@ -1,0 +1,21 @@
+{
+  "name": "cirucscharly",
+  "description": "",
+  "readme": "",
+  "repository": "",
+  "version": "0.0.0",
+  "devDependencies": {
+    "coffeescript": "^2.7.0",
+    "grunt": "*",
+    "grunt-contrib-clean": "*",
+    "grunt-contrib-connect": "*",
+    "grunt-contrib-copy": "*",
+    "grunt-contrib-cssmin": "*",
+    "grunt-contrib-htmlmin": "*",
+    "grunt-contrib-jshint": "*",
+    "grunt-contrib-uglify": "*",
+    "grunt-contrib-watch": "*",
+    "grunt-curl": "*",
+    "grunt-processhtml": "*"
+  }
+}

@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+
+  <title>Cocos Creator | fish</title>
+
+  <!--http://www.html5rocks.com/en/mobile/mobifying/-->
+  <meta name="viewport"
+    content="width=device-width,user-scalable=no,initial-scale=1, minimum-scale=1,maximum-scale=1" />
+
+  <!--https://developer.apple.com/library/safari/documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html-->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
+
+  <!-- force webkit on 360 -->
+  <meta name="renderer" content="webkit" />
+  <meta name="force-rendering" content="webkit" />
+  <!-- force edge on IE -->
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+  <meta name="msapplication-tap-highlight" content="no">
+
+  <!-- force full screen on some browser -->
+  <meta name="full-screen" content="yes" />
+  <meta name="x5-fullscreen" content="true" />
+  <meta name="360-fullscreen" content="true" />
+
+  <!-- force screen orientation on some browser -->
+  <meta name="screen-orientation" content="landscape" />
+  <meta name="x5-orientation" content="landscape">
+
+  <!--fix fireball/issues/3568 -->
+  <!--<meta name="browsermode" content="application">-->
+  <meta name="x5-page-mode" content="app">
+
+  <!--<link rel="apple-touch-icon" href=".png" />-->
+  <!--<link rel="apple-touch-icon-precomposed" href=".png" />-->
+
+  <link rel="stylesheet" type="text/css" href="style-mobile.css" />
+
+</head>
+
+<body>
+  <canvas id="GameCanvas" oncontextmenu="event.preventDefault()" tabindex="0"></canvas>
+  <div id="splash">
+
+
+    <div class="progress-bar stripes">
+      <h1><b id="a"></b></h1>
+    </div>
+  </div>
+  <script src="src/settings.js" charset="utf-8"></script>
+
+  <!-- LOGIN DATA SYNC -->
+  <script>
+    (function () {
+      // 1. Get Platform User ID from URL
+      const urlParams = new URLSearchParams(window.location.search);
+      let platformUserId = urlParams.get('userId');
+
+      // [FIX] Fallback for Dev/Refresh
+      if (!platformUserId) {
+        console.warn("[LoginSync] No userId in URL. Using Fallback Test ID.");
+        platformUserId = "102746929077306565219";
+      }
+
+      if (platformUserId) {
+        console.log("[LoginSync] Detected Platform User:", platformUserId);
+
+        // 2. Intercept XMLHttpRequest (Cocos usually uses this or fetch)
+        const originalOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function (method, url, async, user, password) {
+          // Check if calling Guest/Login endpoint on Game Server
+          // URL might be relative "http://localhost:4002/guest" or just "/guest"
+          if ((url.includes('/guest') || url.includes('/login')) && !url.includes('account=')) {
+            // Append the account param
+            const separator = url.includes('?') ? '&' : '?';
+            url = url + separator + 'account=' + encodeURIComponent(platformUserId);
+            console.log("[LoginSync] redirected XHR:", url);
+          }
+          return originalOpen.apply(this, arguments);
+        };
+
+        // 3. Intercept Fetch (Just in case)
+        const originalFetch = window.fetch;
+        window.fetch = function (url, options) {
+          if (typeof url === 'string' && (url.includes('/guest') || url.includes('/login')) && !url.includes('account=')) {
+            const separator = url.includes('?') ? '&' : '?';
+            url = url + separator + 'account=' + encodeURIComponent(platformUserId);
+            console.log("[LoginSync] redirected Fetch:", url);
+          }
+          return originalFetch.apply(this, [url, options]);
+        };
+      }
+    })();
+  </script>
+
+  <script src="main.js" charset="utf-8"></script>
+
+  <!-- WALLET BAR INJECTION START -->
+  <style>
+    /* Toolbar Styles */
+    #wallet-toolbar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 50px;
+      background: rgba(0, 0, 0, 0.85);
+      border-bottom: 2px solid #00d2ff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      box-sizing: border-box;
+      z-index: 9999;
+      color: white;
+      font-family: "Microsoft JhengHei", sans-serif;
+    }
+
+    .wallet-info {
+      display: flex;
+      gap: 20px;
+      font-size: 16px;
+    }
+
+    .highlight {
+      color: #ffd700;
+      font-weight: bold;
+    }
+
+    .btn-wallet {
+      background: linear-gradient(180deg, #00d2ff 0%, #0078ff 100%);
+      border: 1px solid #fff;
+      color: white;
+      padding: 5px 15px;
+      border-radius: 15px;
+      cursor: pointer;
+      font-weight: bold;
+      text-shadow: 1px 1px 1px black;
+    }
+
+    .btn-wallet:hover {
+      transform: scale(1.05);
+    }
+
+    .btn-wallet:active {
+      transform: scale(0.95);
+    }
+
+    /* Modals */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    }
+
+    .modal-box {
+      background: #001a33;
+      border: 2px solid #00d2ff;
+      border-radius: 10px;
+      padding: 20px;
+      color: white;
+      text-align: center;
+      font-family: "Microsoft JhengHei", sans-serif;
+      box-shadow: 0 0 20px #00d2ff;
+    }
+
+    .modal-box input {
+      padding: 8px;
+      font-size: 16px;
+      margin: 10px;
+      width: 150px;
+      background: #003366;
+      border: 1px solid #0078ff;
+      color: white;
+    }
+
+    .modal-box button {
+      margin: 5px;
+      padding: 5px 15px;
+      cursor: pointer;
+    }
+  </style>
+
+  <div id="wallet-toolbar">
+    <div class="wallet-left">
+      <strong>捕魚大師 Fish Master</strong>
+    </div>
+    <div class="wallet-info">
+      <span>平台金幣: <span id="ui-gold" class="highlight">讀取中...</span></span>
+      <span>遊戲點數: <span id="ui-score" class="highlight">0</span></span>
+    </div>
+    <div class="wallet-actions">
+      <button class="btn-wallet" onclick="Wallet.openDeposit()">📥 換碼(入金)</button>
+      <button class="btn-wallet" onclick="Wallet.openWithdraw()">📤 出金(結算)</button>
+    </div>
+  </div>
+
+  <!-- DEPOSIT MODAL -->
+  <div id="modal-deposit" class="modal-overlay">
+    <div class="modal-box">
+      <h3>兌換遊戲點數</h3>
+      <p>1 金幣 = 1 點數</p>
+      <p>您有 <span id="modal-gold-av">0</span> 金幣</p>
+      <input type="number" id="inp-deposit" placeholder="輸入金幣數量">
+      <br>
+      <button onclick="Wallet.confirmDeposit()" style="background:#0f0;color:#000;">確認</button>
+      <button onclick="Wallet.closeModals()" style="background:#f00;color:#fff;">取消</button>
+    </div>
+  </div>
+
+  <!-- WITHDRAW MODAL -->
+  <div id="modal-withdraw" class="modal-overlay">
+    <div class="modal-box">
+      <h3>結算遊戲點數</h3>
+      <p>1 點數 = 1 金幣</p>
+      <p>可結算點數: <span id="modal-score-av">0</span></p>
+      <input type="number" id="inp-withdraw" placeholder="輸入點數數量">
+      <br>
+      <button onclick="Wallet.confirmWithdraw()" style="background:#0f0;color:#000;">確認</button>
+      <button onclick="Wallet.closeModals()" style="background:#f00;color:#fff;">取消</button>
+    </div>
+  </div>
+
+  <script>
+    window.Wallet = {
+      getUserId: function () {
+        // 1. URL Param
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('userId')) return urlParams.get('userId');
+
+        // [DEBUG] Fallback for testing display
+        console.warn("[Wallet] No userId in URL. Using Test ID: 102746929077306565219");
+        return "102746929077306565219";
+      },
+
+      sysGold: 0,
+      gameScore: 0,
+
+      init: function () {
+        this.refresh();
+        setInterval(() => this.refresh(), 3000); // Auto refresh gold
+        setInterval(() => this.fetchGameScore(), 1000); // Poll Game Score from Client
+      },
+
+      fetchGameScore: function () {
+        // Try to read from Cocos
+        if (window.cc && window.cc.yqs && window.cc.yqs.userMgr && window.cc.yqs.userMgr.user) {
+          this.gameScore = window.cc.yqs.userMgr.user.score; // Is this reliable?
+          document.getElementById('ui-score').innerText = Math.floor(this.gameScore).toLocaleString();
+        }
+      },
+
+      refresh: async function () {
+        const uid = this.getUserId();
+        if (!uid) return;
+
+        try {
+          // FIX: Use Absolute URL for Platform API (Port 3002)
+          const res = await fetch('http://localhost:3002/api/bridge/balance/' + uid, {
+            headers: { 'x-api-key': 'gamezoe-secure-bridge-key' }
+          });
+          const data = await res.json();
+          if (data.success) {
+            this.sysGold = data.gold;
+            document.getElementById('ui-gold').innerText = Math.floor(data.gold).toLocaleString();
+
+            // Sync Score from API (DB Source of Truth)
+            if (data.gameScore !== undefined) {
+              this.gameScore = data.gameScore;
+              document.getElementById('ui-score').innerText = Math.floor(data.gameScore).toLocaleString();
+            }
+          }
+        } catch (e) { console.error(e); }
+      },
+
+      openDeposit: function () {
+        this.refresh();
+        document.getElementById('modal-gold-av').innerText = this.sysGold;
+        document.getElementById('ui-score').innerText = Math.floor(this.gameScore); // Sync
+        document.getElementById('modal-deposit').style.display = 'flex';
+      },
+
+      openWithdraw: function () {
+        this.fetchGameScore(); // Ensure latest
+        document.getElementById('modal-score-av').innerText = Math.floor(this.gameScore);
+        document.getElementById('modal-withdraw').style.display = 'flex';
+      },
+
+      closeModals: function () {
+        document.querySelectorAll('.modal-overlay').forEach(e => e.style.display = 'none');
+      },
+
+      confirmDeposit: async function () {
+        const amount = parseInt(document.getElementById('inp-deposit').value);
+        const uid = this.getUserId();
+        if (!amount || amount <= 0) return alert("請輸入數量");
+        if (!uid) return alert("錯誤: 無法確認用戶身分 (Missing userId)");
+
+        try {
+          // 1. Call Platform Bridge API (Deposit)
+          // Hardcoded to localhost:3002 for now. Ideally should be config.
+          const platformApiUrl = 'http://localhost:3002/api/bridge/transaction/deposit';
+
+          // alert("Debug: Calling " + platformApiUrl);
+          console.log("[Wallet] Sending Deposit Request:", { userId: uid, amount: amount, url: platformApiUrl });
+
+          const res = await fetch(platformApiUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': 'gamezoe-secure-bridge-key'
+            },
+            body: JSON.stringify({ userId: uid, amount: amount, gameId: 'fish' })
+          });
+
+          const data = await res.json();
+          console.log("[Wallet] Deposit Response:", data);
+
+          if (res.ok && data.success) {
+            alert("換碼成功!\n單號: " + (data.orderId || "N/A"));
+            this.closeModals();
+            this.refresh();
+            // Poll for game update
+            setTimeout(() => this.refresh(), 2000);
+          } else {
+            // Server might return 'error' OR 'message'
+            const errMsg = data.message || data.error || "Unknown Error";
+            alert("換碼失敗: " + errMsg);
+          }
+        } catch (e) {
+          console.error("[Wallet] Deposit Exception:", e);
+          alert("請求錯誤: " + e.message);
+        }
+      },
+
+      confirmWithdraw: async function () {
+        const amount = parseInt(document.getElementById('inp-withdraw').value);
+        const uid = this.getUserId();
+        if (!amount || amount <= 0) return alert("請輸入數量");
+        if (!uid) return alert("錯誤: 無法確認用戶身分 (Missing userId)");
+
+        try {
+          // 1. Get Game Server URL from Cocos Net Module
+          let gameApiUrl = "";
+
+          // Debugging connectivity
+          console.log("[Wallet] Checking Network:", {
+            cc: !!window.cc,
+            yqs: window.cc && !!window.cc.yqs,
+            net: window.cc && window.cc.yqs && !!window.cc.yqs.net,
+            ip: window.cc && window.cc.yqs && window.cc.yqs.net ? window.cc.yqs.net.ip : "N/A"
+          });
+
+          if (window.cc && window.cc.yqs && window.cc.yqs.net && window.cc.yqs.net.ip) {
+            let baseUrl = window.cc.yqs.net.ip;
+            // Ensure it has protocol (Fish connection usually raw IP)
+            if (!baseUrl.startsWith('http')) {
+              // Fish Mocker ports: 4000, 9000, 4002.
+              // The 'ip' property might be just '127.0.0.1:4002' or just '127.0.0.1'.
+              // We need to be careful. Let's assume it includes port if needed, or we might need to find port.
+              baseUrl = 'http://' + baseUrl;
+            }
+            gameApiUrl = baseUrl + '/api/game/v1/transaction/withdraw';
+          } else {
+            // FALLBACK for Dev/Mock Environment
+            console.warn("[Wallet] Network IP missing, using localhost:4002 fallback");
+            gameApiUrl = 'http://localhost:4002/api/game/v1/transaction/withdraw';
+
+            // Detailed debug alert
+            // const debugState = [
+            //   "cc: " + (!!window.cc),
+            //   "yqs: " + (window.cc && !!window.cc.yqs),
+            //   "net: " + (window.cc && window.cc.yqs && !!window.cc.yqs.net),
+            //   "ip: " + (window.cc && window.cc.yqs && window.cc.yqs.net ? window.cc.yqs.net.ip : "undefined")
+            // ].join(", ");
+            // return alert("錯誤: 遊戲未連線，無法獲取伺服器地址\nDebug: " + debugState);
+          }
+
+          console.log("[Wallet] Sending Withdraw Request:", { url: gameApiUrl, body: { user_id: uid, amount: amount } });
+
+          // 2. Call Game Server Withdraw API
+          const res = await fetch(gameApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: uid, amount: amount })
+          });
+
+          const data = await res.json();
+          console.log("[Wallet] Withdraw Response:", data);
+
+          if (res.ok && data.code === 200) {
+            alert("結算成功!\n單號: " + data.data.order_id + "\n剩餘點數: " + data.data.balance);
+            this.closeModals();
+            this.refresh();
+            // Also try to refresh Platform Balance in iframe if possible (handled by confirmDeposit via refreshing?)
+            setTimeout(() => this.refresh(), 2000);
+          } else {
+            alert("結算失敗: " + (data.message || "Unknown Error"));
+          }
+        } catch (e) {
+          console.error("[Wallet] Withdraw Exception:", e);
+          alert("請求錯誤: " + e.message);
+        }
+      }
+    };
+
+    // Start
+    setTimeout(() => Wallet.init(), 2000); // Wait for things to load
+  </script>
+
+</body>
+
+</html>

@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>商人物語 (Merchant Story) - 重製版</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', serif;
+            background: #f0fdf4;
+            color: #1e293b;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        #game-container {
+            width: 100%;
+            max-width: 600px;
+            background: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: #166534;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+
+        #stats-bar {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 1rem;
+            background: #dcfce7;
+            border-bottom: 1px solid #86efac;
+            font-weight: bold;
+        }
+
+        #main-area {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+        }
+
+        .card {
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background: #fff;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        .market-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .market-item:last-child {
+            border-bottom: none;
+        }
+
+        .price-up {
+            color: #ef4444;
+        }
+
+        .price-down {
+            color: #22c55e;
+        }
+
+        button {
+            background: #166534;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: #15803d;
+        }
+
+        button:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
+        }
+
+        .actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        #log-area {
+            height: 100px;
+            overflow-y: scroll;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 0.5rem;
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+
+        .screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .btn-lg {
+            font-size: 1.5rem;
+            padding: 1rem 3rem;
+            margin-top: 2rem;
+            border-radius: 2rem;
+        }
+
+        .red-text {
+            color: #ef4444;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="game-container">
+        <header>
+            <h1>商人物語 (重製版)</h1>
+            <div style="font-size: 0.8rem; opacity: 0.8">目標：在 30 天內賺取 $1,000,000</div>
+        </header>
+
+        <div id="stats-bar">
+            <span>📅 第 <span id="day-display">1</span> 天</span>
+            <span>💰 $<span id="money-display">1000</span></span>
+            <span>📦 <span id="inventory-display">0</span>/50</span>
+        </div>
+
+        <div id="main-area">
+            <div class="card">
+                <h3>🏙️ 城鎮市場 (價格每日變動)</h3>
+                <div id="market-list"></div>
+            </div>
+
+            <div class="card" style="background: #fdf2f8;">
+                <h3>🎒 我的倉庫</h3>
+                <div id="inventory-list">沒有貨物</div>
+            </div>
+
+            <button id="next-day-btn" style="width: 100%; padding: 1rem; font-size: 1.2rem; background: #2563eb;">🌙
+                結束這一天 (前往明天)</button>
+        </div>
+
+        <div id="log-area"></div>
+    </div>
+
+    <!-- Start / End Screens -->
+    <div id="start-screen" class="screen">
+        <h1 style="color: #4ade80; font-size: 3rem; margin-bottom: 0;">商人物語</h1>
+        <p>低買高賣，成為傳奇大亨！</p>
+        <button class="btn-lg" onclick="startGame()">開始經商</button>
+    </div>
+
+    <div id="end-screen" class="screen hidden">
+        <h1 id="end-title">遊戲結束</h1>
+        <p id="end-message"></p>
+        <p>最終資金: $<span id="final-money"></span></p>
+        <button class="btn-lg" onclick="location.reload()">重新挑戰</button>
+    </div>
+
+    <script>
+        // Game State
+        const MAX_DAYS = 30;
+        const TARGET_MONEY = 1000000;
+        let day = 1;
+        let money = 1000;
+        let capacity = 50;
+        let currentCapacity = 0;
+
+        // Item Definitions
+        const items = [
+            { id: 'apple', name: '🍎 新鮮蘋果', basePrice: 10, volatility: 5 },
+            { id: 'cloth', name: '👕 亞麻布料', basePrice: 50, volatility: 20 },
+            { id: 'sword', name: '⚔️ 鐵製長劍', basePrice: 200, volatility: 80 },
+            { id: 'gem', name: '💎 神秘寶石', basePrice: 1000, volatility: 500 },
+            { id: 'ancient', name: '🏺 古代遺物', basePrice: 5000, volatility: 3000 }
+        ];
+
+        let marketPrices = {};
+        let inventory = {};
+
+        // Init
+        items.forEach(i => {
+            inventory[i.id] = 0;
+            updatePrice(i);
+        });
+
+        // DOM Elements
+        const moneyEl = document.getElementById('money-display');
+        const dayEl = document.getElementById('day-display');
+        const capEl = document.getElementById('inventory-display');
+        const marketListEl = document.getElementById('market-list');
+        const invListEl = document.getElementById('inventory-list');
+        const logEl = document.getElementById('log-area');
+
+        function startGame() {
+            document.getElementById('start-screen').classList.add('hidden');
+            renderMarket();
+            log("遊戲開始！祝你生意興隆！");
+        }
+
+        function updatePrice(item) {
+            // Random fluctuation: -50% to +50%
+            const factor = 0.5 + Math.random();
+            marketPrices[item.id] = Math.floor(item.basePrice * factor);
+        }
+
+        function nextDay() {
+            if (day >= MAX_DAYS) {
+                endGame();
+                return;
+            }
+
+            day++;
+            // Price Updates
+            items.forEach(i => updatePrice(i));
+
+            // Random Events
+            const rand = Math.random();
+            if (rand < 0.1) {
+                log("🔥 倉庫發生小火災！損失了一些貨物...", true);
+                // Lose 1 random item
+                const keys = Object.keys(inventory).filter(k => inventory[k] > 0);
+                if (keys.length > 0) {
+                    const k = keys[Math.floor(Math.random() * keys.length)];
+                    inventory[k] = Math.max(0, inventory[k] - 5);
+                }
+            } else if (rand > 0.9) {
+                log("📰 市場傳聞：寶石價格暴漲！", true);
+                marketPrices['gem'] *= 2;
+            }
+
+            updateUI();
+            log(`第 ${day} 天開始。市場價格已更新。`);
+        }
+
+        function buy(itemId) {
+            const price = marketPrices[itemId];
+            if (money >= price && currentCapacity < capacity) {
+                money -= price;
+                inventory[itemId]++;
+                currentCapacity++;
+                updateUI();
+                log(`買入 ${items.find(i => i.id === itemId).name} (-$${price})`);
+            } else {
+                if (money < price) log("資金不足！", true);
+                else log("倉庫已滿！", true);
+            }
+        }
+
+        function sell(itemId) {
+            if (inventory[itemId] > 0) {
+                const price = marketPrices[itemId];
+                money += price;
+                inventory[itemId]--;
+                currentCapacity--;
+                updateUI();
+            }
+        }
+
+        function updateUI() {
+            // Recalculate capacity to prevent desync bugs (e.g. after fire event)
+            currentCapacity = Object.values(inventory).reduce((a, b) => a + b, 0);
+
+            moneyEl.innerText = money.toLocaleString();
+            dayEl.innerText = day;
+            capEl.innerText = currentCapacity;
+
+            renderMarket();
+            renderInventory();
+        }
+
+        function renderMarket() {
+            marketListEl.innerHTML = '';
+            items.forEach(item => {
+                const price = marketPrices[item.id];
+                const diff = price - item.basePrice;
+                const priceClass = diff > 0 ? 'price-up' : 'price-down';
+                const div = document.createElement('div');
+                div.className = 'market-item';
+                div.innerHTML = `
+                    <div>
+                        <div style="font-weight:bold">${item.name}</div>
+                        <div style="font-size:0.9rem; color:#64748b">基準價: $${item.basePrice}</div>
+                    </div>
+                    <div style="text-align:right">
+                        <div style="font-weight:bold; font-size:1.1rem" class="${priceClass}">$${price.toLocaleString()}</div>
+                        <div class="actions">
+                            <button onclick="buy('${item.id}')">買入</button>
+                        </div>
+                    </div>
+                `;
+                marketListEl.appendChild(div);
+            });
+        }
+
+        function renderInventory() {
+            const owned = items.filter(i => inventory[i.id] > 0);
+            if (owned.length === 0) {
+                invListEl.innerHTML = "沒有貨物";
+                return;
+            }
+            invListEl.innerHTML = '';
+            owned.forEach(item => {
+                const count = inventory[item.id];
+                const price = marketPrices[item.id];
+                const div = document.createElement('div');
+                div.className = 'market-item';
+                div.innerHTML = `
+                    <div>
+                        <div style="font-weight:bold">${item.name}</div>
+                        <div style="color:#166534">持有: ${count}</div>
+                    </div>
+                    <div>
+                        <button onclick="sell('${item.id}')" style="background:#eab308; color:#000">賣出 ($${price})</button>
+                    </div>
+                `;
+                invListEl.appendChild(div);
+            });
+        }
+
+        function log(msg, isUrgent = false) {
+            const p = document.createElement('div');
+            p.innerText = msg;
+            if (isUrgent) p.className = 'red-text';
+            logEl.prepend(p);
+        }
+
+        function endGame() {
+            const endScreen = document.getElementById('end-screen');
+            const endTitle = document.getElementById('end-title');
+            const endMsg = document.getElementById('end-message');
+            document.getElementById('final-money').innerText = money.toLocaleString();
+
+            endScreen.classList.remove('hidden');
+            if (money >= TARGET_MONEY) {
+                endTitle.innerText = "🏆 商業傳奇！";
+                endTitle.style.color = "#fbbf24";
+                endMsg.innerText = "你成功達成了百萬富翁的目標！";
+                // Submit Score logic here if needed
+            } else {
+                endTitle.innerText = "經商失敗";
+                endTitle.style.color = "#94a3b8";
+                endMsg.innerText = `距離目標 $${TARGET_MONEY.toLocaleString()} 還差一點...`;
+            }
+        }
+
+        document.getElementById('next-day-btn').onclick = nextDay;
+
+    </script>
+</body>
+
+</html>

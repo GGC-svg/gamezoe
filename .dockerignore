@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+.git
+.vscode
+public/games/*/node_modules
+server/gamezoe.db

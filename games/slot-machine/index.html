@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>Slot Machine | Online Casino Game</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="assets/css/main.css">
+  <script>
+    var slotMachineConfig = {
+      //
+    }
+  </script>
+  <script src="assets/js/main.js"></script>
+  <script async defer src="https://buttons.github.io/buttons.js"></script>
+  <style>
+    body {
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      background-color: #05020f;
+    }
+
+    #slot-machine {
+      flex: 1 1 auto;
+      min-height: 0;
+      position: relative;
+    }
+
+    /* Blocker to prevent gambling while processing */
+    #game-blocker {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 900;
+      /* Below modals (1000) but above game */
+      display: none;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-size: 2em;
+      font-family: sans-serif;
+      font-weight: bold;
+      backdrop-filter: blur(2px);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="game-toolbar">
+    <div class="brand">
+      <strong>GameZoe Slots</strong>
+    </div>
+    <div class="wallet-controls">
+      <div class="balance-item">
+        <span>💰 金幣: </span>
+        <span id="gold-display">讀取中...</span>
+        <button onclick="refreshGold()">↻</button>
+      </div>
+      <div class="balance-item">
+        <span>🎮 遊戲點數: </span>
+        <span id="game-balance-display">讀取中...</span>
+      </div>
+      <div class="actions">
+        <button class="btn-action" onclick="openDepositModal()">📥 換碼 (入金)</button>
+        <button class="btn-action" onclick="openWithdrawModal()">📤 出金 (結算)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deposit Modal -->
+  <div id="deposit-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h3>金幣換取遊戲點數 (換碼)</h3>
+      <p>1 金幣 = 1 點數</p>
+      <input type="number" id="deposit-amount" placeholder="輸入數量" />
+      <div class="modal-buttons">
+        <button onclick="confirmDeposit()">確認</button>
+        <button onclick="closeModal('deposit-modal')">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Withdraw Modal -->
+  <div id="withdraw-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h3>遊戲點數兌換金幣 (出金)</h3>
+      <p>點數高於 500 的部分才能提領。</p>
+      <p>可提領金額: <span id="max-withdraw">0</span></p>
+      <input type="number" id="withdraw-amount" placeholder="輸入數量" />
+      <div class="modal-buttons">
+        <button onclick="confirmWithdraw()">確認</button>
+        <button onclick="closeModal('withdraw-modal')">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="game-blocker">
+    <div>🔒 交易處理中...</div>
+  </div>
+  <div id="slot-machine"></div>
+
+  <style>
+    .game-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 20px;
+      background: #1a1a2e;
+      color: white;
+      border-bottom: 2px solid #e94560;
+      font-family: "Microsoft JhengHei", sans-serif;
+    }
+
+    .wallet-controls {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .balance-item {
+      background: #16213e;
+      padding: 5px 10px;
+      border-radius: 5px;
+      font-family: monospace;
+      font-size: 1.1em;
+    }
+
+    .btn-action {
+      background: #e94560;
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .btn-action:hover {
+      background: #ff5e78;
+    }
+
+    /* Modal Styles */
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 1000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: "Microsoft JhengHei", sans-serif;
+    }
+
+    .modal-content {
+      background: #1a1a2e;
+      padding: 20px;
+      border-radius: 8px;
+      color: white;
+      text-align: center;
+      border: 1px solid #e94560;
+    }
+
+    .modal-content input {
+      padding: 8px;
+      margin: 10px 0;
+      width: 100px;
+      color: black;
+    }
+
+    .modal-buttons button {
+      margin: 5px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+  </style>
+
+  <script>
+    // --- CORE SYNC LOGIC ---
+    const GAME_INTERNAL_KEY = 'smg-balance'; // The key main.js hardcodedly uses
+    const userId = new URLSearchParams(window.location.search).get('userId');
+    const USER_STORAGE_KEY = userId ? `smg-balance-${userId}` : null;
+    const API_BASE = window.location.origin + '/api/bridge';
+
+    console.log("Slot Machine Boot. UserID:", userId);
+
+    // 1. PRE-GAME INJECTION: Prepare the environment before main.js reads it
+    function initGameSession() {
+      if (!USER_STORAGE_KEY) {
+        // Guest: Force Game to see 0
+        localStorage.setItem(GAME_INTERNAL_KEY, 0);
+      } else {
+        // User: Load their personal balance
+        let userBal = localStorage.getItem(USER_STORAGE_KEY);
+
+        // RULE: "New user gets 500"
+        if (userBal === null) {
+          userBal = 500;
+          localStorage.setItem(USER_STORAGE_KEY, 500);
+        }
+
+        // Inject into Game's expected key
+        localStorage.setItem(GAME_INTERNAL_KEY, userBal);
+        console.log(`Session Loaded. Balance ${userBal} synced to game.`);
+      }
+    }
+
+    // Run immediately
+    initGameSession();
+
+    // 2. STATE WATCHER: Sync Game's changes back to User Storage
+    // The game writes to GAME_INTERNAL_KEY. We must copy that to USER_STORAGE_KEY.
+    setInterval(updateBalanceDisplay, 500); // Faster polling for smoother UI
+
+    function updateBalanceDisplay() {
+      // Logic: The "Truth" is now what the game is doing (GAME_INTERNAL_KEY), 
+      // because the user is spinning. We explicitly trust the game's key while playing.
+
+      let currentBal = parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
+
+      // Verify Sync
+      if (USER_STORAGE_KEY) {
+        // Persist current game state to user storage
+        localStorage.setItem(USER_STORAGE_KEY, currentBal);
+      }
+
+      // Update Top Bar UI
+      document.getElementById('game-balance-display').innerText = currentBal.toFixed(2);
+
+      // Update Withdraw Modal if open
+      const withdrawModal = document.getElementById('withdraw-modal');
+      if (withdrawModal && withdrawModal.style.display === 'flex') {
+        const max = Math.max(0, currentBal - 500);
+        document.getElementById('max-withdraw').innerText = max.toFixed(2);
+      }
+    }
+    // --- END SYNC LOGIC ---
+
+    // Old helpers updated to use the new "Trust Game Key" philosophy
+    function getGameBalance() {
+      return parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
+    }
+
+    function setGameBalance(amount) {
+      // Write to BOTH to ensure consistency across reload
+      localStorage.setItem(GAME_INTERNAL_KEY, amount);
+      if (USER_STORAGE_KEY) {
+        localStorage.setItem(USER_STORAGE_KEY, amount);
+      }
+      window.location.reload();
+    }
+
+    async function refreshGold() {
+      if (!userId) {
+        document.getElementById('gold-display').innerText = '未登入';
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/balance/${userId}`, {
+          headers: { 'x-api-key': 'gamezoe-secure-bridge-key' }
+        });
+        if (!res.ok) throw new Error("API Error " + res.status);
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('gold-display').innerText = Math.floor(data.gold).toLocaleString();
+        } else {
+          document.getElementById('gold-display').innerText = '錯誤';
+        }
+      } catch (e) {
+        console.error(e);
+        document.getElementById('gold-display').innerText = '連線失敗';
+      }
+    }
+
+    function openDepositModal() {
+      document.getElementById('deposit-modal').style.display = 'flex';
+    }
+
+    function openWithdrawModal() {
+      const bal = getGameBalance();
+      const max = Math.max(0, bal - 500);
+      document.getElementById('max-withdraw').innerText = max.toFixed(2);
+      document.getElementById('withdraw-modal').style.display = 'flex';
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).style.display = 'none';
+    }
+
+    async function confirmDeposit() {
+      const amount = parseFloat(document.getElementById('deposit-amount').value);
+      if (!amount || amount <= 0) return alert('請輸入有效數量');
+
+      // START BLOCKER
+      const btn = event.target;
+      const originalText = btn.innerText;
+      btn.innerText = "處理中...";
+      btn.disabled = true;
+      document.getElementById('game-blocker').style.display = 'flex';
+
+      try {
+        const res = await fetch(`${API_BASE}/transfer`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': 'gamezoe-secure-bridge-key'
+          },
+          body: JSON.stringify({
+            userId,
+            amount: amount,
+            type: 'DEPOSIT', // Gold -> Game
+            externalTransactionId: 'slot-' + Date.now(),
+            description: 'Transfer to Slot Machine'
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          const currentBal = getGameBalance();
+          // We fake the update in localStorage. The game reads this on load.
+          // We don't send balance TO server in this simplified model, 
+          // the server only tracks Gold. Game tracks Game Balance locally.
+          setGameBalance(currentBal + amount);
+          alert('換碼成功！');
+          closeModal('deposit-modal');
+        } else {
+          alert('換碼失敗: ' + data.message);
+        }
+      } catch (e) {
+        alert('連線失敗，請稍後再試');
+        console.error(e);
+      } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+        document.getElementById('game-blocker').style.display = 'none';
+      }
+    }
+
+    async function confirmWithdraw() {
+      // 1. Critical Check: Re-read balance immediately before logic
+      const currentBal = getGameBalance();
+      const max = Math.max(0, currentBal - 500);
+      const amount = parseFloat(document.getElementById('withdraw-amount').value);
+
+      if (!amount || amount <= 0) return alert('請輸入有效數量');
+      if (amount > max) return alert('無法提領超過可轉換金額: ' + max);
+
+      const btn = event.target;
+      const originalText = btn.innerText;
+      btn.innerText = "處理中...";
+      btn.disabled = true;
+
+      // START BLOCKER
+      document.getElementById('game-blocker').style.display = 'flex';
+
+      // 2. SAFETY LOCK: DEDUCT BALANCE LOCAL FIRST (Optimistic Deletion)
+      setGameBalance(currentBal - amount);
+
+      try {
+        const res = await fetch(`${API_BASE}/transfer`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': 'gamezoe-secure-bridge-key'
+          },
+          body: JSON.stringify({
+            userId,
+            amount: amount, // Withdraw adds Gold
+            type: 'WITHDRAW', // Game -> Gold
+            externalTransactionId: 'slot-wd-' + Date.now(),
+            description: 'Transfer from Slot Machine'
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          // 3a. Success: Credits are already gone. Just update Gold UI.
+          alert('出金成功！');
+          closeModal('withdraw-modal');
+          refreshGold();
+          setTimeout(() => window.location.reload(), 500);
+        } else {
+          throw new Error(data.message || 'Unknown Error');
+        }
+      } catch (e) {
+        // 3b. Failure: REFUND the credits back to the game.
+        console.error(e);
+        alert('出金失敗: ' + e.message + '\n點數已退回遊戲帳戶');
+
+        // Re-read current balance (in case they somehow gained more?) and add back
+        // Actually safer to add to what we deducted from.
+        // We know we deducted 'amount'. So we add 'amount' back.
+        // Re-reading localStorage is safest in case weird race, but let's stick to simple refund.
+        const refundBal = getGameBalance();
+        setGameBalance(refundBal + amount);
+      } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+        // Only hide blocker if we aren't reloading (failure or deposit success without reload)
+        // But logic above has reload on success. 
+        // Logic: if success, we reload, so keeping blocker is fine. 
+        // If fail, we hide blocker.
+        // Actually deposit success sets timeout reload too now.
+        // Let's hide it for consistency.
+        document.getElementById('game-blocker').style.display = 'none';
+      }
+    }
+
+    // Init
+    refreshGold();
+    updateBalanceDisplay();
+  </script>
+</body>
+
+</html>
