@@ -58,6 +58,7 @@ app.use(express.static(path.join(__dirname, '../dist')));
 app.get('/api/games', (req, res) => {
     db.all("SELECT * FROM games ORDER BY displayOrder ASC, title ASC", [], (err, rows) => {
         if (err) {
+            console.error("Database Error in /api/games:", err);
             res.status(500).json({ error: err.message });
             return;
         }
