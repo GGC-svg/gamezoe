@@ -5,6 +5,7 @@ import db from './database.js';
 import { OAuth2Client } from 'google-auth-library';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -39,6 +40,13 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false,
     strictTransportSecurity: false, // Disable HSTS for HTTP
     contentSecurityPolicy: false // Disable CSP for now to prevent upgrade-insecure-requests
+}));
+
+// [PROXY] Proxy requests to Fish Master Socket Server (localhost:9000)
+app.use('/socket.io', createProxyMiddleware({
+    target: 'http://localhost:9000',
+    ws: true,
+    changeOrigin: true
 }));
 
 // Serve Games Static Files (Directly from source, skipping build copy)

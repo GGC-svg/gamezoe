@@ -266,8 +266,8 @@
         if (!uid) return;
 
         try {
-          // FIX: Use Absolute URL for Platform API (Port 3002)
-          const res = await fetch('http://localhost:3002/api/bridge/balance/' + uid, {
+          // FIX: Use Relative URL for Platform API (Works on both 3000/3001/3002)
+          const res = await fetch('/api/bridge/balance/' + uid, {
             headers: { 'x-api-key': 'gamezoe-secure-bridge-key' }
           });
           const data = await res.json();
@@ -309,8 +309,9 @@
 
         try {
           // 1. Call Platform Bridge API (Deposit)
-          // Hardcoded to localhost:3002 for now. Ideally should be config.
-          const platformApiUrl = 'http://localhost:3002/api/bridge/transaction/deposit';
+          // 1. Call Platform Bridge API (Deposit)
+          // Relative path works both local and production
+          const platformApiUrl = '/api/bridge/transaction/deposit';
 
           // alert("Debug: Calling " + platformApiUrl);
           console.log("[Wallet] Sending Deposit Request:", { userId: uid, amount: amount, url: platformApiUrl });

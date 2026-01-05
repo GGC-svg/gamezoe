@@ -2365,7 +2365,7 @@ require = function t(e, n, i) {
     }, {}], HTTP: [function (t, e, n) {
         "use strict";
         cc._RF.push(e, "40d13Xib09P44aSZAJAf73l", "HTTP");
-        var i = "http://localhost:9000";
+        var i = "/"; // Relative URL for Proxy Support
         cc.VERSION = 20161227;
         var s = cc.Class({
             extends: cc.Component,
