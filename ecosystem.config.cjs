@@ -9,7 +9,8 @@ module.exports = {
             max_memory_restart: '1G',
             env: {
                 NODE_ENV: "production",
-                PORT: 3000
+                PORT: 3000,
+                TZ: "Asia/Taipei"
             }
         },
         {
@@ -20,7 +21,8 @@ module.exports = {
             watch: false,
             max_memory_restart: '500M',
             env: {
-                NODE_ENV: "production"
+                NODE_ENV: "production",
+                TZ: "Asia/Taipei"
             }
         }
     ]
