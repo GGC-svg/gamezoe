@@ -10,7 +10,9 @@ const MOCK_ADMIN: User = {
   email: 'admin@gamezoe.com',
   avatar: 'https://picsum.photos/id/64/200/200',
   provider: 'google',
-  role: 'admin'
+  role: 'admin',
+  gold_balance: 1000,
+  silver_balance: 5000
 };
 
 const MOCK_USER: User = {
@@ -19,7 +21,9 @@ const MOCK_USER: User = {
   email: 'player@example.com',
   avatar: 'https://picsum.photos/id/237/200/200',
   provider: 'facebook',
-  role: 'user'
+  role: 'user',
+  gold_balance: 0,
+  silver_balance: 0
 };
 
 export const authService = {
@@ -72,7 +76,7 @@ export const authService = {
   },
 
   // CHECK SESSION
-  getCurrentSession: async (): Promise<{ user: User | null, purchasedGames: string[] }> => {
+  getCurrentSession: async (): Promise<{ user: User | null, purchasedGames: string[], library?: { gameId: string; expiresAt: string | null }[] }> => {
     const userId = localStorage.getItem(SESSION_KEY);
 
     if (!userId) {
