@@ -402,7 +402,7 @@ app.post('/api/wallet/topup', (req, res) => {
 
             // 2. Log Transaction
             const desc = `Top-up $${amountUSD}`;
-            db.run("INSERT INTO wallet_transactions (user_id, amount, currency, type, description) VALUES (?, ?, 'gold', 'deposit', ?)",
+            db.run("INSERT INTO wallet_transactions (user_id, amount, currency, type, description, created_at) VALUES (?, ?, 'gold', 'deposit', ?, datetime('now', '+8 hours'))",
                 [userId, goldAmount, desc], (err) => {
                     if (err) {
                         db.run("ROLLBACK");
@@ -635,7 +635,7 @@ app.post('/api/games/:gameId/purchase', (req, res) => {
                             // Record Wallet Transaction(s)
                             const recordTransaction = (amt, curr, next) => {
                                 if (amt === 0) return next();
-                                db.run("INSERT INTO wallet_transactions (user_id, amount, currency, type, description, reference_id) VALUES (?, ?, ?, 'game_rental', ?, ?)",
+                                db.run("INSERT INTO wallet_transactions (user_id, amount, currency, type, description, reference_id, created_at) VALUES (?, ?, ?, 'game_rental', ?, ?, datetime('now', '+8 hours'))",
                                     [userId, -amt, curr, desc, gameId], (err) => {
                                         if (err) return next(err);
                                         next();
@@ -769,7 +769,7 @@ app.post('/api/auth/login', (req, res) => {
                 });
 
                 // Log Login
-                db.run("INSERT INTO login_logs (user_id, ip_address) VALUES (?, ?)", [id, req.ip]);
+                db.run("INSERT INTO login_logs (user_id, ip_address, login_time) VALUES (?, ?, datetime('now', '+8 hours'))", [id, req.ip]);
 
                 res.json({ user: row, purchasedGames, library });
             });
@@ -783,7 +783,7 @@ app.post('/api/auth/login', (req, res) => {
                 }
 
                 // Log Login
-                db.run("INSERT INTO login_logs (user_id, ip_address) VALUES (?, ?)", [id, req.ip]);
+                db.run("INSERT INTO login_logs (user_id, ip_address, login_time) VALUES (?, ?, datetime('now', '+8 hours'))", [id, req.ip]);
 
                 res.json({ user: req.body, purchasedGames: [] });
             });
@@ -1124,6 +1124,9 @@ app.delete('/api/admin/tiers/:id', (req, res) => {
     });
 });
 // --- PRODUCTION SERVING ---
+// Serve Game Assets (Fix for Fish Master Blue Screen)
+app.use('/games', express.static(path.join(__dirname, '../games')));
+
 // Serve static files from the React app build directory
 app.use(express.static(path.join(__dirname, '../dist')));
 
