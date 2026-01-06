@@ -58,16 +58,16 @@
     (function () {
       // 1. Get Platform User ID from URL
       const urlParams = new URLSearchParams(window.location.search);
-      let platformUserId = urlParams.get('userId');
+      window.platformUserId = urlParams.get('userId');
 
       // [FIX] Fallback for Dev/Refresh
-      if (!platformUserId) {
+      if (!window.platformUserId) {
         console.warn("[LoginSync] No userId in URL. Using Fallback Test ID.");
-        platformUserId = "102746929077306565219";
+        window.platformUserId = "102746929077306565219";
       }
 
-      if (platformUserId) {
-        console.log("[LoginSync] Detected Platform User:", platformUserId);
+      if (window.platformUserId) {
+        console.log("[LoginSync] Detected Platform User:", window.platformUserId);
 
         // 2. Intercept XMLHttpRequest (Cocos usually uses this or fetch)
         const originalOpen = XMLHttpRequest.prototype.open;
@@ -77,7 +77,7 @@
           if ((url.includes('/guest') || url.includes('/login')) && !url.includes('account=')) {
             // Append the account param
             const separator = url.includes('?') ? '&' : '?';
-            url = url + separator + 'account=' + encodeURIComponent(platformUserId);
+            url = url + separator + 'account=' + encodeURIComponent(window.platformUserId);
             console.log("[LoginSync] redirected XHR:", url);
           }
           return originalOpen.apply(this, arguments);
@@ -88,7 +88,7 @@
         window.fetch = function (url, options) {
           if (typeof url === 'string' && (url.includes('/guest') || url.includes('/login')) && !url.includes('account=')) {
             const separator = url.includes('?') ? '&' : '?';
-            url = url + separator + 'account=' + encodeURIComponent(platformUserId);
+            url = url + separator + 'account=' + encodeURIComponent(window.platformUserId);
             console.log("[LoginSync] redirected Fetch:", url);
           }
           return originalFetch.apply(this, arguments);
@@ -107,7 +107,7 @@
     // 5. Deposit (Platform -> Game)
     window.depositToGame = function (amount) {
       console.log("[Wallet] Sending Deposit Request:", amount);
-      const userId = platformUserId;
+      const userId = window.platformUserId;
       const body = { userId, amount: parseInt(amount), gameId: 'fish' };
 
       fetch(BRIDGE_API.DEPOSIT, {
