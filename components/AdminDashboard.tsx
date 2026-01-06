@@ -204,7 +204,7 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
       if (activeTab === 'logs') {
          fetch('/api/admin/logs').then(res => res.json()).then(setLogs).catch(console.error);
       } else if (activeTab === 'purchases') {
-         fetch('/api/admin/purchases').then(res => res.json()).then(setPurchases).catch(console.error);
+         fetch('/api/admin/transactions').then(res => res.json()).then(setPurchases).catch(console.error);
       } else if (activeTab === 'activities') {
          fetch('/api/admin/activities').then(res => res.json()).then(setActivities).catch(console.error);
       } else if (activeTab === 'analytics') {

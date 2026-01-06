@@ -573,7 +573,7 @@ ports.forEach(port => {
 
                     // 4. Log Transaction (Fix: Audit Trail)
                     const desc = `換碼(入金) - Fish Master`;
-                    db.run("INSERT INTO wallet_transactions (user_id, amount, currency, type, description) VALUES (?, ?, 'gold', 'transfer_out', ?)",
+                    db.run("INSERT INTO wallet_transactions (user_id, amount, currency, type, description, created_at) VALUES (?, ?, 'gold', 'transfer_out', ?, datetime('now', '+8 hours'))",
                         [socket.userId, -amount, desc], (err) => {
                             if (err) console.error("Failed to log charge transaction", err);
                         });
@@ -697,10 +697,11 @@ ports.forEach(port => {
                             if (err) console.error(`[Exchange] Failed to persist score to DB for ${socket.userId}`, err);
                         });
 
-                        // 4. Log Transaction (Fix: Audit Trail)
-                        const desc = `出金(結算) - Fish Master`;
-                        db.run("INSERT INTO wallet_transactions (user_id, amount, currency, type, description) VALUES (?, ?, 'gold', 'game_win', ?)",
-                            [socket.userId, amount, desc], (err) => {
+                        // Log Transaction (Fix: Audit Trail)
+                        const desc = `結算(出金) - Fish Master`;
+                        const gameId = 1; // Assuming a default gameId for now, or retrieve from context if available
+                        db.run("INSERT INTO wallet_transactions (user_id, amount, currency, type, description, game_id, created_at) VALUES (?, ?, 'gold', 'game_win', ?, ?, datetime('now', '+8 hours'))",
+                            [socket.userId, amount, desc, gameId], (err) => {
                                 if (err) console.error("Failed to log exchange transaction", err);
                             });
 
