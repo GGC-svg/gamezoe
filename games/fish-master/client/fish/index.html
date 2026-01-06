@@ -104,64 +104,66 @@
       WITHDRAW: '/api/bridge/transaction/withdraw'
     };
 
-      // 5. Deposit (Platform -> Game)
-      window.depositToGame = function (amount) {
-        console.log("[Wallet] Sending Deposit Request:", amount);
-        const userId = platformUserId;
-        const body = { userId, amount: parseInt(amount), gameId: 'fish' };
+    // 5. Deposit (Platform -> Game)
+    window.depositToGame = function (amount) {
+      console.log("[Wallet] Sending Deposit Request:", amount);
+      const userId = platformUserId;
+      const body = { userId, amount: parseInt(amount), gameId: 'fish' };
 
-        fetch(BRIDGE_API.DEPOSIT, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': 'gamezoe-secure-bridge-key' },
-          body: JSON.stringify(body)
+      fetch(BRIDGE_API.DEPOSIT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': 'gamezoe-secure-bridge-key' },
+        body: JSON.stringify(body)
+      })
+        .then(res => res.json())
+        .then(data => {
+          console.log("[Wallet] Deposit Response:", data);
+          if (data.success) {
+            alert("兌換成功 / Deposit Successful ✅\nGold deducted, Game Points added.");
+            // Refresh Game UI if possible (optional)
+          } else {
+            alert("兌換失敗 / Deposit Failed ❌\n" + (data.message || "Unknown Error"));
+          }
         })
-          .then(res => res.json())
-          .then(data => {
-            console.log("[Wallet] Deposit Response:", data);
-            if (data.success) {
-              alert("兌換成功 / Deposit Successful ✅\nGold deducted, Game Points added.");
-              // Refresh Game UI if possible (optional)
-            } else {
-              alert("兌換失敗 / Deposit Failed ❌\n" + (data.message || "Unknown Error"));
-            }
-          })
-          .catch(err => {
-            console.error("[Wallet] Deposit Error:", err);
-            alert("系統錯誤 / System Error ⚠️\nPlease check console.");
-          });
-      };
+        .catch(err => {
+          console.error("[Wallet] Deposit Error:", err);
+          alert("系統錯誤 / System Error ⚠️\nPlease check console.");
+        });
+    };
 
-      // 6. Withdraw (Game -> Platform)
-      // This function is called EXTERNALLY by the Game Client (Cocos)
-      window.withdrawFromGame = function (amount) {
-        console.log("[Wallet] Sending Withdraw Request:", amount);
-        
-        // Ensure we hit the PROXY URL (Relative) to avoid Localhost issues
-        // The proxy in server/index.js forwards '/socket.io' but we need a REST endpoint for this?
-        // Wait, the Game Server (Mock) has a withdrawal endpoint.
-        
-        // Actually, for Withdraw, the GAME calls the BRIDGE directly? 
-        // No, usually user clicks a button in Game, Game calls its own backend, backend calls Bridge.
-        // If this function is for testing or manual trigger:
-        
-        // If we are simulating game-side withdrawal:
-        // We need to call the Bridge Withdraw Endpoint directly as if we were the game server?
-        // Or call the Game Server's withdraw endpoint?
-        
-        // Let's assume this is a client-side helper for testing.
-        // It relies on the Game Server being reachable.
-        
-        // [FIX] Use Relative URL for Game Server Proxy (if exists) or direct Bridge call?
-        // The previous implementation tried to hit `localhost:4002`.
-        // We should instead hit the Bridge URL if we want to simulate the result, 
-        // OR hit the Game Server via a Proxy if we want the full flow.
-        
-        // Since we didn't proxy the REST API of Fish Server (only socket.io), 
-        // let's try to hit the Bridge directly to simulate a "Win" settlement?
-        // Or if the Game UI calls this, we should alert "Please use Game Menu to Quit/Withdraw".
-        
-        alert("Please click 'Exit' in the game to settle points.");
-      };
+    // 6. Withdraw (Game -> Platform)
+    // This function is called EXTERNALLY by the Game Client (Cocos)
+    window.withdrawFromGame = function (amount) {
+      console.log("[Wallet] Sending Withdraw Request:", amount);
+
+      // Ensure we hit the PROXY URL (Relative) to avoid Localhost issues
+      // The proxy in server/index.js forwards '/socket.io' but we need a REST endpoint for this?
+      // Wait, the Game Server (Mock) has a withdrawal endpoint.
+
+      // Actually, for Withdraw, the GAME calls the BRIDGE directly? 
+      // No, usually user clicks a button in Game, Game calls its own backend, backend calls Bridge.
+      // If this function is for testing or manual trigger:
+
+      // If we are simulating game-side withdrawal:
+      // We need to call the Bridge Withdraw Endpoint directly as if we were the game server?
+      // Or call the Game Server's withdraw endpoint?
+
+      // Let's assume this is a client-side helper for testing.
+      // It relies on the Game Server being reachable.
+
+      // [FIX] Use Relative URL for Game Server Proxy (if exists) or direct Bridge call?
+      // The previous implementation tried to hit `localhost:4002`.
+      // We should instead hit the Bridge URL if we want to simulate the result, 
+      // OR hit the Game Server via a Proxy if we want the full flow.
+
+      // Since we didn't proxy the REST API of Fish Server (only socket.io), 
+      // let's try to hit the Bridge directly to simulate a "Win" settlement?
+      // Or if the Game UI calls this, we should alert "Please use Game Menu to Quit/Withdraw".
+
+      alert("Please click 'Exit' in the game to settle points.");
+    };
+  </script>
+
   <style>
     /* Toolbar Styles */
     #wallet-toolbar {
