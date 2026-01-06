@@ -91,6 +91,19 @@
             url = url + separator + 'account=' + encodeURIComponent(platformUserId);
             console.log("[LoginSync] redirected Fetch:", url);
           }
+          return originalFetch.apply(this, arguments);
+        };
+      }
+    })();
+  </script>
+
+  <script>
+    // BRIDGE API Configuration
+    const BRIDGE_API = {
+      DEPOSIT: '/api/bridge/transaction/deposit',
+      WITHDRAW: '/api/bridge/transaction/withdraw'
+    };
+
       // 5. Deposit (Platform -> Game)
       window.depositToGame = function (amount) {
         console.log("[Wallet] Sending Deposit Request:", amount);
