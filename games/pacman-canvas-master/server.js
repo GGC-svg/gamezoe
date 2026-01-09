@@ -10,7 +10,9 @@ var myLogger = function (req, res, next) {
 app.use(myLogger);
 app.use(express.static('.'))
 
-// viewed at http://localhost:8080
+
+app.listen(PORT, () => console.log('Server started at port ' + PORT));
+
 app.get('/', function (req, res, next) {
     res.sendFile(path.join(__dirname + '/index.htm'));
 });

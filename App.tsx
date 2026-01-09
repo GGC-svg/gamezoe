@@ -68,6 +68,27 @@ function App() {
     initData();
   }, []);
 
+  // [FIX] Expose user to window for iframe games (MyFish, etc.)
+  useEffect(() => {
+    if (window && user) {
+      // CRITICAL: Force ID to string to prevent precision loss with large Google IDs
+      const userWithStringId = {
+        ...user,
+        id: String(user.id)
+      };
+      (window as any).currentUser = userWithStringId;
+      // Also expose via GameZoe namespace for consistency
+      (window as any).GameZoe = { currentUser: userWithStringId };
+
+      console.log('[App] Exposed user to window, ID:', String(user.id), '(type: string)');
+    } else if (window && !user) {
+      // Clear when logged out
+      (window as any).currentUser = null;
+      (window as any).GameZoe = { currentUser: null };
+    }
+  }, [user]);
+
+
   // Handle Login
   const handleLogin = async (provider: 'google' | 'facebook', token?: string) => {
     setIsAuthLoading(true);

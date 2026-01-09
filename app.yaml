@@ -1,0 +1,14 @@
+runtime: nodejs18
+instance_class: F2
+
+env_variables:
+  NODE_ENV: 'production'
+
+handlers:
+  - url: /games/(.*)
+    static_files: games/\1/index.html
+    upload: games/(.*)/index.html
+    require_matching_file: false
+
+  - url: /.*
+    script: auto

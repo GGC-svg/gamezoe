@@ -159,9 +159,21 @@ const GamePlayer: React.FC<GamePlayerProps> = ({ game, onClose, currentUser, exp
                     </div>
                 )}
 
-                {game.gameUrl ? (
+                {!currentUser ? (
+                    // Show login required message instead of loading game
+                    <div className="text-center p-8">
+                        <h3 className="text-3xl text-red-400 font-bold mb-4">🔒 未登入</h3>
+                        <p className="text-slate-300 text-lg mb-6">請先登入平台才能遊玩</p>
+                        <button
+                            onClick={onClose}
+                            className="bg-nexus-accent hover:bg-nexus-accentHover text-white px-8 py-3 rounded-lg font-bold"
+                        >
+                            返回平台
+                        </button>
+                    </div>
+                ) : game.gameUrl ? (
                     <iframe
-                        src={`${game.gameUrl}${game.gameUrl.includes('?') ? '&' : '?'}userId=${currentUser?.id || ''}&gameId=${game.id}`}
+                        src={`${game.gameUrl}${game.gameUrl.includes('?') ? '&' : '?'}userId=${currentUser.id}&gameId=${game.id}`}
                         title={game.title}
                         className="w-full h-full border-0 bg-white"
                         allow="autoplay; fullscreen; gamepad; acceleration; gyroscope"

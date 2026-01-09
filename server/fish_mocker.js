@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import sqlite3 from 'sqlite3';
 import { generateSignature, verifySignature } from './utils/signature.js';
+import { RoomManager, baseParamToScore } from './utils/RoomManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,6 +15,29 @@ const __dirname = path.dirname(__filename);
 // -------------------------------------------------------------------------
 // GAME CONSTANTS
 // -------------------------------------------------------------------------
+
+// [VIP CONFIG] - Derived from Observation / Standard Practice
+// Since legacy code used random VIP, we implement a standard recharge-based system.
+const VIP_LEVELS = [
+    { level: 1, minGold: 10000 },    // 10 RMB
+    { level: 2, minGold: 50000 },    // 50 RMB
+    { level: 3, minGold: 200000 },   // 200 RMB
+    { level: 4, minGold: 1000000 },  // 1000 RMB
+    { level: 5, minGold: 5000000 },  // 5000 RMB
+    { level: 6, minGold: 20000000 }  // 20000 RMB
+];
+
+function calculateVip(totalRecharge) {
+    let vip = 0;
+    for (const v of VIP_LEVELS) {
+        if (totalRecharge >= v.minGold) {
+            vip = v.level;
+        } else {
+            break;
+        }
+    }
+    return vip;
+}
 
 const FishMulti = {
     1: 2, 2: 2, 3: 3, 4: 4, 5: 5, 6: 5, 7: 6, 8: 7, 9: 8, 10: 9,
@@ -25,27 +49,41 @@ const FishMulti = {
     34: 120, 35: 200
 };
 
+// [FIX] Bullet Multipliers (Standardized 1-10)
+// [CANONICAL] From game/service/define.go
+// Maps BulletKind ID to Multiplier Value (1, 2, 3, 5)
 const BulletMulti = {
-    1: 1, 2: 2, 3: 3, 4: 1, 5: 3, 6: 5, 7: 1, 8: 3, 9: 5,
-    10: 1, 11: 3, 12: 5, 13: 1, 14: 3, 15: 5, 16: 1, 17: 3, 18: 5,
+    1: 1, 2: 2, 3: 3, 4: 1, 5: 3, 6: 5,
+    7: 1, 8: 3, 9: 5, 10: 1, 11: 3, 12: 5,
+    13: 1, 14: 3, 15: 5, 16: 1, 17: 3, 18: 5,
     19: 1, 20: 3, 21: 5, 22: 1
 };
 
 const GameBaseScore = 1;
 
 // -------------------------------------------------------------------------
-// SERVER STATE (Global Memory)
+// DYNAMIC ROOM MANAGEMENT (Map-Based, Aligned with Go)
 // -------------------------------------------------------------------------
+// Old fixed RoomState array removed. Now using RoomManager with dynamic Map.
+// Rooms are created on-demand with auto-generated IDs (1000+).
 
-const RoomState = {
-    1: {
-        aliveFish: {},
-        aliveBullets: {},
-        users: {} // UserId -> UserObject { score, ... }
-    }
+// [FIX] Room Configuration based on Screenshot
+// Room 1: Entry 0.1 (100 Score) -> Base 1 -> Multi 1-3 (Cost 1-3 = 0.001-0.003)
+// Room 2: Entry 10 (10000 Score) -> Base 50 -> Multi 1-5 (Cost 50-250 = 0.05-0.25)
+// Room 3: Entry 100 (100000 Score) -> Base 500 -> Multi 1-5 (Cost 500-2500 = 0.5-2.5)
+// Room 4: Entry 1000 (1000000 Score) -> Base 2000 -> Multi 1-5 (Cost 2000-10000 = 2-10)
+
+// [CANONICAL] Derived from Screenshot & Logic (BaseScore * Multi)
+// Novice: 0.001 - 0.003
+// Junior: 0.05 - 0.25
+// High: 0.5 - 2.5
+// Tycoon: 2.0 - 10.0
+const RoomConfig = {
+    1: { baseScore: 0.001, minGold: 0.1 },
+    2: { baseScore: 0.05, minGold: 10 },
+    3: { baseScore: 0.5, minGold: 100 },
+    4: { baseScore: 2.0, minGold: 1000 }
 };
-
-let nextFishId = 1000;
 
 // -------------------------------------------------------------------------
 // HELPER FUNCTIONS
@@ -83,6 +121,11 @@ process.on('uncaughtException', (err) => { console.error('UNCAUGHT EXCEPTION:', 
 const ports = [4000, 9000, 4002];
 const ioInstances = []; // Global store for all IO instances
 
+// -------------------------------------------------------------------------
+// GLOBAL ROOM MANAGER (Initialized after forEach)
+// -------------------------------------------------------------------------
+let roomManager = null;  // Will be initialized after all ioInstances are collected
+
 ports.forEach(port => {
     const app = express();
     app.use(cors());
@@ -109,12 +152,12 @@ ports.forEach(port => {
     app.get('/get_serverinfo', (req, res) => {
         res.json({
             code: 0, msg: "success", status: 1,
-            ip: "127.0.0.1", host: "127.0.0.1", port: 4002,
-            hall_ip: "127.0.0.1", hall_port: 9000, hall: "127.0.0.1:9000", version: 1
+            ip: "192.168.50.115", host: "192.168.50.115", port: 9000,
+            hall_ip: "192.168.50.115", hall_port: 9000, hall: "192.168.50.115:9000", version: 1
         });
     });
 
-    function generateUserResponse(account) {
+    function generateUserResponse(account, balance = 0, dbName = null) {
         // Deterministic Numeric ID from String (Simple Hash)
         let numId = 0;
         for (let i = 0; i < account.length; i++) {
@@ -128,15 +171,25 @@ ports.forEach(port => {
             qqLoginUrl: "http://localhost:3000/games/fish/index.html",
             account: account,
             sign: "mock_sign_" + account,
-            user_id: numId, userid: numId, userId: numId, id: numId,
+            user_id: account, userid: account, userId: account, id: account, // [FIX] Use Account String as ID to prevent mismatch and precision loss
             token: account, // Critical: Socket 'login' uses this to identify user
 
             // Profile
-            name: "Hunter_" + account.substring(0, 5),
+            // [FIX] Use DB Name if available to match Game Room
+            name: dbName || ("Hunter_" + account.substring(0, 5)),
             headimg: (numId % 8) + 1,
-            lv: 1, exp: 0,
-            coins: 0, money: 0, gems: 0, vip: 0,
-            roomid: 1, sex: 1, ip: "127.0.0.1"
+            lv: 10, exp: 999,
+
+            // Sync all to Real Balance
+            coins: balance,
+            money: balance,
+            gems: balance,
+
+            vip: calculateVip(balance), // [VIP_FIX] specific to HTTP login: use balance as proxy for recharge history
+            roomid: 1, sex: 1, ip: "127.0.0.1",
+            item: {
+                ice: 100
+            }
         };
     }
 
@@ -379,35 +432,65 @@ ports.forEach(port => {
 
 
     app.get('/guest', (req, res) => {
-        const account = req.query.account || "guest_" + Math.floor(Math.random() * 10000);
-        console.log(`[HTTP] Guest Login Request: ${account}`);
-        res.json(generateUserResponse(account));
+        // [FIX] Guest should also try to read DB balance if account is provided
+        handleLogin(req, res, 4002);
     });
 
     function handleLogin(req, res, port) {
         const account = req.query.account || req.body.account || "guest_10086";
         console.log(`[HTTP] Login Request: ${account}`);
-        res.json(generateUserResponse(account));
+
+        // DB Query for Real Balance AND Name (FIXED: Removing 'token' column which doesn't exist)
+        db.get("SELECT name, fish_balance FROM users WHERE id = ?", [account], (err, row) => {
+            let balance = 0;
+            let name = null;
+            if (err) {
+                console.error("[HTTP] Login DB Error:", err);
+            } else if (row) {
+                // FIXED: Scale * 1000 so game displays integer (1 Gold = 1000 Score)
+                balance = (row.fish_balance || 0) * 1000;
+                name = row.name;
+                console.log(`[HTTP] Login Success. User: ${account}, Balance: ${balance} (Scaled x1000), Name: ${name}`);
+            } else {
+                console.log(`[HTTP] Login User Not Found in DB: ${account} (Using 0)`);
+            }
+            res.json(generateUserResponse(account, balance, name));
+        });
     }
+
+    // ... (socket)
+
+
     app.post('/login', (req, res) => { handleLogin(req, res, port); });
     app.get('/login', (req, res) => { handleLogin(req, res, port); });
 
     app.get('/get_user_status', (req, res) => { res.json({ errcode: 0, status: 1 }); });
     app.get('/get_message', (req, res) => { res.json({ errcode: 0, data: [], version: 1, msg: "Welcome!" }); });
-    app.get('/enter_private_room', (req, res) => { res.json({ errcode: 0, roomid: 1, ip: "127.0.0.1", port: 4002 }); });
-
     app.get('/enter_public_room', (req, res) => {
-        // Map baseParam to RoomId
-        let roomId = 1;
-        const baseParam = parseInt(req.query.baseParam || "1");
-        if (baseParam === 50) roomId = 2;
-        else if (baseParam === 500) roomId = 3;
-        else if (baseParam === 2000) roomId = 4;
+        const { account, baseParam } = req.query;
 
-        if (req.query.roomId) roomId = parseInt(req.query.roomId);
+        // [REFACTOR] Convert baseParam to baseScore and use dynamic matchmaking
+        const baseScore = baseParamToScore(parseInt(baseParam) || 1);
 
-        console.log(`[EnterRoom] BaseParam=${baseParam} -> Room ${roomId}`);
-        res.json({ errcode: 0, roomid: roomId, roomId: roomId, ip: "127.0.0.1", port: 4002 });
+        // Use RoomManager's matchmaking logic (aligned with Go)
+        const roomId = roomManager.findOrCreateRoom(baseScore);
+
+        console.log(`[EnterRoom] User ${account} matched to room ${roomId} (baseScore: ${baseScore})`);
+
+        const token = account || "guest_10086";
+        const sign = req.query.sign || "mock_sign";
+        const time = req.query.time || Date.now();
+
+        res.json({
+            errcode: 0,
+            roomid: roomId,
+            roomId: roomId,
+            ip: "127.0.0.1",
+            port: port, // [FIX] Dynamic Port Mapping (was hardcoded 4002)
+            token: token,
+            sign: sign,
+            time: time
+        });
     });
 
     // -------------------------------------------------------------------------
@@ -421,107 +504,350 @@ ports.forEach(port => {
     // Use standard import (already imported at top)
     const sqlite3Verbose = sqlite3.verbose();
     const dbPath = path.join(__dirname, 'gamezoe.db');
-    const db = new sqlite3Verbose.Database(dbPath, (err) => {
+    // --- PRECISION HELPER FUNCTIONS ---
+    // Use integer arithmetic for all balance operations to prevent floating-point drift.
+    // SCALE = 1000 means 1.000 coin is stored as 1000 integers.
+    const BALANCE_SCALE = 1000;
+
+    // Convert display float (e.g., 10.500) to storage integer (10500)
+    function toStorageInt(value) {
+        if (value === undefined || value === null || isNaN(value)) return 0;
+        // Use Math.round to handle floating point inputs like 10.4999999
+        return Math.round(Number(value) * BALANCE_SCALE);
+    }
+
+    // Convert storage integer (10500) to display float (10.5)
+    // Used when sending data to client or saving to legacy DB format
+    function toDisplayFloat(intValue) {
+        if (intValue === undefined || intValue === null || isNaN(intValue)) return 0;
+        return Math.floor(Number(intValue)) / BALANCE_SCALE;
+    }
+
+    // Safe addition for integers
+    function safeAdd(a, b) {
+        return Math.round(a + b);
+    }
+
+    // Safe subtraction for integers
+    function safeSub(a, b) {
+        return Math.round(a - b);
+    }
+
+    // Ensure database table exists
+    const DB_PATH = path.join(__dirname, 'gamezoe.db');
+    const db = new sqlite3.Database(DB_PATH, (err) => {
         if (err) console.error('[DB] Fish Mock Server failed to connect to DB', err);
         else console.log('[DB] Fish Mock Server connected to SQLite');
     });
 
     // Helper to save user score to DB
+    // [ARCH FIX] ONLY update fish_balance (Game Points). NEVER touch gold_balance (Platform Coins) here.
     function saveUserToDB(userId, score) {
         if (!userId || userId === 'guest') return;
-        db.run("UPDATE users SET fish_balance = ? WHERE id = ?", [score, userId], (err) => {
+
+        // Convert integer balance back to float for DB storage
+        const balanceToSave = toDisplayFloat(score);
+
+        // [CRITICAL] Only update fish_balance. 
+        // gold_balance is Platform Coin and should ONLY change via explicit Deposit/Withdraw.
+        db.run("UPDATE users SET fish_balance = ? WHERE id = ?", [balanceToSave, userId], (err) => {
             if (err) console.error(`[DB] Failed to save score for ${userId}:`, err);
-            // else console.log(`[DB] Saved score ${score} for ${userId}`);
         });
     }
+
+    // -------------------------------------------------------------------------
+    // SOCKET.IO CONNECTION HANDLER
+    // -------------------------------------------------------------------------
+    // [REFACTOR] RoomManager is now global, shared across all ports
+
 
     io.on('connection', (socket) => {
         console.log(`[Port ${port} Socket] Connected: ${socket.id}`);
 
-        const getRoom = () => RoomState[1];
+        // [DEBUG] Trace ALL incoming events to diagnose "Unkillable Fish"
+        // If client sends 'catch_fish', it MUST show up here.
+        socket.onAny((eventName, ...args) => {
+            // Filter out noisy heartbeat if applicable (though socket.io usually uses engine.io for that)
+            // We want to see EVERYTHING for now.
+            console.log(`[SOCKET_TRACE] Event: '${eventName}' from ${socket.id}`, args);
+        });
 
         // Removed nested invalid sqlite setup
 
         // ... (socket connection)
 
+        // Random Room ID for this session (Mimic dynamic table)
+        // [FIX] REVERT TO 1. "888888" caused undefined RoomConfig lookup -> NaN Errors
+        const MOCK_ROOM_ID = 1;
+
+        // [FIX] VIP to CannonKind Mapping (Source: Go code)
+        // 0->1, 1->4 (VIP1), 2->7 ...
+        const VIP_TO_CANNON = {
+            0: 1, 1: 4, 2: 7, 3: 10, 4: 13, 5: 16, 6: 19, 7: 22
+        };
+
         // --- LOGIN ---
         socket.on('login', (data) => {
             console.log(`[DEBUG] Login Payload Raw:`, data);
             const reqData = parsePayload(data);
-            let userId = reqData.token || "guest"; // Use Token as ID
 
-            // [HIJACK] Force Platform User for Guest/Dev connections
-            // [HIJACK] Force Platform User for Guest/Dev connections (DISABLED FOR PRODUCTION)
-            // if (userId === "guest" || userId.startsWith("guest_") || (userId.length < 15 && !userId.startsWith("u_"))) {
-            //     console.warn(`[Login Hijack] Detected Guest/Legacy User: ${userId}. Remapping to Platform Test ID.`);
-            //     userId = "102746929077306565219"; // 黃繼德 (Test Account)
-            // }
+            // Robust ID detection: Check id, userId, account, then token
+            let userId = reqData.id || reqData.userId || reqData.account || reqData.token || "guest";
+
+            // [CRITICAL] Ensure userId matches Platform ID format if possible (String)
+            // This is vital for the client to match "My User ID" with "Seat User ID"
+            userId = String(userId);
 
             console.log(`[DEBUG] Login Parsed UserID: ${userId}`);
 
-            const requestedRoomId = parseInt(reqData.roomId || "1");
+            // [GO_STRICT_MODE] Like Go server: One Socket = One Room
+            // Go code sets client.Room once and never changes it
+            // Second login attempt = ERROR (client must disconnect and reconnect)
+            if (socket.currentRoomId !== undefined && socket.currentRoomId !== null) {
+                const requestedRoomId = parseInt(reqData.roomId) || null;
+                if (socket.currentRoomId !== requestedRoomId) {
+                    console.error(`[LOGIN_REJECT] Socket ${socket.id} already in room ${socket.currentRoomId}. Cannot switch to ${requestedRoomId}. Must disconnect first.`);
+                    socket.emit('login_result', {
+                        errcode: 403,
+                        errmsg: 'Already logged into a room. Please disconnect and reconnect to switch rooms.'
+                    });
+                    return;
+                }
+                // Same room re-login (reconnect scenario) - allow it
+                console.log(`[LOGIN] Re-login to same room ${socket.currentRoomId} allowed`);
+            }
+
+            // [MULTI-ROOM FIX] Extract roomId from login payload
+            const requestedRoomId = parseInt(reqData.roomId) || null;
+
+            // [REFACTOR] Validate that roomId exists in RoomManager
+            let validRoomId = requestedRoomId;
+            if (!validRoomId || !roomManager.getRoom(validRoomId)) {
+                console.warn(`[LOGIN] Invalid roomId ${requestedRoomId}, cannot proceed without valid room`);
+                // This shouldn't happen if enter_public_room works correctly
+                // But as fallback, create a default room
+                validRoomId = roomManager.findOrCreateRoom(0.001);
+            }
 
             socket.userId = userId;
-            socket.currentRoomId = requestedRoomId;
-            const room = getRoom();
+
+            socket.currentRoomId = validRoomId;
+            console.log(`[LOGIN] User ${userId} joining room ${validRoomId}`);
+
+            // [CRITICAL] Socket Join Room for Scoped Broadcasts
+            const roomName = `room_${validRoomId}`;
+            socket.join(roomName);
+            // [DIAGNOSTIC] Log socket's rooms after joining
+            console.log(`[SOCKET_ROOMS] After join, socket ${socket.id} is in rooms:`, Array.from(socket.rooms));
+            console.log(`[LOGIN] Socket ${socket.id} joined ${roomName}`);
+
+            ;
+
+            const room = roomManager.getRoom(validRoomId); // [REFACTOR] Use RoomManager
 
             const finalizeLogin = (dbUser) => {
-                const name = dbUser ? dbUser.name : ("Guest_" + userId.substring(0, 4));
-                // Use fish_balance
-                let initialScore = dbUser ? (dbUser.fish_balance || 0) : 500;
-                let initialGold = dbUser ? (dbUser.gold_balance || 0) : 0; // NEW: Platform Gold
+                const name = dbUser ? dbUser.name : ("Hunter_" + userId.substring(0, 5));
 
-                console.log(`[DEBUG] Login Finalize. User: ${userId}, Score: ${initialScore}, Gold: ${initialGold}, Name: ${name}`);
+                //  [FIX] Synchronize Game Room Currency with Lobby
+                // Lobby uses 'balance' for coins/money/gems.
+                // fish_balance from DB is already scaled by 1000
+                console.log(`[DEBUG] dbUser:`, dbUser);  // Debug
+                let currentBalance = toStorageInt(20030); // Default fallback, stored as INT
+                let currentGold = toStorageInt(20030); // Default fallback, stored as INT
 
-                // New User Bonus (Only if 0)
-                if (dbUser && initialScore === 0) {
-                    initialScore = 500;
-                    saveUserToDB(userId, 500);
-                    console.log(`[Bonus] User ${userId} received 500 point welcome bonus (Fish)!`);
-                }
-
-                // Init Memory
-                if (!room.users[userId]) {
-                    room.users[userId] = {
-                        userId: userId, score: initialScore, gold: initialGold, seatIndex: 0,
-                        name: name, online: true,
-                        cannonKind: 1, vip: 1
-                    };
+                if (dbUser && dbUser.fish_balance !== undefined) {
+                    // [BALANCE FIX] fish_balance now stores game score directly
+                    // Backward compatibility: if value < 1000000 (1M), it's old format (元), multiply by 1000
+                    // [PRECISION FIX] Load float from DB and convert to integer for memory
+                    currentBalance = toStorageInt(dbUser.fish_balance);
+                    currentGold = toStorageInt(dbUser.gold_balance || dbUser.fish_balance); // Use gold_balance if available, else fish_balance
+                    console.log(`[DEBUG] Using DB fish_balance: ${dbUser.fish_balance} -> currentBalance(Int): ${currentBalance}`);
+                    console.log(`[DEBUG] Using DB gold_balance: ${dbUser.gold_balance} -> currentGold(Int): ${currentGold}`);
                 } else {
-                    // Update existing memory with latest DB data (restore session)
-                    room.users[userId].score = initialScore;
-                    room.users[userId].gold = initialGold;
-                    room.users[userId].name = name;
+                    console.log(`[DEBUG] Using default balance: ${toDisplayFloat(currentBalance)}, dbUser:`, dbUser);
                 }
 
-                const mySeat = room.users[userId];
-                const emptySeat = { userid: 0, userId: 0, score: 0, name: "", online: false, cannonKind: 1, vip: 0 };
+                // [BALANCE_SYNC_FIX] Only overwrite if user NOT already in room (prevent D→C→B→D overwrite)
+                if (room.users[socket.userId]) {
+                    // User already exists in memory 
+                    // [SEAT_FIX] Ensure they have a valid seat. If they were marked -1 (offline/error), re-assign.
+                    if (room.users[socket.userId].seatIndex === -1) {
+                        const occupiedSeats = new Set(Object.values(room.users).map(u => u.seatIndex));
+                        for (let i = 0; i < 4; i++) {
+                            if (!occupiedSeats.has(i)) {
+                                room.users[socket.userId].seatIndex = i;
+                                break;
+                            }
+                        }
+                        console.log(`[SEAT_FIX] Re-assigned seat for existing user ${socket.userId} -> ${room.users[socket.userId].seatIndex}`);
+                    }
+                    console.log(`[BALANCE_SYNC] User ${socket.userId} already in room. Keeping memory score: ${toDisplayFloat(room.users[socket.userId].score)}`);
+                } else {
+                    // First time login, create user from DB
+                    console.log(`[BALANCE_SYNC] User ${socket.userId} first login. Loading from DB: ${toDisplayFloat(currentBalance)}`);
+                    // Find a free seat index
+                    let freeIdx = -1;
+                    const occupiedSeats = new Set(Object.values(room.users).map(u => u.seatIndex));
+                    for (let i = 0; i < 4; i++) {
+                        if (!occupiedSeats.has(i)) {
+                            freeIdx = i;
+                            break;
+                        }
+                    }
 
-                socket.emit('login_result', {
+                    if (freeIdx === -1) {
+                        console.warn(`[LOGIN_ERROR] Room is full! User ${socket.userId} gets seat -1`);
+                        // Ideally reject login, but for now let them spectate?
+                    }
+
+                    // [ARCH FIX] Read gold_balance separately and NEVER sync it with game score automatically
+                    const currentGold = dbUser ? toStorageInt(dbUser.gold_balance || 0) : 0;
+
+                    room.users[socket.userId] = {
+                        userId: userId, // Ensure userId is set here
+                        score: currentBalance, // Game Points (INT)
+                        gold: currentGold,     // Platform Coin (INT) - Read Only in Game
+                        seatIndex: freeIdx,    // [FIXED] Use Calculated Seat Index!
+                        name: dbUser ? dbUser.name : ("Hunter_" + socket.userId.substr(0, 5)),
+                        online: true,
+                        cannonKind: 1, // Default cannon
+                        vip: 0, // start with 0, will be updated below
+                        recharge_total: 0,
+                        power: 0,
+                        bullet: 0
+                    };
+                    console.log(`[BALANCE_SYNC] User ${socket.userId} login. Seat: ${freeIdx}, VIP: 0`);
+                }
+
+                // [VIP_FIX] Calculate VIP based on mock recharge (Simple Logic)
+                const user = room.users[socket.userId];
+
+                // [VIP_SYNC] If recharge_total is missing/low but user has high balance (e.g. from DB), 
+                // sync recharge_total to balance to ensure they get the correct VIP.
+                const potentialVip = calculateVip(user.score || 0);
+                const currentVip = calculateVip(user.recharge_total || 0);
+
+                if (potentialVip > currentVip) {
+                    console.log(`[VIP_SYNC] Syncing recharge_total to score for User ${socket.userId}. Score: ${user.score}`);
+                    user.recharge_total = user.score;
+                }
+
+                // Recalculate based on current total
+                user.vip = calculateVip(user.recharge_total || 0);
+
+                const userVip = user.vip;
+                const correctCannonKind = VIP_TO_CANNON[userVip] || 1; // Default to basic cannon if VIP 0
+
+                console.log(`[DEBUG] Login Finalize. User: ${userId}, Score: ${toDisplayFloat(room.users[userId].score)}, Gold: ${toDisplayFloat(room.users[userId].gold)}, Name: ${name}`);
+
+                // [BALANCE_SYNC_FIX] User already created above, just use it
+                const mySeat = room.users[userId];
+                const TARGET_SEAT_INDEX = mySeat.seatIndex;
+
+                // [FIX] SHOTGUN APPROACH: Send both Casing styles to satisfy Client
+                const mySeatPayload = {
+                    ...mySeat,
+                    userId: userId, userid: userId,          // Both
+                    seatIndex: TARGET_SEAT_INDEX, seatindex: TARGET_SEAT_INDEX, // Both
+                    cannonKind: correctCannonKind,
+                    vip: userVip,
+                    // [FIX] Add Cannon Power/Multiplier Properties
+                    power: 1,    // [FIX] Power Level (1-10)
+                    multiplier: 1, // [FIX] Multiplier
+                    cannonPower: 1,
+                    bullet: 1,   // [FIX] Bullet Level (for UI display)
+                    score: toDisplayFloat(mySeat.score), // Game Points -> FLOAT
+                    gold: toDisplayFloat(mySeat.gold)    // Platform Coin -> FLOAT
+                };
+
+                const emptySeat = { userid: 0, userId: "0", score: 0, name: "", online: false, cannonKind: 1, vip: 0, seatIndex: -1, seatindex: -1, power: 0, bullet: 0 };
+
+                // Construct Seats Array (Shotgun)
+                // [PRECISION FIX] Send FLOAT to client
+                const seatList = [];
+                for (let i = 0; i < 4; i++) {
+                    let seatUser = { ...emptySeat, seatIndex: i, seatindex: i };
+                    // Find if any user is at this seat
+                    for (let uid in room.users) {
+                        if (room.users[uid].seatIndex === i) {
+                            const u = room.users[uid];
+                            seatUser = {
+                                ...u,
+                                score: toDisplayFloat(u.score), // INT -> FLOAT for client
+                                gold: toDisplayFloat(u.gold),   // INT -> FLOAT for client
+                                userId: u.userId, userid: u.userId,
+                                seatIndex: u.seatIndex, seatindex: u.seatIndex
+                            };
+                            break;
+                        }
+                    }
+                    seatList.push(seatUser);
+                }
+
+                // [FIX] Login Result Object (Not String) + Shotgun Casing
+                const loginResultPayload = {
                     errcode: 0,
                     data: {
-                        roomId: String(requestedRoomId),
-                        conf: { type: "default", maxGames: 9999, gamebasescore: 1 }, // Simplification
-                        seats: [
-                            { ...mySeat, seatIndex: 0 },
-                            { ...emptySeat, seatIndex: 1 },
-                            { ...emptySeat, seatIndex: 2 },
-                            { ...emptySeat, seatIndex: 3 }
-                        ]
+                        roomId: String(validRoomId),  // [CRITICAL FIX] Use validRoomId, not requestedRoomId
+                        roomID: String(validRoomId),
+                        RoomId: String(validRoomId),
+                        id: String(validRoomId),
+                        // [FIX] Dynamic RoomBaseScore for ALL Rooms
+                        // Client: t = Math.round(1e3 * t), Server returns INTEGER
+                        roomBaseScore: room.baseScore * 1000,  // [REFACTOR] Use room's actual baseScore
+                        conf: {
+                            type: "default",
+                            maxGames: 9999,
+                            // [CANONICAL] Send Room Base Score (e.g. 0.001)
+                            gamebasescore: room.baseScore,  // [REFACTOR] Use room's actual baseScore
+                            roomId: String(validRoomId)  // [CRITICAL FIX] Use validRoomId
+                        },
+                        seats: seatList,
+                        // Shotgun Root Level just in case
+                        seatindex: TARGET_SEAT_INDEX,
+                        seatIndex: TARGET_SEAT_INDEX,
+                        userid: userId,
+                        userId: userId
                     }
-                });
+                };
+
+                console.log('[ServerFix] COMPLETE login_result payload:', JSON.stringify(loginResultPayload, null, 2));
+                socket.emit('login_result', loginResultPayload);
 
                 socket.emit('login_finished', { errcode: 0 });
+
+                // [FIX] MOVED SYNC TO 'ready' EVENT
+                // But keep 'new_user_comes_push' for notifying others (or self if instant)
+                // Client might rely on 'new_user_comes_push' OR 'game_sync_push'
                 setTimeout(() => {
-                    socket.emit('new_user_comes_push', { ...mySeat, seatIndex: 0 });
+                    socket.emit('new_user_comes_push', mySeatPayload);
+
+                    // [SYNC FIX] Send existing fish to the new user!
+                    // Otherwise client generates random fish or sees nothing while server has different fish.
+                    const existingFishList = [];
+                    if (room.aliveFish) {
+                        Object.values(room.aliveFish).forEach(f => {
+                            // Must verify if fish is still valid/active
+                            if (Date.now() - f.activeTime < 120000) {
+                                existingFishList.push(f);
+                            }
+                        });
+                    }
+                    if (existingFishList.length > 0) {
+                        console.log(`[SYNC] Sending ${existingFishList.length} existing fish to new user ${userId}`);
+                        socket.emit('build_fish_reply', existingFishList);
+                    }
+
                 }, 500);
 
-                startFishLoop(socket);
+                // [REFACTOR] Spawn timers now managed by RoomManager on room creation
+                // No need to call startFishLoop here
             };
 
             // Query DB
             if (userId !== 'guest') {
-                db.get("SELECT name, fish_balance FROM users WHERE id = ?", [userId], (err, row) => {
+                // [FIX] Select gold_balance explicitly
+                db.get("SELECT name, fish_balance, gold_balance FROM users WHERE id = ?", [userId], (err, row) => {
                     if (err) console.error("Login DB Error", err);
                     finalizeLogin(row);
                 });
@@ -530,257 +856,812 @@ ports.forEach(port => {
             }
         });
 
+        // --- READY & GAME SYNC ---
+        // [FIX] Handle 'ready' event to send Game Sync.
+        socket.on('ready', () => {
+            console.log(`[DEBUG] Client Ready: ${socket.userId}`);
+            const room = roomManager.getRoom(socket.currentRoomId);  // [REFACTOR] Use roomManager
+
+            // [REFACTOR] Spawn timers now managed by RoomManager, started on room creation
+            // No need for fishSpawnStarted flag or startFishLoop call
+
+            if (!socket.userId || !room || !room.users[socket.userId]) return;
+
+            const u = room.users[socket.userId];
+            const mySeatPayload = {
+                ...u,
+                userId: u.userId, userid: u.userId,
+                seatIndex: u.seatIndex, seatindex: u.seatIndex,
+                score: toDisplayFloat(u.score), // INT -> FLOAT
+                gold: toDisplayFloat(u.gold) // INT -> FLOAT
+            };
+
+            // Construct Seats Shotgun
+            const emptySeat = { userid: 0, userId: "0", score: 0, name: "", online: false, cannonKind: 1, vip: 0, seatIndex: -1, seatindex: -1 };
+            const seatList = [
+                { ...emptySeat, seatIndex: 0, seatindex: 0 },
+                { ...emptySeat, seatIndex: 1, seatindex: 1 },
+                { ...emptySeat, seatIndex: 2, seatindex: 2 },
+                { ...emptySeat, seatIndex: 3, seatindex: 3 }
+            ];
+            // Fill existing users
+            for (let uid in room.users) {
+                const user = room.users[uid];
+                if (user.seatIndex >= 0 && user.seatIndex < 4) {
+                    seatList[user.seatIndex] = {
+                        ...user,
+                        score: toDisplayFloat(user.score), // INT -> FLOAT
+                        gold: toDisplayFloat(user.gold),   // INT -> FLOAT
+                        userId: user.userId, userid: user.userId,
+                        seatIndex: user.seatIndex, seatindex: user.seatIndex
+                    };
+                }
+            }
+
+            socket.emit('game_sync_push', {
+                state: 0,
+                gamestate: 0,
+                time_remaining: 9999,
+                seats: seatList,
+                conf: {
+                    gamebasescore: room.baseScore,  // [REFACTOR] Use room's actual baseScore
+                    roomId: String(socket.currentRoomId)
+                },
+                // [CRITICAL FIX] Client's game_sync handler expects roomBaseScore to calculate sceneMulti
+                roomBaseScore: room.baseScore * 1000
+            });
+        });
+
+
+        // --- HEARTBEAT (Fix Timeout) ---
+        socket.on('game_ping', () => {
+            // console.log(`[PING] Responding to ${socket.id}`);
+            socket.emit('game_pong');
+        });
+
+
+        // --- HEARTBEAT (Fix Timeout) ---
+        socket.on('game_ping', () => {
+            // console.log(`[PING] Responding to ${socket.id}`);
+            socket.emit('game_pong');
+        });
+
         // --- WALLET: CHARGE (DEPOSIT) [SECURE] ---
         // Deduct Gold from DB -> Add Score
         socket.on('charge', (data) => {
             console.log(`[DEBUG] Charge Request for Socket ${socket.id}. UserID: ${socket.userId}`);
             const reqData = parsePayload(data);
-            const amount = parseInt(reqData.amount);
-            console.log(`[DEBUG] Charge Amount: ${amount}. reqData:`, reqData);
+            const amountGold = parseInt(reqData.amount); // Input is GOLD (float from client)
+            const amountScore = toStorageInt(amountGold);       // Convert to SCALED SCORE (integer)
 
-            if (!amount || amount <= 0) {
-                console.log(`[DEBUG] Invalid amount: ${amount}`);
-                return;
-            }
-            if (!socket.userId) {
-                console.log(`[DEBUG] Missing socket.userId. Aborting.`);
-                return;
-            }
+            console.log(`[DEBUG] Charge Gold: ${amountGold} -> Score: ${toDisplayFloat(amountScore)} (Int: ${amountScore})`);
+
+            if (!amountGold || amountGold <= 0) return;
+            if (!socket.userId) return;
 
             const room = getRoom();
             const user = room.users[socket.userId];
-            if (!user) {
-                console.log(`[DEBUG] User not found in Room Memory.`);
-                return;
-            }
+            if (!user) return;
 
             // 1. Atomically Check & Deduct Gold in DB
-            // "this.changes" will be 1 if row was updated (funds sufficient), 0 if not.
-            db.run("UPDATE users SET gold_balance = gold_balance - ? WHERE id = ? AND gold_balance >= ?", [amount, socket.userId, amount], function (err) {
+            // [PRECISION FIX] Convert amountGold to float for DB comparison
+            db.run("UPDATE users SET gold_balance = gold_balance - ? WHERE id = ? AND gold_balance >= ?", [toDisplayFloat(amountGold), socket.userId, toDisplayFloat(amountGold)], function (err) {
                 if (err) {
                     console.error(`[Charge] DB Error for ${socket.userId}:`, err);
                     return;
                 }
 
                 if (this.changes > 0) {
-                    // 2. Success: Add Memory Score
-                    user.score += amount;
+                    // 2. Success: Add Memory Score (Game Points)
+                    user.score = safeAdd(user.score, amountScore);
+                    // [ARCH FIX] Do NOT add to user.gold here. user.gold is a cached view of Platform Coin.
+                    // Ideally, we should fetch fresh gold_balance, but for now we just don't touch it to avoid confusion/double counting.
+                    // Or, since we just deducted from DB, we should update the cached view:
+                    user.gold = safeSub(user.gold, toStorageInt(amountGold));
 
-                    // 3. Persist Score to DB (Fix: Ensure points aren't lost on reload & Handle NULL)
-                    db.run("UPDATE users SET fish_balance = COALESCE(fish_balance, 0) + ? WHERE id = ?", [amount, socket.userId], (err) => {
-                        if (err) console.error(`[Charge] Failed to persist score for ${socket.userId}`, err);
-                    });
+                    // [VIP_FIX] Accumulate Recharge
+                    user.recharge_total = (user.recharge_total || 0) + amountGold; // Use Gold amount
+                    // Update VIP immediately
+                    const newVip = calculateVip(user.recharge_total);
+                    if (newVip > user.vip) {
+                        user.vip = newVip;
+                        console.log(`[VIP] User ${socket.userId} upgraded to VIP ${newVip}! TotalRecharge: ${user.recharge_total}`);
+                    }
 
-                    // 4. Log Transaction (Fix: Audit Trail)
+                    // 4. Log Transaction
                     const desc = `換碼(入金) - Fish Master`;
                     db.run("INSERT INTO wallet_transactions (user_id, amount, currency, type, description, created_at) VALUES (?, ?, 'gold', 'transfer_out', ?, datetime('now', '+8 hours'))",
-                        [socket.userId, -amount, desc], (err) => {
+                        [socket.userId, -toDisplayFloat(amountGold), desc], (err) => {
                             if (err) console.error("Failed to log charge transaction", err);
                         });
 
-                    console.log(`[Charge] Success! Deducted ${amount} Gold, Added ${amount} Score. New Score: ${user.score}`);
+                    console.log(`[Charge] Success! Deducted ${toDisplayFloat(amountGold)} Gold, Added ${toDisplayFloat(amountScore)} Score.`);
 
-                    socket.emit('charge_reply', { success: true, amount: amount, newScore: user.score });
-
-                    // Force Sync
-                    socket.emit('game_sync_push', {
-                        type: "score_update", userId: socket.userId, score: user.score
-                    });
                 } else {
-                    console.warn(`[Charge] Failed. Insufficient Gold for ${socket.userId}. Needed: ${amount}`);
+                    console.warn(`[Charge] Failed. Insufficient Gold.`);
                     socket.emit('charge_reply', { success: false, msg: "Insufficient Gold" });
                 }
             });
         });
 
-        // --- WALLET: EXCHANGE (REMOVED LEGACY DUPLICATE) ---
-        // (Use the Secure Server-Side handler below)
-
-        // --- FIRE ---
         socket.on('user_fire', (data) => {
+            console.log(`[FIRE_HANDLER_REACHED] Socket ${socket.id} (User: ${socket.userId}) triggered 'user_fire'`);
+
             const reqData = parsePayload(data);
-            const room = getRoom();
+            const room = roomManager.getRoom(socket.currentRoomId);  // [REFACTOR] Use roomManager
+            const bulletKind = parseInt(reqData.bulletKind) || 1;
+
+            // [LASER_BUG_FIX] 防止客户端在冷却期间发送kind=22的普通子弹
+            if (bulletKind === 22) {
+                const user = room.users[socket.userId];
+                const now = Date.now();
+                const lastLaserTime = user?.lastLaserTime || 0;
+                const cooldownRemaining = Math.max(0, 30000 - (now - lastLaserTime));
+
+                if (cooldownRemaining > 0) {
+                    console.warn(`[LASER_REJECT] User ${socket.userId} tried to fire laser during cooldown! Remaining: ${Math.ceil(cooldownRemaining / 1000)}s`);
+                    return; // 拒绝非法请求
+                }
+            }
+
+            // [FIX] Force Server-Side UserId (Don't Trust Client)
+            // Ensures all broadcasts carry correct user identity
+            reqData.userId = socket.userId;
+            if (socket.userId && room.users[socket.userId]) {
+                // [CRITICAL FIX] CLIENT expects chairId starting from 1, SERVER uses 0-indexed seatIndex
+                reqData.chairId = room.users[socket.userId].seatIndex + 1;
+
+                // [LASER_BUG_FIX] Update Cannon Kind in Memory (但不允许雷射炮)
+                // kind=22(雷射炮)不是普通可切换炮种，不应存入cannonKind
+                if (bulletKind !== 22) {
+                    room.users[socket.userId].cannonKind = bulletKind;
+                    console.log(`[CANNON_SWITCH] User ${socket.userId} switched to kind ${bulletKind}`);
+                } else {
+                    console.log(`[LASER_DETECTED] User ${socket.userId} firing laser cannon (kind=22)`);
+                }
+            }
 
             // Deduct Cost
-            const RoomBaseScores = { 1: 1, 2: 50, 3: 500, 4: 2000 };
-            const rScore = RoomBaseScores[socket.currentRoomId || 1] || 1;
-            const bMulti = BulletMulti[reqData.bulletKind] || 1;
-            const cost = bMulti * rScore;
+            // [CRITICAL FIX] Use room.baseScore directly, not RoomConfig map!
+            // Dynamically created rooms (1000+) don't exist in RoomConfig{1,2,3,4}
+            // room already declared at line 974
+            const rScore = Number(room?.baseScore || 0.001);
+            const bMulti = Number(BulletMulti[reqData.bulletKind]) || 1;
 
-            if (socket.userId && room.users[socket.userId]) {
-                room.users[socket.userId].score -= cost;
-            }
-
-            // Store Bullet
-            if (reqData.bulletId) {
-                room.aliveBullets[reqData.bulletId] = {
-                    bulletId: reqData.bulletId, bulletKind: reqData.bulletKind,
-                    userId: reqData.userId, activeTime: Date.now()
-                };
-            }
-
-            socket.broadcast.emit('user_fire_Reply', reqData);
-        });
-
-        // --- CATCH ---
-        socket.on('catch_fish', (data) => {
-            const reqData = parsePayload(data);
-            const room = getRoom();
-            const fishId = parseInt(reqData.fishId);
-            const bulletId = reqData.bulletId;
-
-            const fish = room.aliveFish[fishId];
-            if (!fish) return;
-
-            const fishDiff = FishMulti[fish.fishKind] || 2;
-            const rtp = 0.97;
-            const difficulty = fishDiff / rtp;
-
-            const isHit = (Math.floor(Math.random() * difficulty) === 0);
-
-            if (isHit) {
-                const RoomBaseScores = { 1: 1, 2: 50, 3: 500, 4: 2000 };
-                const rScore = RoomBaseScores[socket.currentRoomId || 1] || 1;
-                const bMulti = BulletMulti[room.aliveBullets[bulletId]?.bulletKind || 1] || 1;
-
-                const score = fishDiff * bMulti * rScore;
-
-                // Add Score
-                if (room.users[socket.userId]) {
-                    room.users[socket.userId].score += score;
-                }
-
-                io.emit('catch_fish_reply', {
-                    userId: reqData.userId, chairId: reqData.chairId,
-                    fishId: String(fishId), bulletId: bulletId, addScore: score, item: ""
-                });
-
-                delete room.aliveFish[fishId];
-            }
-
-            if (bulletId) delete room.aliveBullets[bulletId];
-        });
-
-        // --- EXCHANGE / WITHDRAW (Secure Server-Side) ---
-        // Handles "Score -> Gold" conversion atomically
-        socket.on('exchange', (data) => {
-            const reqData = parsePayload(data);
-            const amount = parseInt(reqData.amount);
-            if (!amount || amount <= 0) return;
-
-            const room = getRoom();
-            const user = room.users[socket.userId];
-            if (!user) return;
-
-            // Rule: Must keep 500
-            if (user.score < amount + 500) {
-                console.warn(`[Exchange] Failed. Must retain 500. Score: ${user.score}, Amount: ${amount}`);
-                socket.emit('exchange_reply', { success: false, msg: "Must keep at least 500 coins" });
+            if (isNaN(rScore) || rScore <= 0) {
+                console.error(`[FIRE ERROR] Invalid BaseScore for Room ${socket.currentRoomId}:`, rScore);
                 return;
             }
 
-            if (user.score >= amount) {
-                // 1. Deduct Memory (Optimistic Lock)
-                user.score -= amount;
-                console.log(`[Exchange] User ${socket.userId} requesting withdraw of ${amount}. Locking Score.`);
+            // bulletKind already declared at line 814
 
-                // 2. DB Transaction (Add Gold)
-                db.run("UPDATE users SET gold_balance = gold_balance + ? WHERE id = ?", [amount, socket.userId], (err) => {
-                    if (err) {
-                        console.error(`[Exchange] DB Error for ${socket.userId}:`, err);
-                        // Rollback
-                        user.score += amount;
-                        // socket.emit('exchange_reply', { success: false, msg: "Database Error" });
-                    } else {
-                        // 3. Persist Score to DB (Fix: Ensure points aren't lost on reload & Handle NULL)
-                        db.run("UPDATE users SET fish_balance = COALESCE(fish_balance, 0) - ? WHERE id = ?", [amount, socket.userId], (err) => {
-                            if (err) console.error(`[Exchange] Failed to persist score to DB for ${socket.userId}`, err);
-                        });
+            // [CANONICAL] Laser cannon special handling (GO: client.go:237-244)
+            if (bulletKind === 22) {
+                // [FIX] Check power requirement
+                if (!room.users[socket.userId] || (room.users[socket.userId].power || 0) < 1) {
+                    console.log(`[LASER] User ${socket.userId} tried to fire laser without full power: ${room.users[socket.userId]?.power}`);
+                    return;
+                }
 
-                        // Log Transaction (Fix: Audit Trail)
-                        const desc = `結算(出金) - Fish Master`;
-                        const gameId = 1; // Assuming a default gameId for now, or retrieve from context if available
-                        db.run("INSERT INTO wallet_transactions (user_id, amount, currency, type, description, game_id, created_at) VALUES (?, ?, 'gold', 'game_win', ?, ?, datetime('now', '+8 hours'))",
-                            [socket.userId, amount, desc, gameId], (err) => {
-                                if (err) console.error("Failed to log exchange transaction", err);
-                            });
+                if (room.users[socket.userId]) {
+                    room.users[socket.userId].power = 0;  // Reset power
+                    room.users[socket.userId].lastLaserTime = Date.now();  // 记录发射时间
+                    console.log(`[LASER] User ${socket.userId} fired laser cannon, power reset, cooldown started`);
+                }
+                reqData.chairId = (room.users[socket.userId]?.seatIndex || 0) + 1;
+                reqData.userId = socket.userId;
+                socket.broadcast.emit('user_fire_Reply', reqData);
+                return;  // Don't deduct score, don't add to aliveBullets
+            }
 
-                        console.log(`[Exchange] Success! User ${socket.userId} converted ${amount} Score -> Gold.`);
+            console.log(`[FIRE DEBUG] User:${socket.userId} Kind:${bulletKind} Multi:${bMulti} Base:${rScore} Cost:${toDisplayFloat(toStorageInt(bMulti * rScore))} OldScore:${toDisplayFloat(room.users[socket.userId]?.score)}`);
 
-                        // 4. Emit Success
-                        socket.emit('exchange_reply', {
-                            success: true,
-                            addGold: amount,
-                            newScore: user.score
-                        });
+            // Deduct Cost
+            if (room.users[socket.userId]) {
+                // [PRECISION FIX] Calculate cost as INT
+                const costInt = toStorageInt(bMulti * rScore);
+                room.users[socket.userId].score = safeSub(room.users[socket.userId].score, costInt);
 
-                        // Force Sync Score immediately
-                        socket.emit('game_sync_push', {
-                            type: "score_update", userId: socket.userId, score: user.score
-                        });
-                    }
-                });
-            } else {
-                console.warn(`[Exchange] ${socket.userId} insufficient score: ${user.score} < ${amount}`);
+                // [ARCH FIX] NEVER touch room.users[socket.userId].gold (Platform Coin) here!
+                // Game logic only affects 'score' (Game Points).
+
+                // [CANONICAL] Bill uses INT too
+                room.users[socket.userId].bill = room.users[socket.userId].bill || 0;
+                room.users[socket.userId].bill = safeSub(room.users[socket.userId].bill, costInt);
+
+                // [CANONICAL] Power accumulation (GO: client.go:251-254)
+                const addPower = bMulti / 3000;
+                room.users[socket.userId].power = room.users[socket.userId].power || 0;
+                if (room.users[socket.userId].power < 1) {
+                    room.users[socket.userId].power += addPower;
+                }
+
+                console.log(`[FIRE DEBUG] NewScore(Int):${room.users[socket.userId].score}`);
+            }
+
+            // Store Bullet (防御性检查：kind=22不应创建普通子弹)
+            if (bulletKind === 22) {
+                console.error(`[DEFENSIVE_ERROR] Attempted to create regular bullet with kind=22! This should never happen!`);
+                return;  // 防御性拒绝
+            }
+
+            reqData.chairId = (room.users[socket.userId]?.seatIndex || 0) + 1; // [FIX] CLIENT expects chairId 1-indexed
+            reqData.userId = socket.userId;            // Store Bullet
+            const bulletId = reqData.bulletId; // Assuming bulletId is in reqData
+            const cannonType = reqData.cannonType || 1; // Assuming cannonType is in reqData, default to 1
+            // [CRITICAL FIX] Store ACTUAL bullet cost, not base score
+            // If bulletMulti=10000, baseScore=0.001, cost should be 10, not 0.001!
+            const bulletCost = rScore * bMulti; // e.g., 0.001 * 10000 = 10
+
+            room.aliveBullets[bulletId] = {
+                bulletId: bulletId,
+                userId: socket.userId,
+                cannonType: cannonType,
+                bulletKind: bulletKind,
+                bMulti: bMulti,
+                score: bulletCost, // [FIX] Store actual cost, not base!
+                chairId: (room.users[socket.userId]?.seatIndex || 0) + 1, // [FIX] Store chairId for visuals
+                time: Date.now()
+            };
+
+            console.log(`[BULLET_TRACK] Created Bullet: ${bulletId} for User: ${socket.userId}, Kind: ${bulletKind}, Time: ${Date.now()}`);
+
+            // Broadcast to other users
+            socket.broadcast.to(socket.currentRoomId).emit('user_fire_Reply', {
+                ...reqData,
+                userId: socket.userId // Ensure userId is sent
+            });
+        });
+
+        // --- LASER CATCH ---
+        socket.on('laser_catch_fish', (data) => {
+            const reqData = parsePayload(data);
+            const room = roomManager.getRoom(socket.currentRoomId);
+            const user = room.users[socket.userId];
+            if (!user) return;
+
+            const fishesStr = reqData.fishes || "";
+            const fishIdList = fishesStr.split('-').map(id => parseInt(id));
+            if (fishIdList.length === 0) return;
+
+            let addScore = 0;
+            const killedFishes = [];
+            const rScore = Number(room.baseScore || 0.001);
+            // Laser bullet kind is 22, Multiplier is 1 (Go define.go)
+            const laserMulti = BulletMulti[22] || 1;
+
+            fishIdList.forEach(fId => {
+                const fish = room.aliveFish[fId];
+                if (fish) {
+                    killedFishes.push(fId);
+                    const fishMulti = FishMulti[fish.fishKind] || 2;
+                    // Score = FishMulti * BulletMulti * BaseScore
+                    // Using integer math flow similar to catch_fish
+                    const rewardInt = toStorageInt(rScore * laserMulti * fishMulti);
+                    addScore = safeAdd(addScore, rewardInt);
+
+                    // Remove fish (client trusts laser hits usually)
+                    delete room.aliveFish[fId];
+                }
+            });
+
+            if (addScore > 0) {
+                user.score = safeAdd(user.score, addScore);
+                user.bill = safeAdd(user.bill || 0, addScore);
+
+                const catchFishAddScore = toDisplayFloat(addScore);
+                const catchReply = {
+                    userId: socket.userId,
+                    chairId: (user.seatIndex || 0) + 1,
+                    fishId: killedFishes.join(','),
+                    addScore: catchFishAddScore,
+                    score: toDisplayFloat(user.score),
+                    isLaser: true
+                };
+
+                io.in('room_' + socket.currentRoomId).emit('catch_fish_reply', catchReply);
+                console.log(`[LASER HIT] User ${socket.userId} hit ${killedFishes.length} fish. Reward: ${catchFishAddScore}`);
             }
         });
 
-        // --- SPAWN LOOP ---
-        function spawnFishBatch(socket, kindStart, kindEnd, intervalType) {
-            if (!outputTraceConfig) return;
-            const room = getRoom();
-            const fishKind = Math.floor(Math.random() * (kindEnd - kindStart + 1)) + kindStart;
+        // --- LOCK FISH (Restored) ---
+        socket.on('user_lock_fish', (data) => {
+            const reqData = parsePayload(data);
+            const room = roomManager.getRoom(socket.currentRoomId);
+            if (!room || !room.users[socket.userId]) return;
 
-            // Random Trace
-            let traceId = (intervalType === 4) ? (101 + Math.floor(Math.random() * 10)) :
-                (Math.floor(Math.random() * 3) === 0 ? 201 + Math.floor(Math.random() * 17) : 101 + Math.floor(Math.random() * 10));
+            const response = {
+                userId: socket.userId,
+                chairId: room.users[socket.userId].seatIndex + 1,
+                fishId: reqData.fishId || -1
+            };
+
+            socket.broadcast.to(socket.currentRoomId).emit('lock_fish_reply', response);
+            console.log(`[LOCK] User ${socket.userId} locked fish ${response.fishId}`);
+        });
+
+        // --- FROZEN SCENE ---
+        socket.on('user_frozen', (data) => {
+            const room = roomManager.getRoom(socket.currentRoomId);
+            if (!room) return;
+
+            // [CANONICAL] Frozen duration 10 seconds
+            const duration = 10000;
+            room.frozenEndTime = Date.now() + duration;
+
+            console.log(`[FROZEN] User ${socket.userId} froze the scene for 10s`);
+
+            // Broadcast to ALL users (包括自己，如果客户端需要服务器确认)
+            io.in('room_' + socket.currentRoomId).emit('user_frozen_reply', {
+                cutDownTime: 10000 // Client expects MILLISECONDS (10s)
+            });
+        });
+
+        // --- EXIT (Critical: Missing Handler!) ---
+        socket.on('exit', () => {
+            console.log(`[EXIT] User ${socket.userId} requested exit from room ${socket.currentRoomId}`);
+
+            if (!socket.currentRoomId || !socket.userId) {
+                console.warn(`[EXIT] Invalid state: roomId=${socket.currentRoomId}, userId=${socket.userId}`);
+                socket.disconnect(true);
+                return;
+            }
+
+            const roomName = 'room_' + socket.currentRoomId;
+            const room = roomManager.getRoom(socket.currentRoomId);
+
+            // 1. Broadcast exit to other players
+            io.in(roomName).emit('exit_notify_push', socket.userId);
+
+            // 2. Leave room channel to stop receiving broadcasts
+            socket.leave(roomName);
+            console.log(`[EXIT] User ${socket.userId} left ${roomName}`);
+
+            // 3. Clean up room memory
+            if (room && room.users[socket.userId]) {
+                // Save score before cleanup
+                saveUserToDB(socket.userId, room.users[socket.userId].score);
+                delete room.users[socket.userId];
+                console.log(`[EXIT] Removed user ${socket.userId} from room ${socket.currentRoomId} memory`);
+            }
+
+            // 4. Send exit confirmation to client
+            socket.emit('exit_result', { errcode: 0 });
+
+            // 5. Force disconnect the socket (like Go server does)
+            socket.disconnect(true);
+            console.log(`[EXIT] Disconnected socket ${socket.id}`);
+
+            // 6. Check if room should be cleaned up
+            roomManager.checkAndDeleteEmptyRoom(socket.currentRoomId);
+        });
+
+        // --- CATCH (Corrected with RTP) ---
+        // --- CATCH (Corrected with RTP) ---
+        socket.on('catch_fish', (data) => {
+            const reqData = parsePayload(data);
+            const room = roomManager.getRoom(socket.currentRoomId);  // [REFACTOR] Use roomManager
+            const bulletId = reqData.bulletId; // [FIX] Extract variable
+            const fishIdParam = reqData.fishId; // Can be comma separated
+
+            console.log(`[CATCH] Request from ${socket.userId}: Bullet:${bulletId}, Fish:${fishIdParam}`);
+
+            // 1. Validate Bullet
+            let bullet = room.aliveBullets[bulletId];
+            if (!bullet) {
+                console.warn(`[TRACE_HIT] Bullet NOT found: ${bulletId} (User: ${socket.userId}).`);
+
+                // Detailed debug of existing bullets for this user
+                const userBullets = Object.values(room.aliveBullets).filter(b => b.userId === socket.userId);
+                console.warn(`[TRACE_HIT] User has ${userBullets.length} active bullets in memory: [${userBullets.map(b => b.bulletId).join(', ')}]`);
+
+                console.warn(`[TRACE_HIT] Creating MOCK bullet to allow hit (Mock Logic Active).`);
+                // [CRITICAL FIX] Use room.baseScore directly, NOT RoomConfig!
+                // room already declared at line 974
+                const mockBMulti = room.users[socket.userId]?.cannonKind ? BulletMulti[room.users[socket.userId].cannonKind] : 1;
+                const mockCost = (room?.baseScore || 0.001) * mockBMulti; // Use room.baseScore (2.0)!
+
+                bullet = {
+                    bulletId: bulletId,
+                    userId: socket.userId,
+                    cannonType: 1,
+                    bMulti: mockBMulti,
+                    score: mockCost, // [FIX] Use actual cost
+                    chairId: (room.users[socket.userId]?.seatIndex || 0) + 1, // [FIX] Add chairId
+                    time: Date.now(),
+                    isMock: true
+                };
+            } else {
+                console.log(`[TRACE_HIT] Bullet Found: ${bulletId} (Created: ${Date.now() - bullet.time}ms ago)`);
+            }
+
+            if (bullet.userId !== socket.userId) {
+                console.warn(`[TRACE_HIT] Ownership mismatch! BulletOwner:${bullet.userId} vs RequestUser:${socket.userId}`);
+                return;
+            }
+
+            // 2. Resolve Fishes
+            const fishIdList = String(fishIdParam).split(',');
+            console.log(`[TRACE_HIT] Processing ${fishIdList.length} fish hits: [${fishIdList.join(', ')}]`);
+            const killedFishes = [];
+
+            fishIdList.forEach(fId => {
+                const fish = room.aliveFish[fId];
+                if (fish) {
+                    // [CANONICAL] Hit Rate Check
+                    const fishMulti = FishMulti[fish.fishKind] || 2;
+
+                    // [CANONICAL] Reverted to Go logic as requested
+                    const captureRate = 1.0 / fishMulti;
+
+
+                    const diceRoll = Math.random();
+                    const isHit = diceRoll < captureRate;
+
+                    if (isHit) {
+                        killedFishes.push(fish);
+                        console.log(`[FISH_TRACK] HIT! Fish:${fId} (Kind:${fish.fishKind}, Multi:${fishMulti}) Rate:${captureRate.toFixed(4)} Roll:${diceRoll.toFixed(4)}`);
+                    } else {
+                        console.log(`[FISH_TRACK] MISS! Fish:${fId} (Kind:${fish.fishKind}, Multi:${fishMulti}) Rate:${captureRate.toFixed(4)} Roll:${diceRoll.toFixed(4)}`);
+                    }
+                } else {
+                    console.warn(`[FISH_REJECT] Fish NOT found: ${fId}. It might have swum away.`);
+                }
+            });
+
+            if (killedFishes.length > 0) {
+                // [FIX] Canonical Score Calculation
+                // In Go: totalScore = GetFishMulti(fish) * GetBulletMulti(bulletKind) * RoomBaseScore
+                // bullet.score NOW stores ACTUAL cost (baseScore * bulletMulti)
+                // Reward = bullet.score * fishMulti
+
+                const bulletCost = Number(bullet.score) || 0; // e.g., 10 (NOW STORES ACTUAL COST!)
+                const bMulti = Number(bullet.bMulti) || 1;
+
+                // Check for special fish effects (Bomb, etc.)
+                let specialFish = null;
+                for (const f of killedFishes) {
+                    if (f.fishKind === 30 || (f.fishKind >= 23 && f.fishKind <= 26) || (f.fishKind >= 31 && f.fishKind <= 33)) {
+                        specialFish = f;
+                        break;
+                    }
+                }
+
+                if (specialFish) {
+                    if (specialFish.fishKind === 30) {
+                        // [CANONICAL] Bomb Fish (Kind 30) - Kill max 20 small fish
+                        const candidates = Object.values(room.aliveFish).filter(f => f.fishKind < 11 && f.fishId !== specialFish.fishId);
+                        const targets = candidates.slice(0, 20);
+                        targets.forEach(t => {
+                            if (!killedFishes.find(k => k.fishId === t.fishId)) {
+                                killedFishes.push(t);
+                            }
+                        });
+                        console.log(`[SPECIAL] Bomb fish! Added ${targets.length} small fish.`);
+                    }
+                    else if (specialFish.fishKind >= 23 && specialFish.fishKind <= 26) {
+                        // [CANONICAL] All-in-One
+                        const targets = Object.values(room.aliveFish).filter(f =>
+                            (f.fishKind >= 23 && f.fishKind <= 26) && f.fishId !== specialFish.fishId
+                        );
+                        targets.forEach(t => {
+                            if (!killedFishes.find(k => k.fishId === t.fishId)) {
+                                killedFishes.push(t);
+                            }
+                        });
+                        console.log(`[SPECIAL] All-in-one! Added ${targets.length} similar fish.`);
+                    }
+                    else if (specialFish.fishKind >= 31 && specialFish.fishKind <= 33) {
+                        // [CANONICAL] Same-kind bomb
+                        let targetKind = -1;
+                        if (specialFish.fishKind === 31) targetKind = 12;
+                        if (specialFish.fishKind === 32) targetKind = 1;
+                        if (specialFish.fishKind === 33) targetKind = 7;
+
+                        if (targetKind !== -1) {
+                            const targets = Object.values(room.aliveFish).filter(f =>
+                                (f.fishKind === specialFish.fishKind || f.fishKind === targetKind) && f.fishId !== specialFish.fishId
+                            );
+                            targets.forEach(t => {
+                                if (!killedFishes.find(k => k.fishId === t.fishId)) {
+                                    killedFishes.push(t);
+                                }
+                            });
+                            console.log(`[SPECIAL] Same-kind bomb! Killing kind ${targetKind} and ${specialFish.fishKind}. Added ${targets.length}.`);
+                        }
+                    }
+                }
+
+                // Calculate Total Score (Integer)
+                let totalScore = 0;
+                const fishIds = [];
+                for (const f of killedFishes) {
+                    const fishMulti = FishMulti[f.fishKind] || 2;
+                    // [CANONICAL] Reward = BulletCost * FishMulti
+                    // Example: 10元炮 * 2倍魚 = 20元獎勵
+                    const rewardInt = toStorageInt(bulletCost * fishMulti);
+                    totalScore = safeAdd(totalScore, rewardInt);
+
+                    fishIds.push(String(f.fishId));
+                    delete room.aliveFish[f.fishId];
+                }
+                // totalScore is now a safe integer
+
+                // Add Score
+                if (room.users[socket.userId]) {
+                    // [PRECISION FIX] Add score as INT
+                    room.users[socket.userId].score = safeAdd(room.users[socket.userId].score, totalScore);
+                    // [ARCH FIX] NEVER touch gold (Platform Coin) here!
+
+                    // [CANONICAL] Bill uses INT
+                    room.users[socket.userId].bill = room.users[socket.userId].bill || 0;
+                    room.users[socket.userId].bill = safeAdd(room.users[socket.userId].bill, totalScore);
+
+                    // [POWER FIXED] Accumulate Power on Kill too? (Standard: Fire adds power, Kill might add more?)
+                    // GO code adds power on FIRE. But let's sync power here just in case.
+                }
+
+                // [CANONICAL] Item drop 1% probability (GO: client.go:283-287)
+                let item = "";
+                if (Math.random() < 0.01) {
+                    item = "ice";
+                    console.log(`[ITEM] Ice item dropped for user ${socket.userId}!`);
+                }
+
+                // Broadcast HIT to ALL with SERVER userId and corrected chairId
+                const catchReply = {
+                    userId: socket.userId, // [FIX] Use server userId
+                    chairId: bullet.chairId || (room.users[socket.userId]?.seatIndex + 1), // [FIX] Use Bullet's ChairId for correct UI animation
+                    fishId: fishIds.join(','), // Multiple fish separated by comma
+                    bulletId: bulletId,
+                    addScore: toDisplayFloat(totalScore), // Send float to client
+                    item: item,
+                    // [ANIMATION FIX] Include score and power for UI animations
+                    score: toDisplayFloat(room.users[socket.userId]?.score || 0),
+                    power: room.users[socket.userId]?.power || 0
+                };
+                console.log(`[CATCH SUCCESS] Broadcasting catch_fish_reply:`, catchReply);
+                io.emit('catch_fish_reply', catchReply);
+            }
+
+            // Delete bullet after catch (Canonical behavior from GO implementation)
+            // If CLIENT sends duplicate bulletId, it's a CLIENT bug
+            if (bulletId) delete room.aliveBullets[bulletId];
+        });
+
+        // --- SPAWN LOOP ---
+        // [MATCH GO LOGIC]
+        // Timers:
+        // C1: 1s (Normal 1-15)
+        // C2: 10s (Medium 16-20)
+        // C3: 30s (Large 21-34)
+        // C4: 61s (King 35)
+        // Note: Go code has C1=1s/2s (dynamic?), C2=10s, C3=30s, C4=61s.
+        // We will simulate this precise scheduling.
+
+        // Global storage for spawn timers, keyed by roomId
+        const spawnTimers = {};
+        let nextFishId = 0; // Global fish ID counter
+        let spawnTimersStarted = false; // [FIX] Global flag to prevent duplication
+
+        function getNextFishId() {
+            nextFishId++;
+            return nextFishId;
+        }
+
+        function startSpawnTimers(roomId) {
+            // [CRITICAL FIX] Prevent multiple instances of spawn timers
+            if (spawnTimersStarted) {
+                console.log(`[SPAWN] Timers already running, skipping duplicate start.`);
+                return;
+            }
+            spawnTimersStarted = true;
+            console.log(`[ROOM] Started 4 Canonical Tickers for room ${roomId}`);
+
+            spawnTimers[roomId] = [];
+
+            // C1: Normal Fish (Kind 1-15), Every 1s
+            const t1 = setInterval(() => {
+                spawnFishBatch(roomId, 1, 15, 'C1');
+            }, 1000);
+            spawnTimers[roomId].push(t1);
+
+            // C2: Medium Fish (Kind 16-20), Every 10s
+            const t2 = setInterval(() => {
+                spawnFishBatch(roomId, 16, 20, 'C2');
+            }, 10000);
+            spawnTimers[roomId].push(t2);
+
+            // C3: Large Fish (Kind 21-34), Every 30s
+            const t3 = setInterval(() => {
+                spawnFishBatch(roomId, 21, 34, 'C3');
+            }, 30000);
+            spawnTimers[roomId].push(t3);
+
+            // C4: King (Kind 35), Every 61s
+            const t4 = setInterval(() => {
+                spawnFishBatch(roomId, 35, 35, 'C4');
+            }, 61000);
+            spawnTimers[roomId].push(t4);
+        }
+
+        // [LOGIC] Spawn Batch Implementation
+        function spawnFishBatch(roomId, kindStart, kindEnd, timerType) {
+            if (!outputTraceConfig) return;
+            const room = roomManager.getRoom(roomId); // Use roomManager to get the room
+            if (!room) return;
+
+            // [CANONICAL] Trace Logic from fish_utils.go
+            // Randomly select trace type: 1=Straight, 2=Curve2, 3=Curve3
+            const traceType = Math.floor(Math.random() * 3) + 1;
+            let traceId = 101;
+
+            switch (traceType) {
+                case 1: // Straight (201-217)
+                    traceId = 201 + Math.floor(Math.random() * 17);
+                    break;
+                case 2: // Curve 2 (1-10)
+                    traceId = 1 + Math.floor(Math.random() * 10);
+                    break;
+                case 3: // Curve 3 (101-110)
+                    traceId = 101 + Math.floor(Math.random() * 10);
+                    break;
+            }
 
             const paths = outputTraceConfig[String(traceId)];
             if (!paths || paths.length === 0) return;
 
+            // Determine Count based on Timer Type (Heuristic based on logs/Go loop)
+            let count = 1;
+            if (timerType === 'C1') count = 2; // Normal fish spawn in small groups
+            if (timerType === 'C2') count = 1;
+            if (timerType === 'C3') count = 1;
+            if (timerType === 'C4') count = 1;
+
             const fishList = [];
-            const addFish = (pathData) => {
-                nextFishId++;
-                const fId = nextFishId;
-                const speed = (fishKind >= 30) ? 3 : 5;
+            const fishKind = Math.floor(Math.random() * (kindEnd - kindStart + 1)) + kindStart;
 
-                room.aliveFish[fId] = { fishId: fId, fishKind, trace: pathData, speed, activeTime: Date.now() };
-                fishList.push({ fishId: fId, fishKind, trace: pathData, speed, activeTime: Date.now() });
-            };
+            for (let i = 0; i < count; i++) {
+                const fishId = getNextFishId();
+                const speed = (fishKind >= 35) ? 3 : (fishKind >= 30 ? 4 : (fishKind >= 20 ? 5 : 6));
 
-            if (intervalType === 1) {
-                paths.forEach(p => addFish(p));
-            } else {
-                addFish(paths[0]); // Simple single spawn
+                // Track in room
+                const fishObj = {
+                    fishId: fishId,
+                    fishKind: fishKind,
+                    trace: paths[0], // Use first path variant
+                    speed: speed,
+                    activeTime: Date.now()
+                };
+
+                if (!room.aliveFish) room.aliveFish = {}; // Ensure aliveFish exists
+                room.aliveFish[fishId] = fishObj; // Store
+
+                fishList.push({
+                    fishKind: fishKind,
+                    fishId: fishId,
+                    trace: paths[0], // Use first path variant
+                    speed: speed,
+                    activeTime: Date.now()
+                });
             }
 
-            if (fishList.length > 0) socket.emit('build_fish_reply', fishList);
+            if (fishList.length > 0) {
+                // [DIAGNOSTIC] Only log if abnormal socket count
+                io.in('room_' + roomId).fetchSockets().then(sockets => {
+                    if (sockets.length > 4) {
+                        console.warn(`[BROADCAST_WARN] ⚠️ Room ${roomId} has ${sockets.length} sockets! (Max 4). Fish: ${fishList.length}`);
+                        console.warn(`[BROADCAST_WARN] Socket IDs:`, sockets.map(s => s.id));
+                    }
+                });
+                io.in('room_' + roomId).emit('build_fish_reply', {
+                    detail: fishList
+                });
+            }
         }
 
-        function startFishLoop(socket) {
-            if (socket.fishIntervals) socket.fishIntervals.forEach(t => clearInterval(t));
-            socket.fishIntervals = [];
-
-            const t1 = setInterval(() => { if (!socket.connected) clearAll(); else spawnFishBatch(socket, 1, 15, 1); }, 2000);
-            const t2 = setInterval(() => { if (!socket.connected) clearAll(); else spawnFishBatch(socket, 16, 20, 2); }, 10000);
-            const t3 = setInterval(() => { if (!socket.connected) clearAll(); else spawnFishBatch(socket, 21, 34, 3); }, 30000);
-            const t4 = setInterval(() => { if (!socket.connected) clearAll(); else spawnFishBatch(socket, 35, 35, 4); }, 61000);
-
-            socket.fishIntervals.push(t1, t2, t3, t4);
-
-            function clearAll() {
-                if (socket.fishIntervals) socket.fishIntervals.forEach(t => clearInterval(t));
-                socket.fishIntervals = [];
+        function startFishLoop(room, roomId) {
+            // [LASER_BUG_FIX] 防止定时器重复初始化导致鱼生成大乱
+            // 改为房间级别的定时器，而不是socket级别
+            if (room.fishIntervals && room.fishIntervals.length > 0) {
+                console.log(`[FISH_LOOP] Room ${roomId} already has active timers, skipping...`);
+                return;
             }
+
+            console.log(`[FISH_LOOP] Initializing room ${roomId} fish spawn timers`);
+            room.fishIntervals = [];
+
+            // [CLEANUP] Remove expired fish to prevent "Ghost Fish"
+            // Fish typically cross screen in < 40s. Go code uses 120s. Let's use 120s.
+            const tCleanup = setInterval(() => {
+                const now = Date.now();
+                const lifetime = 120000; // [FIX] Increase to 120s to match Go 
+                let count = 0;
+                if (room.aliveFish) {
+                    Object.keys(room.aliveFish).forEach(fId => {
+                        const fish = room.aliveFish[fId];
+                        if (fish && (now - fish.activeTime > lifetime)) {
+                            delete room.aliveFish[fId];
+                            count++;
+                        }
+                    });
+                }
+                if (count > 0) console.log(`[CLEANUP] Room ${roomId} removed ${count} expired fish.`);
+            }, 10000); // Check every 10s
+
+            // 使用房间级别的定时器，不依赖socket.connected状态
+            const t1 = setInterval(() => {
+                // 如果房间没有玩家，不生成鱼（节省资源）
+                if (!room.users || Object.keys(room.users).length === 0) return;
+                spawnFishBatch(roomId, 1, 15, 1);
+            }, 2000);
+
+            const t2 = setInterval(() => {
+                if (!room.users || Object.keys(room.users).length === 0) return;
+                spawnFishBatch(roomId, 16, 20, 2);
+            }, 10100);
+
+            const t3 = setInterval(() => {
+                if (!room.users || Object.keys(room.users).length === 0) return;
+                spawnFishBatch(roomId, 21, 34, 3);
+            }, 30200);
+
+            const t4 = setInterval(() => {
+                if (!room.users || Object.keys(room.users).length === 0) return;
+                spawnFishBatch(roomId, 35, 35, 4);  // Fish King
+            }, 61000);
+
+            room.fishIntervals = [tCleanup, t1, t2, t3, t4];
+            console.log(`[FISH_LOOP] Room ${roomId} timers initialized: ${room.fishIntervals.length} timers active`);
         }
 
         socket.on('disconnect', () => {
+            console.log(`[DISCONNECT] Socket ${socket.id} disconnected. UserID: ${socket.userId}`);
+            // [DIAGNOSTIC] Log which rooms this socket was in
+            console.log(`[DISCONNECT_ROOMS] Socket ${socket.id} was in rooms:`, Array.from(socket.rooms));
+            console.log(`[DISCONNECT_ROOMS] Socket currentRoomId: ${socket.currentRoomId}`);
+
+            // [FIX] Broadcast exit to current room before cleanup
+            if (socket.currentRoomId && socket.userId) {
+                const roomName = 'room_' + socket.currentRoomId;
+                io.in(roomName).emit('exit_notify_push', socket.userId);
+                // [CRITICAL] Leave room to stop receiving broadcasts
+                socket.leave(roomName);
+                console.log(`[DISCONNECT] User ${socket.userId} left ${roomName} and broadcasted exit`);
+            }
+
+            // [CRITICAL] Sync balance back to DB before cleanup
+            if (socket.userId && socket.currentRoomId) {
+                const room = roomManager.getRoom(socket.currentRoomId);  // [REFACTOR] Use roomManager
+                const userInRoom = room?.users[socket.userId];
+
+                if (userInRoom && userInRoom.score !== undefined) {
+                    saveUserToDB(socket.userId, userInRoom.score);
+                }
+            }
+
             if (socket.userId && socket.userId !== 'guest') {
-                const room = getRoom();
-                if (room.users[socket.userId]) {
+                const room = roomManager.getRoom(socket.currentRoomId);  // [REFACTOR] Use roomManager
+                if (room && room.users[socket.userId]) {
+                    // [FIX] Clean up user's bullets to prevent accumulation and ID conflicts
+                    if (room.aliveBullets) {
+                        const bulletIds = Object.keys(room.aliveBullets);
+                        bulletIds.forEach(bulletId => {
+                            if (room.aliveBullets[bulletId]?.userId === socket.userId) {
+                                delete room.aliveBullets[bulletId];
+                            }
+                        });
+                        console.log(`[DISCONNECT] Cleaned up ${bulletIds.length} bullets for user ${socket.userId}`);
+                    }
+
                     saveUserToDB(socket.userId, room.users[socket.userId].score);
                     delete room.users[socket.userId]; // Cleanup memory
                 }
+            }
+
+            // [REFACTOR] Check if room should be cleaned up
+            if (socket.currentRoomId) {
+                roomManager.checkAndDeleteEmptyRoom(socket.currentRoomId);
             }
 
             if (socket.fishIntervals) {
@@ -790,17 +1671,34 @@ ports.forEach(port => {
         });
     });
 
-    // Global Periodic Save (Every 10s)
-    setInterval(() => {
-        const room = RoomState[1];
-        Object.values(room.users).forEach(u => {
-            if (u.userId !== 'guest' && u.online) { // Only save online legitimate users
-                saveUserToDB(u.userId, u.score);
+
+    // Global Periodic Save (Only need one timer)
+    if (port === 9000) {
+        setInterval(() => {
+            if (!roomManager) return;
+            for (const [roomId, room] of roomManager.rooms) {
+                if (room.users) {
+                    Object.values(room.users).forEach(u => {
+                        if (u.userId !== 'guest' && u.online) {
+                            saveUserToDB(u.userId, u.score);
+                        }
+                    });
+                }
             }
-        });
-    }, 10000);
+        }, 10000);
+    }
 
     httpServer.listen(port, () => {
-        console.log(`Mock Server running on port ${port} [VERSION: REAL_V11_WALLET_FIXED]`);
+        console.log(`Mock Server running on port ${port} [VERSION: FIX_LISTEN_LOCATION]`);
     });
-});
+}); // Close ports.forEach
+
+
+
+
+// -------------------------------------------------------------------------
+// INITIALIZE GLOBAL ROOM MANAGER (After all IO instances collected)
+// -------------------------------------------------------------------------
+
+roomManager = new RoomManager(ioInstances, outputTraceConfig, FishMulti);
+console.log(`[ROOM_MANAGER] Initialized with Map-based architecture (Global Singleton)`);

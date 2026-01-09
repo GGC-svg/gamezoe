@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -55,13 +56,43 @@ app.use('/socket.io', createProxyMiddleware({
 // Serve Games Static Files (Directly from source, skipping build copy)
 app.use('/games/slot-machine', express.static(path.join(__dirname, '../games/slot-machine')));
 app.use('/games/slot-machine-2', express.static(path.join(__dirname, '../games/html5-slot-machine-main/dist')));
-app.use('/games/fish', express.static(path.join(__dirname, '../games/fish-master/client/fish')));
 
 // [FIX] Generic Route for ALL other games
 // This allows /games/racing-1/index.html to look inside ../games/racing-1/index.html
 app.use('/games', express.static(path.join(__dirname, '../games')));
 // Serve specific static files or other assets if needed
+// Serve specific static files or other assets if needed
 app.use(express.static(path.join(__dirname, '../dist')));
+
+// --- AI PROXY (Secure) ---
+import { GoogleGenAI } from '@google/genai';
+
+// Initialize GenAI
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "YOUR_API_KEY_HERE" });
+
+app.post('/api/ai/generate', async (req, res) => {
+    // Expecting: { model, contents, config } matching the SDK signature
+    const { model, contents, config } = req.body;
+
+    if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: "Server missing API Key config" });
+    }
+
+    try {
+        const response = await genAI.models.generateContent({
+            model: model || "gemini-1.5-flash",
+            contents: contents, // String or Part[]
+            config: config
+        });
+
+        // The SDK response.text() is a helper, but response structure might be complex
+        // We'll return the full text.
+        res.json({ text: response.text() });
+    } catch (error) {
+        console.error("AI Generation Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
 // --- ROUTES ---
 
@@ -301,7 +332,13 @@ app.post('/api/auth/google-verify', async (req, res) => {
         }
 
         const googleUser = await response.json();
-        const { sub: id, name, email, picture: avatar } = googleUser;
+
+        // CRITICAL: Force to string IMMEDIATELY to prevent precision loss
+        // Google's 'sub' can be a very large number that exceeds JavaScript's safe integer limit
+        const id = String(googleUser.sub);
+        const { name, email, picture: avatar } = googleUser;
+
+        console.log('[Google Auth] Received ID:', id, '(type:', typeof id, ')');
 
         // 2. Upsert User in DB
         db.get("SELECT * FROM users WHERE id = ?", [id], (err, row) => {
@@ -330,14 +367,15 @@ app.post('/api/auth/google-verify', async (req, res) => {
                         }
                         return { gameId: r.game_id, expiresAt: dStr };
                     });
-                    res.json({ user: row, purchasedGames, library });
+                    // CRITICAL: Ensure ID is string to prevent precision loss
+                    res.json({ user: { ...row, id: String(row.id) }, purchasedGames, library });
                 });
             } else {
                 // Register new user
                 const provider = 'google';
                 const role = 'user'; // Default role
                 // Initialize with 0 balance
-                const sql = `INSERT INTO users (id, name, email, avatar, provider, role, gold_balance, silver_balance) VALUES (?, ?, ?, ?, ?, ?, 0, 0)`;
+                const sql = `INSERT INTO users (id, name, email, avatar, provider, role, gold_balance, silver_balance, fish_balance) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 500)`;
                 db.run(sql, [id, name, email, avatar, provider, role], function (err) {
                     if (err) {
                         res.status(500).json({ error: err.message });
@@ -347,9 +385,9 @@ app.post('/api/auth/google-verify', async (req, res) => {
                     // Log Login
                     db.run("INSERT INTO login_logs (user_id, ip_address, login_time) VALUES (?, ?, datetime('now', '+8 hours'))", [id, req.ip]);
 
-                    // Return new user
+                    // Return new user (ID already string from Google API)
                     res.json({
-                        user: { id, name, email, avatar, provider, role, gold_balance: 0, silver_balance: 0 },
+                        user: { id: String(id), name, email, avatar, provider, role, gold_balance: 0, silver_balance: 0 },
                         purchasedGames: []
                     });
                 });
@@ -451,6 +489,75 @@ app.get('/api/bridge/balance/:userId', verifyBridgeKey, (req, res) => {
             return;
         }
         res.json({ success: true, gold: row.gold_balance, silver: row.silver_balance, gameScore: row.fish_balance || 0 });
+    });
+});
+
+// 1.5 Deposit to Game (Specific for Fish Master Passthrough)
+app.post('/api/bridge/deposit', verifyBridgeKey, (req, res) => {
+    const { userId, amount, gameId } = req.body;
+
+    // Rate: 1 Gold = 1 Game Point (1:1)
+    if (!userId || !amount || amount <= 0) {
+        res.status(400).json({ error: "Invalid parameters" });
+        return;
+    }
+
+    db.serialize(() => {
+        db.get("SELECT gold_balance FROM users WHERE id = ?", [userId], (err, user) => {
+            if (err || !user) {
+                res.status(404).json({ error: "User not found" });
+                return;
+            }
+
+            if (user.gold_balance < amount) {
+                res.status(402).json({ error: "Insufficient funds" });
+                return;
+            }
+
+            db.run("BEGIN TRANSACTION");
+
+            // 1. Deduct Gold
+            db.run("UPDATE users SET gold_balance = gold_balance - ? WHERE id = ?", [amount, userId], (err) => {
+                if (err) {
+                    db.run("ROLLBACK");
+                    res.status(500).json({ error: err.message });
+                    return;
+                }
+
+                // 2. Add to Fish Balance (Crucial Step!)
+                // Note: Fish Master Client divides by 1000? No, we set 1:1 in DB now.
+                // Assuming we want 1 Gold = 1 Gem in game.
+                db.run("UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?", [amount, userId], (err) => {
+                    if (err) {
+                        db.run("ROLLBACK");
+                        res.status(500).json({ error: "Failed to update game balance" });
+                        return;
+                    }
+
+                    // 3. Log Transaction
+                    const logDesc = `Deposit to Fish Master`;
+                    db.run("INSERT INTO wallet_transactions (user_id, amount, currency, type, description, created_at) VALUES (?, ?, 'gold', 'casino_deposit', ?, datetime('now', '+8 hours'))",
+                        [userId, -amount, logDesc], (err) => {
+                            if (err) {
+                                db.run("ROLLBACK");
+                                res.status(500).json({ error: err.message });
+                                return;
+                            }
+
+                            db.run("COMMIT", () => {
+                                // Return new balances
+                                db.get("SELECT gold_balance, fish_balance FROM users WHERE id = ?", [userId], (err, finalRow) => {
+                                    res.json({
+                                        success: true,
+                                        newGold: finalRow.gold_balance,
+                                        newGame: finalRow.fish_balance
+                                    });
+                                });
+                            });
+                        });
+                });
+            });
+        });
     });
 });
 
@@ -778,7 +885,7 @@ app.post('/api/auth/login', (req, res) => {
             });
         } else {
             // Register new user
-            const sql = `INSERT INTO users (id, name, email, avatar, provider, role) VALUES (?, ?, ?, ?, ?, ?)`;
+            const sql = `INSERT INTO users (id, name, email, avatar, provider, role, fish_balance) VALUES (?, ?, ?, ?, ?, ?, 500)`;
             db.run(sql, [id, name, email, avatar, provider, role], function (err) {
                 if (err) {
                     res.status(500).json({ error: err.message });
@@ -829,7 +936,8 @@ app.get('/api/users/:id', (req, res) => {
                     }
                     return { gameId: r.game_id, expiresAt: dStr };
                 });
-                res.json({ user: row, purchasedGames, library });
+                // CRITICAL: Force ID to string to prevent precision loss
+                res.json({ user: { ...row, id: String(row.id) }, purchasedGames, library });
             });
         } else {
             res.status(404).json({ error: "User not found" });
@@ -1127,8 +1235,15 @@ app.delete('/api/admin/tiers/:id', (req, res) => {
     });
 });
 // --- PRODUCTION SERVING ---
-// Serve Game Assets (Fix for Fish Master Blue Screen)
-app.use('/games', express.static(path.join(__dirname, '../games')));
+// Serve game files - CRITICAL: Must be before other routes
+app.use('/games', express.static(path.join(__dirname, '../games'), {
+    maxAge: '1h',
+    setHeaders: (res, path) => {
+        if (path.endsWith('.json')) {
+            res.setHeader('Content-Type', 'application/json');
+        }
+    }
+}));
 
 // Serve static files from the React app build directory
 app.use(express.static(path.join(__dirname, '../dist')));

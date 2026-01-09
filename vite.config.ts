@@ -16,6 +16,31 @@ export default defineConfig(({ mode }) => {
         '/games': {
           target: 'http://localhost:3001',
           changeOrigin: true,
+        },
+        '/get_serverinfo': {
+          target: 'http://localhost:4002',
+          changeOrigin: true
+        },
+        '/get_user_status': {
+          target: 'http://localhost:4002',
+          changeOrigin: true
+        },
+        '/get_message': {
+          target: 'http://localhost:4002',
+          changeOrigin: true
+        },
+        '/guest': {
+          target: 'http://localhost:4002',
+          changeOrigin: true
+        },
+        '/login': {
+          target: 'http://localhost:4002',
+          changeOrigin: true
+        },
+        '/myfish_socket': {
+          target: 'ws://localhost:9001',
+          changeOrigin: true,
+          ws: true
         }
       }
     },

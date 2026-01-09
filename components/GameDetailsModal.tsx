@@ -246,18 +246,30 @@ const GameDetailsModal: React.FC<GameDetailsModalProps> = ({ game, isOpen, onClo
 
                 <div className="mt-auto pt-6 border-t border-slate-800">
                   {!isRentalOnly && (
-                    <button
-                      onClick={() => onPlay(game)}
-                      className={`w-full md:w-auto flex items-center justify-center gap-2 ${actionButtonColor} text-white px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5`}
-                    >
-                      {actionButtonIcon}
-                      {game.isFree || isOwned ? '立即遊玩' : (
-                        <div className="flex items-center gap-1">
-                          <span>購買 {game.price}</span>
-                          <span className="text-yellow-300">G</span>
-                        </div>
+                    <>
+                      <button
+                        onClick={() => !game.isFree && !isLoggedIn ? null : onPlay(game)}
+                        disabled={!game.isFree && !isLoggedIn}
+                        className={`w-full md:w-auto flex items-center justify-center gap-2 ${!game.isFree && !isLoggedIn
+                          ? 'bg-slate-700 text-slate-400 cursor-not-allowed opacity-60'
+                          : actionButtonColor
+                          } text-white px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-lg ${!game.isFree && !isLoggedIn ? '' : 'hover:shadow-xl transform hover:-translate-y-0.5'
+                          }`}
+                      >
+                        {actionButtonIcon}
+                        {game.isFree || isOwned ? '立即遊玩' : (
+                          <div className="flex items-center gap-1">
+                            <span>購買 {game.price}</span>
+                            <span className="text-yellow-300">G</span>
+                          </div>
+                        )}
+                      </button>
+                      {!game.isFree && !isLoggedIn && (
+                        <p className="mt-3 text-center md:text-left text-sm text-amber-500 font-bold">
+                          ⚠️ 請先登入才能遊玩
+                        </p>
                       )}
-                    </button>
+                    </>
                   )}
 
                   {isRentalOnly && (
@@ -281,10 +293,14 @@ const GameDetailsModal: React.FC<GameDetailsModalProps> = ({ game, isOpen, onClo
                               </div>
                             </div>
                             <button
-                              onClick={() => onPlay(game)}
-                              className="w-full md:w-auto bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded-lg font-bold text-lg shadow-lg hover:shadow-green-500/20 transition-all"
+                              onClick={() => isLoggedIn ? onPlay(game) : null}
+                              disabled={!isLoggedIn}
+                              className={`w-full md:w-auto ${!isLoggedIn
+                                  ? 'bg-slate-700 text-slate-400 cursor-not-allowed opacity-60'
+                                  : 'bg-green-600 hover:bg-green-500'
+                                } text-white px-8 py-3 rounded-lg font-bold text-lg shadow-lg transition-all`}
                             >
-                              立即遊玩
+                              {!isLoggedIn ? '請先登入' : '立即遊玩'}
                             </button>
                           </div>
                         </div>
