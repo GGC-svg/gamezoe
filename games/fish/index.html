@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+
+  <title>Cocos Creator | fish</title>
+
+  <!--http://www.html5rocks.com/en/mobile/mobifying/-->
+  <meta name="viewport"
+    content="width=device-width,user-scalable=no,initial-scale=1, minimum-scale=1,maximum-scale=1" />
+
+  <!--https://developer.apple.com/library/safari/documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html-->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
+
+  <!-- force webkit on 360 -->
+  <meta name="renderer" content="webkit" />
+  <meta name="force-rendering" content="webkit" />
+  <!-- force edge on IE -->
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+  <meta name="msapplication-tap-highlight" content="no">
+
+  <!-- force full screen on some browser -->
+  <meta name="full-screen" content="yes" />
+  <meta name="x5-fullscreen" content="true" />
+  <meta name="360-fullscreen" content="true" />
+
+  <!-- force screen orientation on some browser -->
+  <meta name="screen-orientation" content="landscape" />
+  <meta name="x5-orientation" content="landscape">
+
+  <!--fix fireball/issues/3568 -->
+  <!--<meta name="browsermode" content="application">-->
+  <meta name="x5-page-mode" content="app">
+
+  <!--<link rel="apple-touch-icon" href=".png" />-->
+  <!--<link rel="apple-touch-icon-precomposed" href=".png" />-->
+
+  <link rel="stylesheet" type="text/css" href="style-mobile.css" />
+
+</head>
+
+<body>
+  <canvas id="GameCanvas" oncontextmenu="event.preventDefault()" tabindex="0"></canvas>
+  <div id="splash">
+
+
+    <div class="progress-bar stripes">
+      <h1><b id="a"></b></h1>
+    </div>
+  </div>
+  <script src="src/settings.js" charset="utf-8"></script>
+  <script src="main.js" charset="utf-8"></script>
+
+  <!-- LOGIN DATA SYNC -->
+  <script>
+    (function () {
+      // 1. Get Platform User ID from URL
+      const urlParams = new URLSearchParams(window.location.search);
+      let platformUserId = urlParams.get('userId');
+
+      // [FIX] Fallback for Dev/Refresh
+      if (!platformUserId) {
+        console.warn("[LoginSync] No userId in URL. Using Fallback Test ID.");
+        platformUserId = "102746929077306565219";
+      }
+
+      if (platformUserId) {
+        console.log("[LoginSync] Detected Platform User:", platformUserId);
+
+        // 2. Intercept XMLHttpRequest (Cocos usually uses this)
+        const originalOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function (method, url, async, user, password) {
+          // [FIX] URL Patching for Broken Configs
+          if (url && typeof url === 'string') {
+            // Fix 1: Protocol Relative URL (//get_serverinfo -> /get_serverinfo)
+            if (url.startsWith('//')) {
+              console.warn("[FishFix] Patching Protocol Relative URL:", url);
+              url = url.substring(1); // /get_serverinfo
+            }
+            // Fix 2: Bad Domain (fish.blzz.shop -> Relative)
+            if (url.includes('fish.blzz.shop')) {
+              console.warn("[FishFix] Patching Bad Domain:", url);
+              url = url.replace(/http:\/\/fish\.blzz\.shop(:\d+)?/, '');
+            }
+            // Fix 3: Localhost:9000 -> Relative (Use Vite Proxy 4002)
+            if (url.includes('localhost:9000')) {
+              // url = url.replace('http://localhost:9000', '');
+            }
+          }
+
+          // [Login Logic] Inject Account ID for Guest/Login (FORCE OVERWRITE)
+          if (url && (typeof url === 'string') && (url.includes('/guest') || url.includes('/login'))) {
+            // If account param exists, replace it. If not, add it.
+            if (url.includes('account=')) {
+              url = url.replace(/account=[^&]+/, 'account=' + encodeURIComponent(platformUserId));
+              console.log("[LoginSync] Force-Overwrote Account ID:", url);
+            } else {
+              const separator = url.includes('?') ? '&' : '?';
+              url = url + separator + 'account=' + encodeURIComponent(platformUserId);
+              console.log("[LoginSync] Injected Account ID:", url);
+            }
+          }
+
+          // Use 'arguments' to ensure all params are passed, but override url
+          const args = Array.from(arguments);
+          args[1] = url;
+          return originalOpen.apply(this, args);
+        };
+
+        // 3. Intercept Fetch (just in case)
+        const originalFetch = window.fetch;
+        window.fetch = function (input, init) {
+          let url = input;
+          if (typeof url === 'string') {
+            // Patching
+            if (url.startsWith('//')) url = url.substring(1);
+            if (url.includes('fish.blzz.shop')) url = url.replace(/http:\/\/fish\.blzz\.shop(:\d+)?/, '');
+
+            // Login Logic (FORCE OVERWRITE)
+            if ((url.includes('/guest') || url.includes('/login'))) {
+              if (url.includes('account=')) {
+                url = url.replace(/account=[^&]+/, 'account=' + encodeURIComponent(platformUserId));
+                console.log("[LoginSync] Force-Overwrote Fetch Account ID:", url);
+              } else {
+                const separator = url.includes('?') ? '&' : '?';
+                url = url + separator + 'account=' + encodeURIComponent(platformUserId);
+                console.log("[LoginSync] Hijacked Fetch:", url);
+              }
+            }
+          }
+          return originalFetch.call(this, url, init);
+        };
+      }
+
+      // 5. Global Helpers for Game to Bridge
+      window.depositToGame = function (amount) {
+        if (!platformUserId) return alert("User ID missing");
+        window.Wallet.confirmDepositFallback(amount);
+      };
+
+      window.withdrawFromGame = function (amount) {
+        if (!platformUserId) return alert("User ID missing");
+        window.Wallet.confirmWithdrawFallback(amount);
+      };
+
+    })();
+  </script>
+
+  <style>
+    /* Toolbar Styles */
+    #wallet-toolbar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 50px;
+      background: rgba(0, 0, 0, 0.85);
+      border-bottom: 2px solid #00d2ff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      box-sizing: border-box;
+      z-index: 9999;
+      color: white;
+      font-family: "Microsoft JhengHei", sans-serif;
+    }
+
+    .wallet-info {
+      display: flex;
+      gap: 20px;
+      font-size: 16px;
+    }
+
+    .highlight {
+      color: #ffd700;
+      font-weight: bold;
+    }
+
+    .btn-wallet {
+      background: linear-gradient(180deg, #00d2ff 0%, #0078ff 100%);
+      border: 1px solid #fff;
+      color: white;
+      padding: 5px 15px;
+      border-radius: 15px;
+      cursor: pointer;
+      font-weight: bold;
+      text-shadow: 1px 1px 1px black;
+    }
+
+    .btn-wallet:hover {
+      transform: scale(1.05);
+    }
+
+    .btn-wallet:active {
+      transform: scale(0.95);
+    }
+
+    /* Modals */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    }
+
+    .modal-box {
+      background: #001a33;
+      border: 2px solid #00d2ff;
+      border-radius: 10px;
+      padding: 20px;
+      color: white;
+      text-align: center;
+      font-family: "Microsoft JhengHei", sans-serif;
+      box-shadow: 0 0 20px #00d2ff;
+    }
+
+    .modal-box input {
+      padding: 8px;
+      font-size: 16px;
+      margin: 10px;
+      width: 150px;
+      background: #003366;
+      border: 1px solid #0078ff;
+      color: white;
+    }
+
+    .modal-box button {
+      margin: 5px;
+      padding: 5px 15px;
+      cursor: pointer;
+    }
+  </style>
+
+  <div id="wallet-toolbar">
+    <div class="wallet-left">
+      <strong>捕魚大師 Fish Master</strong>
+    </div>
+    <div class="wallet-info">
+      <span>平台金幣: <span id="ui-gold" class="highlight">讀取中...</span></span>
+      <span>遊戲點數: <span id="ui-score" class="highlight">0</span></span>
+    </div>
+    <div class="wallet-actions">
+      <button class="btn-wallet" onclick="Wallet.openDeposit()">📥 換碼(入金)</button>
+      <button class="btn-wallet" onclick="Wallet.openWithdraw()">📤 出金(結算)</button>
+    </div>
+  </div>
+
+  <!-- DEPOSIT MODAL -->
+  <div id="modal-deposit" class="modal-overlay">
+    <div class="modal-box">
+      <h3>兌換遊戲點數</h3>
+      <p>1 金幣 = 1 點數</p>
+      <p>您有 <span id="modal-gold-av">0</span> 金幣</p>
+      <input type="number" id="inp-deposit" placeholder="輸入金幣數量">
+      <br>
+      <button onclick="Wallet.confirmDeposit()" style="background:#0f0;color:#000;">確認</button>
+      <button onclick="Wallet.closeModals()" style="background:#f00;color:#fff;">取消</button>
+    </div>
+  </div>
+
+  <!-- WITHDRAW MODAL -->
+  <div id="modal-withdraw" class="modal-overlay">
+    <div class="modal-box">
+      <h3>結算遊戲點數</h3>
+      <p>1 點數 = 1 金幣</p>
+      <p>可結算點數: <span id="modal-score-av">0</span></p>
+      <input type="number" id="inp-withdraw" placeholder="輸入點數數量">
+      <br>
+      <button onclick="Wallet.confirmWithdraw()" style="background:#0f0;color:#000;">確認</button>
+      <button onclick="Wallet.closeModals()" style="background:#f00;color:#fff;">取消</button>
+    </div>
+  </div>
+
+  <script>
+    window.Wallet = {
+      getUserId: function () {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('userId') || "102746929077306565219";
+      },
+
+      sysGold: 0,
+      gameScore: 0,
+
+      init: function () {
+        this.refresh();
+        // [FIX] Disabled aggressive polling - causes network spam
+        // setInterval(() => this.refresh(), 3000);
+        // setInterval(() => this.fetchGameScore(), 1000);
+      },
+
+      fetchGameScore: function () {
+        if (window.cc && window.cc.yqs && window.cc.yqs.userMgr && window.cc.yqs.userMgr.user) {
+          this.gameScore = window.cc.yqs.userMgr.user.score;
+          document.getElementById('ui-score').innerText = Math.floor(this.gameScore).toLocaleString();
+        }
+      },
+
+      refresh: async function () {
+        const uid = this.getUserId();
+        try {
+          const res = await fetch('/api/bridge/balance/' + uid, {
+            headers: { 'x-api-key': 'gamezoe-secure-bridge-key' }
+          });
+          const data = await res.json();
+          if (data.success) {
+            this.sysGold = data.gold;
+            document.getElementById('ui-gold').innerText = Math.floor(data.gold).toLocaleString();
+            if (data.gameScore !== undefined) {
+              this.gameScore = data.gameScore;
+              document.getElementById('ui-score').innerText = Math.floor(data.gameScore).toLocaleString();
+            }
+          }
+        } catch (e) { console.error(e); }
+      },
+
+      openDeposit: function () {
+        this.refresh();
+        document.getElementById('modal-gold-av').innerText = this.sysGold;
+        document.getElementById('ui-score').innerText = Math.floor(this.gameScore);
+        document.getElementById('modal-deposit').style.display = 'flex';
+      },
+
+      openWithdraw: function () {
+        this.fetchGameScore();
+        document.getElementById('modal-score-av').innerText = Math.floor(this.gameScore);
+        document.getElementById('modal-withdraw').style.display = 'flex';
+      },
+
+      closeModals: function () {
+        document.querySelectorAll('.modal-overlay').forEach(e => e.style.display = 'none');
+      },
+
+      confirmDeposit: async function () {
+        this.confirmDepositFallback(document.getElementById('inp-deposit').value);
+      },
+
+      confirmDepositFallback: async function (amountInput) {
+        const amount = parseInt(amountInput);
+        const uid = this.getUserId();
+        if (!amount || amount <= 0) return alert("請輸入數量");
+
+        try {
+          console.log("[Wallet] Sending Deposit Request:", { userId: uid, amount: amount });
+          const res = await fetch('/api/bridge/transaction/deposit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': 'gamezoe-secure-bridge-key' },
+            body: JSON.stringify({ userId: uid, amount: amount, gameId: 'fish' })
+          });
+
+          const data = await res.json();
+          if (res.ok && data.success) {
+            alert("換碼成功!\n單號: " + (data.orderId || "N/A"));
+            this.closeModals();
+            this.refresh();
+          } else {
+            alert("換碼失敗: " + (data.message || "Unknown Error"));
+          }
+        } catch (e) {
+          alert("請求錯誤: " + e.message);
+        }
+      },
+
+      confirmWithdraw: async function () {
+        this.confirmWithdrawFallback(document.getElementById('inp-withdraw').value);
+      },
+
+      confirmWithdrawFallback: async function (amountInput) {
+        const amount = parseInt(amountInput);
+        const uid = this.getUserId();
+        if (!amount || amount <= 0) return alert("請輸入數量");
+
+        try {
+          // Send request to Proxy
+          const res = await fetch('/api/game/v1/transaction/withdraw', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: uid, amount: amount })
+          });
+
+          const data = await res.json();
+          if (res.ok && data.code === 200) {
+            alert("結算成功!\n單號: " + data.data.order_id);
+            this.closeModals();
+            this.refresh();
+          } else {
+            alert("結算失敗: " + (data.message || "Unknown Error"));
+          }
+        } catch (e) {
+          alert("請求錯誤: " + e.message);
+        }
+      }
+    };
+
+    // Start
+    setTimeout(() => Wallet.init(), 2000); 
+  </script>
+
+</body>
+
+</html>

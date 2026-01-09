@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>清除會話 - GameZoe</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft JhengHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .status {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .status-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .label {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .value {
+            color: #666;
+            font-family: 'Consolas', monospace;
+        }
+
+        .success {
+            color: #10b981;
+        }
+
+        .warning {
+            color: #f59e0b;
+        }
+
+        .error {
+            color: #ef4444;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border-left: 4px solid #10b981;
+        }
+
+        .alert-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .steps {
+            background: #fef3c7;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #f59e0b;
+        }
+
+        .steps h3 {
+            color: #b45309;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .steps ol {
+            margin-left: 20px;
+            color: #78350f;
+        }
+
+        .steps li {
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🧹 清除會話工具</h1>
+        <p class="subtitle">修復用戶 ID 精度問題</p>
+
+        <div class="alert alert-info show">
+            <strong>⚠️ 為什麼需要清除？</strong><br>
+            舊的登錄會話中的用戶 ID 已損壞。清除後重新登錄將使用修復後的代碼。
+        </div>
+
+        <div class="status">
+            <div class="status-item">
+                <span class="label">LocalStorage 狀態:</span>
+                <span class="value" id="storage-status">檢查中...</span>
+            </div>
+            <div class="status-item">
+                <span class="label">當前用戶 ID:</span>
+                <span class="value" id="current-id">無</span>
+            </div>
+            <div class="status-item">
+                <span class="label">ID 類型:</span>
+                <span class="value" id="id-type">-</span>
+            </div>
+            <div class="status-item">
+                <span class="label">是否需要清除:</span>
+                <span class="value" id="need-clear">分析中...</span>
+            </div>
+        </div>
+
+        <div class="alert alert-success" id="success-alert">
+            ✅ 會話已成功清除！請點擊下方按鈕返回首頁重新登錄。
+        </div>
+
+        <button class="btn btn-primary" id="clear-btn" onclick="clearSession()">
+            🗑️ 清除會話並重新登錄
+        </button>
+
+        <button class="btn btn-secondary" onclick="checkStatus()">
+            🔄 重新檢查狀態
+        </button>
+
+        <div class="steps">
+            <h3>📋 清除後的步驟</h3>
+            <ol>
+                <li>點擊上方「清除會話」按鈕</li>
+                <li>返回 GameZoe 首頁 (http://localhost:3000)</li>
+                <li>使用 Google 重新登錄</li>
+                <li>進入 MyFish 遊戲測試</li>
+                <li>檢查控制台確認 ID 正確</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        function checkStatus() {
+            // Check localStorage
+            const userSession = localStorage.getItem('nexus_user_session');
+            const userData = localStorage.getItem('user');
+
+            let userId = null;
+            let idType = null;
+            let needClear = false;
+
+            if (userSession || userData) {
+                document.getElementById('storage-status').innerHTML = '<span class="warning">有數據</span>';
+
+                // Try to parse user data
+                if (userData) {
+                    try {
+                        const user = JSON.parse(userData);
+                        userId = user.id;
+                        idType = typeof userId;
+
+                        // Check if ID is corrupted (contains trailing zeros)
+                        if (typeof userId === 'number' || (typeof userId === 'string' && userId.endsWith('00000'))) {
+                            needClear = true;
+                        }
+                    } catch (e) {
+                        console.error('Parse error:', e);
+                    }
+                } else if (userSession) {
+                    userId = userSession;
+                    idType = typeof userId;
+                }
+
+                document.getElementById('current-id').textContent = userId || '未知';
+                document.getElementById('id-type').innerHTML = idType ?
+                    (idType === 'string' ? '<span class="success">string ✓</span>' : `<span class="error">${idType} ✗</span>`) : '-';
+                document.getElementById('need-clear').innerHTML = needClear ?
+                    '<span class="error">是 ⚠️</span>' : '<span class="success">否 ✓</span>';
+
+            } else {
+                document.getElementById('storage-status').innerHTML = '<span class="success">已清空</span>';
+                document.getElementById('current-id').textContent = '無';
+                document.getElementById('id-type').textContent = '-';
+                document.getElementById('need-clear').innerHTML = '<span class="success">否 ✓</span>';
+            }
+        }
+
+        function clearSession() {
+            try {
+                // Clear all localStorage
+                localStorage.clear();
+
+                // Clear sessionStorage too
+                sessionStorage.clear();
+
+                // Show success message
+                document.getElementById('success-alert').classList.add('show');
+                document.getElementById('clear-btn').disabled = true;
+                document.getElementById('clear-btn').textContent = '✅ 已清除';
+                document.getElementById('clear-btn').style.background = '#10b981';
+
+                // Update status
+                checkStatus();
+
+                // Auto redirect after 2 seconds
+                setTimeout(() => {
+                    window.location.href = 'http://localhost:3000';
+                }, 2000);
+
+            } catch (e) {
+                alert('清除失敗: ' + e.message);
+            }
+        }
+
+        // Check status on load
+        window.addEventListener('load', checkStatus);
+    </script>
+</body>
+
+</html>

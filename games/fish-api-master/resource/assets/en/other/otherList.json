@@ -1,0 +1,16 @@
+{"file":"otherList.png","frames":{
+"otherYourPositionText":{"x":2,"y":115,"w":134,"h":45,"offX":0,"offY":0,"sourceW":134,"sourceH":45},
+"otherGlow":{"x":2,"y":2,"w":218,"h":109,"offX":0,"offY":0,"sourceW":218,"sourceH":109},
+"otherBlack":{"x":224,"y":2,"w":30,"h":30,"offX":0,"offY":0,"sourceW":30,"sourceH":30},
+"otherArrow":{"x":140,"y":115,"w":44,"h":37,"offX":0,"offY":0,"sourceW":44,"sourceH":37},
+"otherAdvanced01":{"x":180,"y":173,"w":55,"h":25,"offX":0,"offY":0,"sourceW":55,"sourceH":25},
+"otherAdvanced02":{"x":2,"y":164,"w":56,"h":25,"offX":0,"offY":0,"sourceW":56,"sourceH":25},
+"otherCoin":{"x":224,"y":36,"w":26,"h":26,"offX":0,"offY":0,"sourceW":26,"sourceH":26},
+"otherIntermediate01":{"x":62,"y":164,"w":55,"h":25,"offX":0,"offY":0,"sourceW":55,"sourceH":25},
+"otherIntermediate02":{"x":188,"y":144,"w":56,"h":25,"offX":0,"offY":0,"sourceW":56,"sourceH":25},
+"puyushouhuo":{"x":15,"y":209,"w":45,"h":20,"offX":0,"offY":0,"sourceW":45,"sourceH":20},
+"youxibi":{"x":135,"y":208,"w":55,"h":20,"offX":0,"offY":0,"sourceW":55,"sourceH":20},
+"Finger":{"x":183,"y":250,"w":52,"h":68,"offX":0,"offY":1,"sourceW":52,"sourceH":68},
+"button_game_start":{"x":2,"y":250,"w":181,"h":68,"offX":0,"offY":0,"sourceW":181,"sourceH":68},
+"otherJunior01":{"x":121,"y":164,"w":55,"h":25,"offX":0,"offY":0,"sourceW":55,"sourceH":25},
+"otherJunior02":{"x":188,"y":115,"w":56,"h":25,"offX":0,"offY":0,"sourceW":56,"sourceH":25}}}

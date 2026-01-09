@@ -1,0 +1,14 @@
+runtime: nodejs20
+instance_class: F1
+automatic_scaling:
+  min_instances: 0
+  max_instances: 1
+
+env_variables:
+  # GCP Build Trigger should invoke 'npm run build' before deployment
+  # The start command is 'npm start' by default in the standard environment
+  NODE_ENV: 'production'
+  PORT: '8080' 
+  
+  # NOTE: Do NOT put GEMINI_API_KEY here. 
+  # Set it in the GCP Console -> App Engine -> Settings -> Environment variables

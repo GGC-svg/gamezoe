@@ -1,0 +1,40 @@
+{
+  "__type__": "cc.SpriteFrame",
+  "_name": "sprite_frame_d75e8ca5",
+  "_objFlags": 0,
+  "_native": "",
+  "_texture": {
+    "__uuid__": "d75e8ca5-1f82-4139-8b5a-bdf382e304ed"
+  },
+  "_atlas": null,
+  "_rect": {
+    "__type__": "cc.Rect",
+    "x": 0,
+    "y": 0,
+    "width": 80,
+    "height": 80
+  },
+  "_offset": {
+    "__type__": "cc.Vec2",
+    "x": 0,
+    "y": 0
+  },
+  "_originalSize": {
+    "__type__": "cc.Size",
+    "width": 80,
+    "height": 80
+  },
+  "_rotated": false,
+  "_flipX": false,
+  "_flipY": false,
+  "_packable": true,
+  "_pixelsToUnit": 100,
+  "_pivotX": 0.5,
+  "_pivotY": 0.5,
+  "_meshType": 0,
+  "_spriteType": 0,
+  "_sizeMode": 1,
+  "_fillType": 0,
+  "_isTrimmedMode": true,
+  "_state": 0
+}

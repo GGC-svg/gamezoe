@@ -1,0 +1,6 @@
+.idea/
+*.exe
+*.log
+*_exec
+start_game
+.vscode

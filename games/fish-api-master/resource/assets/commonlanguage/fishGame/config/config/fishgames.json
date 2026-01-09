@@ -1,0 +1,44 @@
+[
+  {
+    "gameId": 30300101,
+    "gameName": "神龙宝藏",
+    "gameType": 303,
+    "HasComLib": "Not"
+  },
+  {
+    "gameId": 30300201,
+    "gameName": "摇钱树",
+    "gameType": 303,
+    "HasComLib": "Yes"
+  },
+  {
+    "gameId": 30300301,
+    "gameName": "金蟾捕鱼",
+    "gameType": 303,
+    "HasComLib": "Yes"
+  },
+  {
+    "gameId": 30300401,
+    "gameName": "李逵劈鱼",
+    "gameType": 303,
+    "HasComLib": "Yes"
+  },
+   {
+    "gameId": 30300501,
+    "gameName": "悟空打渔",
+    "gameType": 303,
+    "HasComLib": "Not"
+  },
+  {
+    "gameId": 30300701,
+    "gameName": "三色鳄鱼",
+    "gameType": 303,
+    "HasComLib": "Yes"
+  },
+   {
+    "gameId": 30300601,
+    "gameName": "大圣闹海",
+    "gameType": 303,
+    "HasComLib": "Not"
+  }
+]

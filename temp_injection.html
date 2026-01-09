@@ -1,0 +1,33 @@
+<!-- INJECTED MOCK BRIDGE -->
+<script>
+    console.log("Injecting Mock Bridge...");
+    setTimeout(function () {
+        var startData = {
+            ip: "ws://localhost",
+            port: 9001,
+            userId: "1001",
+            token: "guest_token",
+            gameRoomID: 1,
+            chatRoomID: 1,
+            DeviceType: 1
+        };
+
+        // Simulate n2j_StartGame
+        if (window.pc && window.pc.bridge && window.pc.bridge.center['n2j_StartGame']) {
+            console.log("Triggering n2j_StartGame (PC Bridge)...");
+            window.pc.bridge.center['n2j_StartGame'](JSON.stringify(startData));
+        } else {
+            console.warn("Bridge not found! Polling...");
+            // Retry
+            var t = setInterval(function () {
+                if (window.pc && window.pc.bridge && window.pc.bridge.center['n2j_StartGame']) {
+                    console.log("Triggering n2j_StartGame (PC Bridge) [RETRY]...");
+                    window.pc.bridge.center['n2j_StartGame'](JSON.stringify(startData));
+                    clearInterval(t);
+                }
+            }, 1000);
+        }
+    }, 2000);
+</script>
+<!-- END INJECTION -->
+</body>

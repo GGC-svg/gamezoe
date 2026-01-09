@@ -1,0 +1,5 @@
+{
+  "name": "GameLocAI - 遊戲本地化翻譯系統",
+  "description": "專業的遊戲本地化工具，利用 Gemini AI 進行深度語境感知的翻譯。支援上傳 .xlsx 或 .json 檔案，定義遊戲世界觀，並匯出多語言遊戲資料。",
+  "requestFramePermissions": []
+}

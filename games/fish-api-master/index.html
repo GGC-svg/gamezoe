@@ -1,0 +1,335 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Fishing</title>
+    <meta name="viewport" content="minimal-ui,width=device-width,initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="full-screen" content="true" />
+    <meta name="screen-orientation" content="landscape" />
+    <meta name="x5-fullscreen" content="true" />
+    <meta name="360-fullscreen" content="true" />
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <link rel="icon" type="image/GIF" href="resource/favicon.ico">
+    <style>
+        html, body {
+            -ms-touch-action: none;
+            background: black;
+            padding: 0;
+            border: 0;
+            margin: 0;
+            height: 100%;
+        }
+
+        body{
+			background-image: url(resource/loading/bj0.png);
+			background-color:#000000;
+            background-size: 100% 100%;
+            background-repeat:no-repeat;
+        }
+        #loadingDiv{
+            width: 23.2rem;
+            height: 1.2rem;
+            background-image: url(resource/loading/ld.png);
+            background-size: auto 100%;
+            background-repeat: no-repeat;
+            position: absolute;
+            bottom: 3rem;
+            left:50%;
+            right:50%;
+            transform:translate(-50%);
+        }
+        #loadingContentDiv{
+            width: 0%;
+            height: 100%;
+            background-image: url(resource/loading/ldcontent.png);
+            background-size: auto 100%;
+            background-repeat: no-repeat;
+        }
+        #loadingTextLabel{
+            font-weight:bold;
+            color: white;
+        }
+    </style>
+    <script src="libs/resource/js/jszip.min.js"></script>
+</head>
+
+<body>
+    <div style="margin: auto;width: 100%;height: 100%;" class="egret-player"
+         data-entry-class="Main"
+         data-orientation="landscape"
+         data-scale-mode="fixedNarrow"
+         data-frame-rate="60"
+         data-content-width="1280"
+         data-content-height="720"
+         data-show-paint-rect="false"
+         data-multi-fingered="2"
+         data-show-fps="false" data-show-log="false"
+         data-show-fps-style="x:0,y:0,size:12,textColor:0xffffff,bgAlpha:0.9">
+    </div>
+
+   <div id="loadingTextDiv" style="position:absolute;text-align:center;bottom:4.5rem;left:50%;right:50%;width:100px;height:1.3rem;transform:translate(-50%);"><label id="loadingTextLabel"></label></div>
+    <div id="loadingDiv">
+        <div id="loadingContentDiv"></div>
+    </div>
+    <div id="no_canvasTip" style="margin: -150px 0 0 -475px;position:absolute;width: 1080px;height: 300px;top: 50%;left: 50%;display:none">
+		<p style="color: #ffffff;font-size: 26px;text-align: center;">您的当前浏览器无法打开该游戏！</p>
+		<p style="color: #ffffff;font-size: 26px;text-align: center;">如果您使用的是IE浏览器，请升级至<span style="color: red">IE10</span>及以上版本。</p>
+		<p style="color: #ffffff;font-size: 26px;text-align: center;">如果您使用的是QQ浏览器、360浏览器、猎豹浏览器等浏览器，请切换至<span style="color: red">极速模式</span>。</p>
+		<br>
+		<p style="color: #ffffff;font-size: 26px;text-align: center;">如果以上方法仍无法解决，请下载<span style="color: red">谷歌浏览器</span>，然后重试！</p>
+	</div>
+	<div id="no_egretTip" style="margin: -50px 0 0 -300px;position:absolute;width: 600px;height: 50px;top: 50%;left: 50%;display:none">
+		<p style="color: #ffffff;font-size: 40px;text-align: center;">资源下载失败，请刷新后重试   :（</p>
+	</div>
+<script>
+    //alert=function(){}
+    //console.log=function(){}
+    // alert("width:"+document.body.clientWidth+"    height:"+document.body.clientHeight);
+     function setHtmlFontSize(){
+        var size=document.body.clientHeight;
+        var fontSize=9;
+        if(size>=1024){
+            fontSize=37;
+        }else if(size>=900){
+            fontSize=32;
+        }else if(size>=750){
+            fontSize=28;
+        }else if(size>=685){
+            fontSize=27;
+        }else if(size>=610){
+            fontSize=22;
+        }else if(size>=400){
+            fontSize=15;
+        }else if(size>=330){
+            fontSize=14;
+        }else if(size>=300){
+            fontSize=12;
+        }
+        document.getElementsByTagName('html')[0].style.fontSize=fontSize+'px';
+    }
+    function loadZip(url, callBack) {
+        var xhrZip = new XMLHttpRequest();
+        xhrZip.open("GET", url, true);
+        xhrZip.responseType = "arraybuffer";
+        xhrZip.addEventListener("load", function () {
+            var arrayBuffer = xhrZip.response;
+            if (!arrayBuffer) {
+                console.log(url + "解析异常:" + xhrZip);
+                throw new Error("zip异常");
+            }
+            new JSZip().loadAsync(arrayBuffer).then(function (zip) {
+                callBack(zip);
+            });
+        });
+        xhrZip.send(null);
+    }
+	function getQueryVariable(variable)
+    {
+       var query = window.location.search.substring(1);
+       var vars = query.split("&");
+       for (var i=0;i<vars.length;i++) {
+               var pair = vars[i].split("=");
+               if(pair[0] == variable){return pair[1];}
+       }
+       return(false);
+    }
+
+    window.onload = function(){
+        var lang=getQueryVariable("Lang");
+        if(lang=="en"){
+            document.body.style.backgroundImage = "url(resource/loading/bj-en.png)";
+        }
+        else if(lang=="th"){
+            document.body.style.backgroundImage = "url(resource/loading/bj-th.png)";
+        }
+        else if(lang=="vi"){
+            document.body.style.backgroundImage = "url(resource/loading/bj-vi.png)";
+        }
+        else if(lang=="id"){
+            document.body.style.backgroundImage = "url(resource/loading/bj-id.png)";
+        }
+        else{
+            document.body.style.backgroundImage = "url(resource/loading/bj.png)";
+        }
+    };
+    function detectOrientReal(){
+        var width = document.documentElement.clientWidth, height = document.documentElement.clientHeight, $wrapper = document.getElementsByTagName("body")[0], style = "";
+        // var localLang=localStorage.getItem("langKey");
+        // var imageUrl='resource/loading/zh/bj.png';
+        // if(localLang){
+        //     if(localLang != "zh"){
+        //         imageUrl='resource/loading/en/bj.png';
+        //     }
+        // }else{
+        //     var urlLang=getQueryVariable("Lang");
+        //     if(urlLang){
+        //         if(urlLang != "zh"){
+        //             imageUrl='resource/loading/en/bj.png';
+        //         }
+        //     }else{
+        //         var lang = navigator.language || navigator.userLanguage;
+        //         lang = lang.substr(0, 2);
+        //         if (lang != "zh") {
+        //             imageUrl='resource/loading/en/bj.png';
+        //         }
+        //     }
+        // }
+        if (width < height) {
+            style += "width:" + height + "px;";
+            style += "height:" + width + "px;";
+            style += "-webkit-transform: rotate(90deg); transform: rotate(90deg);";
+            style += "-webkit-transform-origin: " + width / 2 + "px " + width / 2 + "px;";
+            style += "transform-origin: " + width / 2 + "px " + width / 2 + "px;";
+            // style += "background-image: url('"+imageUrl+"')";
+        } else {
+            style += "width:" + width + "px;";
+            style += "height:" + height + "px;";
+            style += "-webkit-transform: rotate(0); transform: rotate(0);";
+            style += "-webkit-transform-origin: 0 0;";
+            style += "transform-origin: 0 0;";
+            // style += "background-image: url('"+imageUrl+"')";
+        }
+        $wrapper.style.cssText = style;
+        setHtmlFontSize();
+    }
+    
+    // function getQueryVariable(variable) {
+    //     var query = window.location.search.substring(1);
+    //     var vars = query.split("&");
+    //     for (var i = 0; i < vars.length; i++) {
+    //         var pair = vars[i].split("=");
+    //         if (pair[0] == variable) { return decodeURI(pair[1]); }
+    //     }
+    //     return null;
+    // }
+    window.addEventListener("resize",detectOrientReal);
+    detectOrientReal();
+    var zipArray=[];
+    var jsFileNames=["egret.min.js","egret.web.min.js","game.min.js","tween.min.js","assetsmanager.min.js","dragonBones.min.js","socket.min.js","eui.min.js","promise.min.js","screenfull.min.js","particle.min.js","sproto.min.js","mouse.min.js","howler.min.js","default.thm.js","main.min.js"];
+    var index=0;
+    function changeProgress(){
+        document.getElementById("loadingContentDiv").style.width = Math.floor(index/(3+jsFileNames.length)*100)+"%";
+        document.getElementById("loadingTextLabel").innerText = Math.floor(index/(3+jsFileNames.length)*100)+"%";
+    }
+    function createScript(content){
+        var script = document.createElement("script");
+        script.setAttribute("type", "text/javascript");
+        script.text = content;
+        document.body.appendChild(script);
+        if(index-4>=jsFileNames.length-1){
+            goEgret();
+            return;
+        }
+        index++;
+        changeProgress();
+        try{
+            getJsFile();
+        }catch(e){
+            document.getElementById("no_egretTip").style.display = "block";
+        }
+    }
+    function getJsFile(){
+        var fileName=jsFileNames[index-4];
+        for(var i=0;i<zipArray.length;i++){
+            var files=zipArray[i].files;
+            for(var j in files){
+                if(String(files[j].name).indexOf(fileName)>=0){
+                    zipArray[i].file(files[j].name).async("string").then(function success(content) {
+                        createScript(content);
+                    }, function error(e) {
+                        throw new Error("zip加载资源异常");
+                        return;
+                    });
+                    return;
+                }
+            }
+        }
+        document.getElementById("no_egretTip").style.display = "block";
+    }
+    function jsFileStart(){
+        if(zipArray.length==4){
+            try{
+                getJsFile();
+            }catch(e){
+                document.getElementById("no_egretTip").style.display = "block";
+            }
+        }
+    }
+    function zipStart(){
+        try{ 
+            loadZip("corelibs.zip",function(zip){
+                addZip(zip);
+                loadZip("libs.zip",function(zip){
+                    addZip(zip);
+                    loadZip("default.thm.zip" + "?v=" + Math.random(),function(zip){
+                        addZip(zip);
+                        loadZip("main.min.zip" + "?v=" + Math.random(),function(zip){
+                            addZip(zip);
+                            jsFileStart();
+                        });
+                    });
+                });
+            });
+        }catch(e){
+            document.getElementById("no_egretTip").style.display = "block";
+        }
+    }
+    zipStart();
+    function addZip(zip){
+        index++;
+        zipArray.push(zip);
+        changeProgress();
+    }
+    function goEgret(){
+        zipArray=null;
+        jsFileNames=null;
+        index=null;
+        document.getElementById("loadingContentDiv").style.width = "100%";
+        document.getElementById("loadingTextLabel").innerText = "100%";
+        try{  
+            window.removeEventListener("resize",detectOrientReal);
+            var bodyTag = document.getElementsByTagName("body")[0],style="";
+            style += "width:100%";
+            style += "height:100%";
+            style += "-webkit-transform: none; transform: none;";
+            style += "-webkit-transform-origin: none;";
+            style += "transform-origin: none;";
+            bodyTag.style.cssText = style;
+            var node = document.getElementById("loadingDiv");
+            if (node.parentNode) {
+                node.parentNode.removeChild(node);
+            }
+            var nodeDiv = document.getElementById("loadingTextDiv");
+            if (nodeDiv.parentNode) {
+                nodeDiv.parentNode.removeChild(nodeDiv);
+            }
+            document.createElement('canvas').getContext('2d');  
+        }catch(e){  
+            document.getElementById("no_canvasTip").style.display = "block";
+            return;
+        } 
+        /**
+         * {
+         * "renderMode":, //Engine rendering mode, "canvas" or "webgl"
+         * "audioType": 0 //Use the audio type, 0: default, 2: web audio, 3: audio
+         * "antialias": //Whether the anti-aliasing is enabled in WebGL mode, true: on, false: off, defaults to false
+         * "calculateCanvasScaleFactor": //a function return canvas scale factor
+         * }
+         **/
+        egret.runEgret({ renderMode: "webgl", audioType: 0, calculateCanvasScaleFactor:function(context) {
+            var backingStore = context.backingStorePixelRatio ||
+                context.webkitBackingStorePixelRatio ||
+                context.mozBackingStorePixelRatio ||
+                context.msBackingStorePixelRatio ||
+                context.oBackingStorePixelRatio ||
+                context.backingStorePixelRatio || 1;
+            return (window.devicePixelRatio || 1) / backingStore;
+        }});
+    }
+    //禁用鼠标右键
+    document.oncontextmenu = function(){return false;}
+</script>
+</body>
+
+</html>

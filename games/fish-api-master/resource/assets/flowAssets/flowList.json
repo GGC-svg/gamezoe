@@ -1,0 +1,8 @@
+{"file":"flowList.png","frames":{
+"Button_Download":{"x":279,"y":862,"w":98,"h":110,"offX":0,"offY":0,"sourceW":98,"sourceH":110},
+"Finger":{"x":185,"y":934,"w":39,"h":58,"offX":0,"offY":1,"sourceW":40,"sourceH":59},
+"button_game_start":{"x":2,"y":934,"w":179,"h":53,"offX":0,"offY":0,"sourceW":179,"sourceH":54},
+"entrance_button_download":{"x":279,"y":726,"w":190,"h":132,"offX":0,"offY":0,"sourceW":190,"sourceH":132},
+"flowBut01":{"x":2,"y":830,"w":273,"h":100,"offX":0,"offY":0,"sourceW":273,"sourceH":100},
+"flowBut02":{"x":2,"y":726,"w":273,"h":100,"offX":0,"offY":0,"sourceW":273,"sourceH":100},
+"transparent_bg":{"x":2,"y":2,"w":1280,"h":720,"offX":0,"offY":0,"sourceW":1280,"sourceH":720}}}

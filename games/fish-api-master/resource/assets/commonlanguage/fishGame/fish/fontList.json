@@ -1,0 +1,6 @@
+{"file":"fontList.png","frames":{
+"fishAndPillarFont":{"x":2,"y":2,"w":126,"h":217,"offX":1,"offY":1,"sourceW":128,"sourceH":256},
+"gunFont":{"x":245,"y":2,"w":94,"h":106,"offX":1,"offY":1,"sourceW":128,"sourceH":128},
+"gunGoldFont":{"x":132,"y":2,"w":109,"h":176,"offX":1,"offY":1,"sourceW":128,"sourceH":256},
+"powerFont":{"x":2,"y":223,"w":125,"h":165,"offX":1,"offY":1,"sourceW":128,"sourceH":256},
+"silverFont":{"x":131,"y":223,"w":125,"h":165,"offX":1,"offY":1,"sourceW":128,"sourceH":256}}}

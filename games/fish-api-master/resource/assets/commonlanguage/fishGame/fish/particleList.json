@@ -1,0 +1,4 @@
+{"file":"particleList.png","frames":{
+"bowen":{"x":2,"y":2,"w":248,"h":248,"offX":0,"offY":8,"sourceW":256,"sourceH":256},
+"fireLight":{"x":134,"y":254,"w":104,"h":101,"offX":10,"offY":12,"sourceW":128,"sourceH":128},
+"littleLight":{"x":2,"y":254,"w":128,"h":128,"offX":0,"offY":0,"sourceW":128,"sourceH":128}}}

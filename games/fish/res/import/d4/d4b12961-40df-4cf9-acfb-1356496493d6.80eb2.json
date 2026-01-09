@@ -1,0 +1,74 @@
+{
+  "__type__": "cc.SpriteFrame",
+  "_name": "default_sprite_frame",
+  "_objFlags": 0,
+  "_native": "",
+  "_texture": {
+    "__uuid__": "d4b12961-40df-4cf9-acfb-1356496493d6"
+  },
+  "_atlas": null,
+  "_rect": {
+    "__type__": "cc.Rect",
+    "x": 0,
+    "y": 0,
+    "width": 100,
+    "height": 100
+  },
+  "_offset": {
+    "__type__": "cc.Vec2",
+    "x": 0,
+    "y": 0
+  },
+  "_originalSize": {
+    "__type__": "cc.Size",
+    "width": 100,
+    "height": 100
+  },
+  "_rotated": false,
+  "_flipX": false,
+  "_flipY": false,
+  "_vertices": {
+    "rawVerts": [
+      -50, -50, 0, 0, 0,
+      50, -50, 0, 1, 0,
+      -50, 50, 0, 0, 1,
+      50, 50, 0, 1, 1
+    ],
+    "indexes": [0, 1, 2, 1, 3, 2],
+    "uv": [0, 0, 1, 0, 0, 1, 1, 1],
+    "nuv": [0, 0, 1, 0, 0, 1, 1, 1],
+    "minPos": {
+      "__type__": "cc.Vec3",
+      "x": -50,
+      "y": -50,
+      "z": 0
+    },
+    "maxPos": {
+      "__type__": "cc.Vec3", 
+      "x": 50,
+      "y": 50,
+      "z": 0
+    }
+  },
+  "_packable": true,
+  "_pixelsToUnit": 100,
+  "_pivotX": 0.5,
+  "_pivotY": 0.5,
+  "_meshType": 0,
+  "_borderTop": 0,
+  "_borderBottom": 0,
+  "_borderLeft": 0,
+  "_borderRight": 0,
+  "_spriteType": 0,
+  "_sizeMode": 1,
+  "_fillType": 0,
+  "_fillCenter": {
+    "__type__": "cc.Vec2",
+    "x": 0,
+    "y": 0
+  },
+  "_fillStart": 0,
+  "_fillRange": 0,
+  "_isTrimmedMode": true,
+  "_state": 0
+}

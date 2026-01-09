@@ -1,0 +1,14 @@
+{
+    "name": "universalloc-ai-server",
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+        "start": "node server/index.js"
+    },
+    "dependencies": {
+        "express": "^4.18.2",
+        "@google/genai": "^0.1.20",
+        "cors": "^2.8.5",
+        "dotenv": "^16.3.1"
+    }
+}

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>游戏测试</title>
+</head>
+<body>
+    <h1>游戏状态测试</h1>
+    <div id="status">正在检查游戏状态...</div>
+    
+    <script>
+        // 检查游戏是否正常加载
+        setTimeout(function() {
+            const statusDiv = document.getElementById('status');
+            
+            if (typeof cc !== 'undefined') {
+                statusDiv.innerHTML += '<br>✅ Cocos Creator 引擎已加载';
+                
+                if (cc.yqs) {
+                    statusDiv.innerHTML += '<br>✅ 游戏对象已初始化';
+                    
+                    if (cc.yqs.userMgr) {
+                        statusDiv.innerHTML += '<br>✅ 用户管理器已创建';
+                        statusDiv.innerHTML += '<br>用户名: ' + cc.yqs.userMgr.userName;
+                        statusDiv.innerHTML += '<br>金币: ' + cc.yqs.userMgr.coins;
+                        statusDiv.innerHTML += '<br>宝石: ' + cc.yqs.userMgr.gems;
+                    }
+                    
+                    if (cc.director && cc.director.getScene()) {
+                        const sceneName = cc.director.getScene().name;
+                        statusDiv.innerHTML += '<br>✅ 当前场景: ' + sceneName;
+                    }
+                } else {
+                    statusDiv.innerHTML += '<br>❌ 游戏对象未初始化';
+                }
+            } else {
+                statusDiv.innerHTML += '<br>❌ Cocos Creator 引擎未加载';
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

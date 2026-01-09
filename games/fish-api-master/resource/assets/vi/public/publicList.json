@@ -1,0 +1,15 @@
+{"file":"publicList.png","frames":{
+"continue":{"x":2,"y":356,"w":324,"h":101,"offX":0,"offY":0,"sourceW":324,"sourceH":101},
+"exit":{"x":2,"y":251,"w":324,"h":101,"offX":0,"offY":0,"sourceW":324,"sourceH":101},
+"fishlunzi":{"x":2,"y":2,"w":246,"h":245,"offX":0,"offY":0,"sourceW":246,"sourceH":245},
+"guanbi":{"x":330,"y":237,"w":85,"h":86,"offX":0,"offY":0,"sourceW":85,"sourceH":88},
+"Ratebtn":{"x":252,"y":2,"w":94,"h":109,"offX":0,"offY":3,"sourceW":94,"sourceH":112},
+"lv0":{"x":336,"y":115,"w":30,"h":25,"offX":0,"offY":0,"sourceW":30,"sourceH":25},
+"lv1":{"x":350,"y":31,"w":30,"h":25,"offX":0,"offY":0,"sourceW":30,"sourceH":25},
+"lv2":{"x":350,"y":2,"w":30,"h":25,"offX":0,"offY":0,"sourceW":30,"sourceH":25},
+"lv3":{"x":336,"y":202,"w":30,"h":25,"offX":0,"offY":0,"sourceW":30,"sourceH":25},
+"lv4":{"x":336,"y":173,"w":30,"h":25,"offX":0,"offY":0,"sourceW":30,"sourceH":25},
+"lv5":{"x":336,"y":144,"w":30,"h":25,"offX":0,"offY":0,"sourceW":30,"sourceH":25},
+"gamehall_loadingBar":{"x":2,"y":490,"w":583,"h":19,"offX":9,"offY":6,"sourceW":600,"sourceH":31},
+"gamehall_loadingBarBg":{"x":2,"y":461,"w":591,"h":25,"offX":5,"offY":3,"sourceW":600,"sourceH":31},
+"fishjiantou":{"x":252,"y":115,"w":80,"h":118,"offX":10,"offY":0,"sourceW":90,"sourceH":118}}}
