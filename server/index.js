@@ -60,9 +60,10 @@ app.use('/get_serverinfo', createProxyMiddleware({
     changeOrigin: true
 }));
 
-// [PROXY] Proxy Raw WebSocket for Fish Game (ws://127.0.0.1:9001)
+// [PROXY] Proxy Raw WebSocket for Fish Game (ws://127.0.0.1:9000)
 app.use('/fish-socket', createProxyMiddleware({
-    target: 'http://127.0.0.1:9001',
+    // Port 9000 handles BOTH HTTP and WebSocket in fish_mocker.js
+    target: 'http://127.0.0.1:9000',
     ws: true,
     changeOrigin: true
 }));
