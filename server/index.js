@@ -1581,7 +1581,15 @@ app.get(/(.*)/, (req, res) => {
 
 // 6. Start the Server
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+// --- ERROR HANDLING ---
+app.use((err, req, res, next) => {
+    console.error('[Global Server Error]', err.stack);
+    res.status(500).json({ error: 'Internal Server Error', details: err.message });
 });
+
+const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Serving static files from: ${path.join(__dirname, '../dist')}`);
+});
+
 
