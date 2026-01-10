@@ -38,16 +38,9 @@ app.use(cors({
         var msg = 'The CORS policy for this site does not allow access from the specified Origin.';
         return callback(new Error(msg), false);
     },
-
-    // Check if origin is in allowed list
-    if(allowedOrigins.indexOf(origin) === -1) {
-    const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-    return callback(new Error(msg), false);
-}
-        return callback(null, true);
-    },
-credentials: true
+    credentials: true
 }));
+
 // Security Headers
 app.use(helmet({
     crossOriginResourcePolicy: false,
@@ -55,6 +48,15 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false,
     strictTransportSecurity: false, // Disable HSTS for HTTP
     contentSecurityPolicy: false // Disable CSP for now to prevent upgrade-insecure-requests
+}));
+
+// [FIX] Serve index.css explicitly from root
+app.use('/index.css', express.static(path.join(__dirname, '../index.css')));
+
+// [PROXY] Proxy Fish Game server info to localhost:9000
+app.use('/get_serverinfo', createProxyMiddleware({
+    target: 'http://localhost:9000',
+    changeOrigin: true
 }));
 
 // [PROXY] Proxy requests to Fish Master Socket Server (localhost:9000)
