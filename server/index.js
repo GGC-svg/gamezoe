@@ -80,6 +80,8 @@ app.use('/socket.io', createProxyMiddleware({
 // Serve Games Static Files (Directly from source, skipping build copy)
 app.use('/games/slot-machine', express.static(path.join(__dirname, '../games/slot-machine')));
 app.use('/games/slot-machine-2', express.static(path.join(__dirname, '../games/html5-slot-machine-main/dist')));
+// [FIX] Serve Shared Game Resources (Sound, images) for MyFish
+app.use('/resource', express.static(path.join(__dirname, '../games/my-fish/resource')));
 
 // [FIX] Generic Route for ALL other games
 // This allows /games/racing-1/index.html to look inside ../games/racing-1/index.html
