@@ -54,14 +54,22 @@ app.use(helmet({
 app.use('/index.css', express.static(path.join(__dirname, '../index.css')));
 
 // [PROXY] Proxy Fish Game server info to localhost:9000
+// [PROXY] Proxy Fish Game server info to 127.0.0.1:9000
 app.use('/get_serverinfo', createProxyMiddleware({
-    target: 'http://localhost:9000',
+    target: 'http://127.0.0.1:9000',
     changeOrigin: true
 }));
 
-// [PROXY] Proxy requests to Fish Master Socket Server (localhost:9000)
+// [PROXY] Proxy Raw WebSocket for Fish Game (ws://127.0.0.1:9001)
+app.use('/fish-socket', createProxyMiddleware({
+    target: 'http://127.0.0.1:9001',
+    ws: true,
+    changeOrigin: true
+}));
+
+// [PROXY] Proxy requests to Fish Master Socket Server (127.0.0.1:9000)
 app.use('/socket.io', createProxyMiddleware({
-    target: 'http://localhost:9000',
+    target: 'http://127.0.0.1:9000',
     ws: true,
     changeOrigin: true
 }));

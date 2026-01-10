@@ -99,11 +99,10 @@
 
 
                             // Game code does: connectByUrl(ip + ":" + parseInt(port))
-                            // Since it ALWAYS appends :port, we put FULL url in ip and make port="" so it appends ":NaN"
-                            // BUT that breaks the URL. Instead, we use ws://localhost and actual port number.
+                            // We use the proxy path /fish-socket on standard HTTPS port 443
                             var startData = {
-                                ip: "ws://localhost",
-                                port: 9001,  // Direct connection to MyFish server
+                                ip: "wss://gamezoe.com/fish-socket",
+                                port: 443,  // Nginx/Express handles SSL and routing
                                 userId: userId,
                                 token: token,
                                 gameRoomID: 1,
