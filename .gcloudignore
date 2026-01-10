@@ -4,45 +4,20 @@
 .gcloudignore
 .git
 .gitignore
-*.md
-README*
 
-# Non-game tools and development directories
+# Exclude non-game tool directories
 games/gamelocai---遊戲本地化翻譯系統 (OLD FILE)/
 games/universalloc-ai---全領域專家級翻譯神器/
 games/UniversalLoc_PROD/
 games/fish-api-master/
 
-# Node.js dependencies
+# Node.js dependencies  
 node_modules/
 **/node_modules/
 package-lock.json
 **/package-lock.json
 yarn.lock
 **/yarn.lock
-
-# Build outputs and source files (keep only built static files)
-dist/
-**/dist/
-build/
-**/build/
-src/
-**/src/
-.next/
-**/.next/
-
-# Development files
-*.ts
-*.tsx
-*.jsx
-!server.js
-!**/server.js
-tsconfig.json
-**/tsconfig.json
-vite.config.*
-**/vite.config.*
-webpack.config.*
-**/webpack.config.*
 
 # IDE
 .vscode/
@@ -52,73 +27,15 @@ webpack.config.*
 
 # Logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 logs/
-**/logs/
 
 # OS
 .DS_Store
 Thumbs.db
-desktop.ini
 
-# Environment variables
-.env
-.env.*
-!.env.example
-
-# Database files
-*.db
-*.db-journal
-*.sqlite
-*.sqlite3
-
-# Temporary and cache files
-temp_*
+# Temporary files
 tmp/
-**/tmp/
-cache/
-**/cache/
 .cache/
-**/.cache/
-
-# Test files
-test/
-**/test/
-tests/
-**/tests/
-*.test.js
-*.spec.js
-__tests__/
-**/__tests__/
-
-# Documentation and examples
-docs/
-**/docs/
-examples/
-**/examples/
-
-# Large game-specific files that aren't needed for server
-**/Unity/
-**/unityLibrary/
-**/.gradle/
-**/obj/
-**/bin/
-
-# Java build files (for egret and other Java games)
-**/target/
-**/.m2/
-**/.classpath
-**/.project
-**/.settings/
-
-# Python cache
-__pycache__/
-**/__pycache__/
-*.pyc
-*.pyo
 
 # Git related
-.git/
 .github/
