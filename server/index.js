@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3001; // Default to 3001 for Nginx
+const PORT = process.env.PORT || 3000; // Default to 3000 for Nginx
 
 // IMPORTANT: Increase payload limit for Base64 images
 app.use(express.json({ limit: '10mb' }));
