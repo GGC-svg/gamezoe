@@ -77,8 +77,9 @@ const App: React.FC = () => {
       const rowData = row as any; // Cast to any to allow dynamic index access
       if (config.targetCols) {
         Object.entries(config.targetCols).forEach(([langCode, colName]) => {
-          if (colName && rowData[colName]) {
-            translations[langCode] = String(rowData[colName]);
+          const colKey = String(colName); // Ensure it's a string for indexing
+          if (colKey && rowData[colKey]) {
+            translations[langCode] = String(rowData[colKey]);
           }
         });
       }
