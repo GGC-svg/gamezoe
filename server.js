@@ -11,19 +11,39 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Auto-discovery of static game folders
 const GAMES_DIR = path.join(__dirname, 'games');
 
+// Log all incoming requests
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+});
+
 if (fs.existsSync(GAMES_DIR)) {
     const games = fs.readdirSync(GAMES_DIR).filter(file => {
-        return fs.statSync(path.join(GAMES_DIR, file)).isDirectory();
+        const fullPath = path.join(GAMES_DIR, file);
+        const isDir = fs.statSync(fullPath).isDirectory();
+        console.log(`Checking: ${file} - isDirectory: ${isDir}`);
+        return isDir;
     });
 
-    console.log(`Found ${games.length} games.`);
+    console.log(`Found ${games.length} games:`, games);
 
     games.forEach(game => {
         const gamePath = path.join(GAMES_DIR, game);
+
+        // Check what files exist in this game directory
+        try {
+            const files = fs.readdirSync(gamePath);
+            console.log(`Game "${game}" contains ${files.length} items:`, files.slice(0, 5));
+        } catch (err) {
+            console.error(`Error reading game directory ${game}:`, err);
+        }
+
         // Serve each game's folder static files deeply
         app.use(`/games/${game}`, express.static(gamePath));
         console.log(`Serving /games/${game} -> ${gamePath}`);
     });
+} else {
+    console.error(`GAMES_DIR does not exist: ${GAMES_DIR}`);
 }
 
 // Default Health Check for GCP
