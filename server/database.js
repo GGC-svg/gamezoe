@@ -222,6 +222,21 @@ function seedGames() {
             category: 'Action',
             rating: 4.6,
             releaseDate: '2025-02-01'
+        },
+        {
+            id: 'universalloc',
+            title: 'UniversalLoc AI',
+            description: '全領域專家級翻譯神器',
+            fullDescription: '利用先進的 AI 技術，為您的遊戲和應用提供專業級的翻譯服務。',
+            thumbnailUrl: '/games/universalloc-ai/icon.png', // Assuming icon exists or using placeholder
+            coverUrl: '/games/universalloc-ai/cover.png',
+            gameUrl: '/games/universalloc-ai---全領域專家級翻譯神器/index.html', // Pointing to local static file
+            developer: 'GameZoe AI',
+            price: 0,
+            isFree: 1,
+            category: 'Utility',
+            rating: 5.0,
+            releaseDate: '2024-01-01'
         }
     ];
 

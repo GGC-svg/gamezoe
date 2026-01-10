@@ -481,12 +481,24 @@ ports.forEach(port => {
         const sign = req.query.sign || "mock_sign";
         const time = req.query.time || Date.now();
 
+        // [FIX] Use request hostname (dynamic) or fallback to public domain
+        const publicHost = req.hostname === 'localhost' ? 'localhost' : 'gamezoe.com';
+        // const publicHost = "35.201.182.136"; // Alternative: Hardcode VM IP
+
         res.json({
             errcode: 0,
             roomid: roomId,
             roomId: roomId,
-            ip: "127.0.0.1",
-            port: port, // [FIX] Dynamic Port Mapping (was hardcoded 4002)
+            ip: publicHost, // [FIX] Return logical host, Nginx will proxy /socket.io to localhost:9000
+            port: 443,      // [FIX] Tell client to connect via HTTPS/WSS default port
+            // Client likely constructs url: ws://ip:port/socket.io
+            // We want: wss://gamezoe.com/socket.io
+
+            // NOTE: If client appends port, we might need to trick it.
+            // If Client uses: ws://${ip}:${port}
+            // We want: wss://gamezoe.com
+            // So ip="gamezoe.com", port="" (if parsed as string) or 443
+
             token: token,
             sign: sign,
             time: time
