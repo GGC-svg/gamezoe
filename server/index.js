@@ -19,24 +19,34 @@ const PORT = process.env.PORT || 3001; // Default to 3001 for Nginx
 app.use(express.json({ limit: '10mb' }));
 const allowedOrigins = [
     'http://localhost:3000',
+    'http://localhost:3001',
     'http://localhost:3002',
-    'https://www.gamezoe.com',
-    'https://gamezoe.com',
     'http://35.201.182.136'
 ];
+
 app.use(cors({
     origin: function (origin, callback) {
         // Allow requests with no origin (like direct file access, curl, Postman, same-origin)
         if (!origin) return callback(null, true);
 
-        // Check if origin is in allowed list
-        if (allowedOrigins.indexOf(origin) === -1) {
-            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-            return callback(new Error(msg), false);
+        // Dynamic check for gamezoe.com and its subdomains
+        if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('gamezoe.com')) {
+            return callback(null, true);
         }
+
+        console.error('CORS blocked origin:', origin); // Log the specific origin that was blocked
+        var msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+        return callback(new Error(msg), false);
+    },
+
+    // Check if origin is in allowed list
+    if(allowedOrigins.indexOf(origin) === -1) {
+    const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+    return callback(new Error(msg), false);
+}
         return callback(null, true);
     },
-    credentials: true
+credentials: true
 }));
 // Security Headers
 app.use(helmet({
