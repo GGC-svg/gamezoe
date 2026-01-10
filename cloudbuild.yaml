@@ -10,7 +10,7 @@ steps:
       - 'deploy'
       - 'app.yaml'
       - '--quiet'
-      - '--project=$PROJECT_ID'
+      - '--project=gen-lang-client-0566346208'
       - '--version=auto'
 
 timeout: '1600s'
