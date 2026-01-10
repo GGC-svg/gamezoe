@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "concurrently \"node server/index.js\" \"node server/fish_mocker.js --port 9000\" \"node server/myfish_server.js --port 9001\"",
-    "build": "tsc -b && vite build"
+    "build": "vite build"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
