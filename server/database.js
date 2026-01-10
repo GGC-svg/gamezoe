@@ -116,7 +116,20 @@ function initDb() {
             ip_address TEXT,
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (game_id) REFERENCES games(id)
-        )`);
+        )`, (err) => {
+            if (!err) {
+                // Migration: Ensure game_activities has ip_address
+                db.all("PRAGMA table_info(game_activities)", (err, cols) => {
+                    if (!cols.find(c => c.name === 'ip_address')) {
+                        console.log("Migrating: Adding ip_address column to game_activities...");
+                        db.run("ALTER TABLE game_activities ADD COLUMN ip_address TEXT");
+                    }
+                    if (!cols.find(c => c.name === 'last_heartbeat')) {
+                        db.run("ALTER TABLE game_activities ADD COLUMN last_heartbeat DATETIME DEFAULT CURRENT_TIMESTAMP");
+                    }
+                });
+            }
+        });
 
         // Pricing Tiers Table
         db.run(`CREATE TABLE IF NOT EXISTS game_pricing_tiers (
@@ -230,7 +243,7 @@ function seedGames() {
             fullDescription: '利用先進的 AI 技術，為您的遊戲和應用提供專業級的翻譯服務。',
             thumbnailUrl: '/games/universalloc-ai/icon.png', // Assuming icon exists or using placeholder
             coverUrl: '/games/universalloc-ai/cover.png',
-            gameUrl: '/games/universalloc-ai---全領域專家級翻譯神器/index.html', // Pointing to local static file
+            gameUrl: '/games/universalloc-ai---全領域專家級翻譯神器/dist/index.html', // Pointing to built static files
             developer: 'GameZoe AI',
             price: 0,
             isFree: 1,
