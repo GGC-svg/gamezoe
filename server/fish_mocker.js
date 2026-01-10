@@ -150,10 +150,16 @@ ports.forEach(port => {
 
 
     app.get('/get_serverinfo', (req, res) => {
+        // [FIX] Return public hostname and HTTPS port so client connects via WSS Proxy
+        // If local, return localhost/3000? No, client logic might be complex.
+        // Let's assume VM environment for now based on user request.
+        const host = "gamezoe.com";
         res.json({
             code: 0, msg: "success", status: 1,
-            ip: "192.168.50.115", host: "192.168.50.115", port: 9000,
-            hall_ip: "192.168.50.115", hall_port: 9000, hall: "192.168.50.115:9000", version: 1
+            // Force client to connect to wss://gamezoe.com (Port 443)
+            // Note: Client might append port. If port is 443, it's fine.
+            ip: host, host: host, port: 443,
+            hall_ip: host, hall_port: 443, hall: host + ":443", version: 1
         });
     });
 

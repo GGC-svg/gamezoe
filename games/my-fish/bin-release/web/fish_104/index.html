@@ -100,9 +100,31 @@
 
                             // Game code does: connectByUrl(ip + ":" + parseInt(port))
                             // We use the proxy path /fish-socket on standard HTTPS port 443
+                            // Dynamic Protocol/Host detection
+                            var isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                            // Local: ws://localhost:3000/fish-socket (Port 3000 proxies to 9001)
+                            // Prod: wss://gamezoe.com/fish-socket (Port 443 proxies to 3000->9001)
+
+                            // Hack: Game engine blindly appends ":" + port.
+                            // For Local, we want "ws://localhost:3000/fish-socket".
+                            // If we pass port 3000, it becomes "ws://localhost:3000/fish-socket:3000".
+                            // We can trick it by putting the port in the IP and using an empty port? 
+                            // Or use the raw port 9001 for local?
+
+                            var targetIp, targetPort;
+
+                            if (isLocal) {
+                                // Direct connect to 9001 for local stability (since we run it locally)
+                                targetIp = "ws://127.0.0.1";
+                                targetPort = 9001;
+                            } else {
+                                targetIp = "wss://gamezoe.com/fish-socket";
+                                targetPort = 443;
+                            }
+
                             var startData = {
-                                ip: "wss://gamezoe.com/fish-socket",
-                                port: 443,  // Nginx/Express handles SSL and routing
+                                ip: targetIp,
+                                port: targetPort,
                                 userId: userId,
                                 token: token,
                                 gameRoomID: 1,

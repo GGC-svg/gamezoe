@@ -60,13 +60,15 @@ app.use('/get_serverinfo', createProxyMiddleware({
     changeOrigin: true
 }));
 
-// [PROXY] Proxy Raw WebSocket for Fish Game (ws://127.0.0.1:9000)
-app.use('/fish-socket', createProxyMiddleware({
-    // Port 9000 handles BOTH HTTP and WebSocket in fish_mocker.js
-    target: 'http://127.0.0.1:9000',
+// [PROXY] Proxy Raw WebSocket for Fish Game (ws://127.0.0.1:9001)
+const fishSocketProxy = createProxyMiddleware({
+    // Port 9001 is served by myfish_server.js (Raw WS)
+    target: 'http://127.0.0.1:9001',
     ws: true,
-    changeOrigin: true
-}));
+    changeOrigin: true,
+    pathRewrite: { '^/fish-socket': '' }
+});
+app.use('/fish-socket', fishSocketProxy);
 
 // [PROXY] Proxy requests to Fish Master Socket Server (127.0.0.1:9000)
 app.use('/socket.io', createProxyMiddleware({
@@ -1612,6 +1614,19 @@ app.use((err, req, res, next) => {
 const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Serving static files from: ${path.join(__dirname, '../dist')}`);
+});
+
+// [FIX] Manually handle WebSocket upgrades for /fish-socket
+server.on('upgrade', (req, socket, head) => {
+    if (req.url.startsWith('/fish-socket')) {
+        console.log('[Upgrade] Upgrading /fish-socket request...');
+        if (typeof fishSocketProxy.upgrade === 'function') {
+            fishSocketProxy.upgrade(req, socket, head);
+        } else {
+            console.error('[Upgrade] Error: fishSocketProxy.upgrade is not a function. http-proxy-middleware v3 issue?');
+            socket.destroy();
+        }
+    }
 });
 
 

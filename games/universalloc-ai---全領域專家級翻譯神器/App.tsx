@@ -85,8 +85,9 @@ const App: React.FC = () => {
 
       // Calculate Max Length for LQA
       let maxLen: number | undefined = undefined;
-      if (config.lengthReferenceColumn && row[config.lengthReferenceColumn]) {
-        const refText = String(row[config.lengthReferenceColumn]);
+      const rowAny = row as any;
+      if (config.lengthReferenceColumn && rowAny[config.lengthReferenceColumn]) {
+        const refText = String(rowAny[config.lengthReferenceColumn]);
         maxLen = refText.length > 0 ? refText.length + 2 : undefined; // Add +2 buffer
       }
 
