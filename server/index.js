@@ -125,6 +125,13 @@ app.use('/socket.io', createProxyMiddleware({
     changeOrigin: true
 }));
 
+// [PROXY] Proxy Fish Master REST API calls (guest, login, etc.) to Port 9000
+app.use(['/guest', '/login', '/api/game'], createProxyMiddleware({
+    target: 'http://127.0.0.1:9000',
+    changeOrigin: true,
+    logLevel: 'debug'
+}));
+
 // Serve Games Static Files (Directly from source, skipping build copy)
 app.use('/games/slot-machine', express.static(path.join(__dirname, '../games/slot-machine')));
 app.use('/games/slot-machine-2', express.static(path.join(__dirname, '../games/html5-slot-machine-main/dist')));
