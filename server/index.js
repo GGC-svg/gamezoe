@@ -97,6 +97,15 @@ import { GoogleGenAI } from '@google/genai';
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "YOUR_API_KEY_HERE" });
 
 app.post('/api/ai/generate', async (req, res) => {
+    // [SECURITY] Check if user is authenticated (Google OAuth)
+    // Note: This relies on the frontend including userId in the request body after Google Auth
+    const { userId } = req.body;
+
+    if (!userId) {
+        console.warn('[AI API] Unauthorized request: No userId provided');
+        return res.status(401).json({ error: "未授權：請先登入使用此功能" });
+    }
+
     // Expecting: { model, contents, config } matching the SDK signature
     const { model, contents, config } = req.body;
 
@@ -105,6 +114,7 @@ app.post('/api/ai/generate', async (req, res) => {
     }
 
     try {
+        console.log(`[AI API] Request from user: ${userId}`);
         const response = await genAI.models.generateContent({
             model: model || "gemini-1.5-flash",
             contents: contents, // String or Part[]
