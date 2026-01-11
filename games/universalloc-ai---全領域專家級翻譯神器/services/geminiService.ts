@@ -37,6 +37,19 @@ const callWithRetry = async (fn: () => Promise<any>, retries = 3, delay = 2000):
 };
 
 /**
+ * Wait for window.currentUser to be available (handles timing issues)
+ */
+const waitForUser = async (maxWait = 5000): Promise<string> => {
+  const start = Date.now();
+  while (Date.now() - start < maxWait) {
+    const userId = (window as any).currentUser?.id || (window as any).GameZoe?.currentUser?.id;
+    if (userId) return String(userId);
+    await new Promise(resolve => setTimeout(resolve, 100)); // Check every 100ms
+  }
+  throw new Error("未登入：請先登入使用此功能（逾時）");
+};
+
+/**
  * 智慧型長度縮限校稿服務
  */
 export const translateBatch = async (
