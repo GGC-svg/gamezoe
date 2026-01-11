@@ -294,10 +294,29 @@
 
       init: function () {
         this.refresh();
-        // [FIX] Moderate polling for balance sync (every 5 seconds)
-        setInterval(() => this.refresh(), 5000);
-        // [FIX] Fast polling for game score during gameplay (every 2 seconds)
-        setInterval(() => this.fetchGameScore(), 2000);
+        // [FIX] Listen for room exit to refresh balance
+        this.listenForRoomExit();
+      },
+
+      listenForRoomExit: function () {
+        // Hook into game's socket to detect room exit
+        const checkSocket = setInterval(() => {
+          if (window.cc && window.cc.yqs && window.cc.yqs.net && window.cc.yqs.net.socket) {
+            const socket = window.cc.yqs.net.socket;
+            // Listen for exit result from server
+            socket.on('exit_result', () => {
+              console.log('[Wallet] Room exit detected, refreshing balance...');
+              this.refresh();
+            });
+            // Also listen for disconnect
+            socket.on('disconnect', () => {
+              console.log('[Wallet] Socket disconnected, refreshing balance...');
+              setTimeout(() => this.refresh(), 500);
+            });
+            clearInterval(checkSocket);
+            console.log('[Wallet] Room exit listener attached');
+          }
+        }, 1000);
       },
 
       fetchGameScore: function () {
