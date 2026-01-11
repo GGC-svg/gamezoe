@@ -15,6 +15,33 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000; // Default to 3000 for Nginx
 
+// [PROXY] Proxy requests to Fish Master Socket Server (127.0.0.1:9000)
+// Moved to TOP to avoid body-parser issues
+app.use('/socket.io', createProxyMiddleware({
+    target: 'http://127.0.0.1:9000',
+    ws: true,
+    changeOrigin: true
+}));
+
+const gameProxy = createProxyMiddleware({
+    target: 'http://127.0.0.1:9000',
+    changeOrigin: true,
+    logLevel: 'debug'
+});
+
+app.use('/guest', gameProxy);
+app.use('/login', gameProxy);
+app.use('/api/game', gameProxy);
+
+// [PROXY] Proxy Raw WebSocket for Fish Game (ws://127.0.0.1:9001)
+const fishSocketProxy = createProxyMiddleware({
+    target: 'http://127.0.0.1:9001',
+    ws: true,
+    changeOrigin: true,
+    pathRewrite: { '^/fish-socket': '' }
+});
+app.use('/fish-socket', fishSocketProxy);
+
 // IMPORTANT: Increase payload limit for Base64 images
 app.use(express.json({ limit: '10mb' }));
 const allowedOrigins = [
@@ -108,42 +135,9 @@ db.serialize(() => {
     });
 });
 
-// [PROXY] Proxy Raw WebSocket for Fish Game (ws://127.0.0.1:9001)
-const fishSocketProxy = createProxyMiddleware({
-    // Port 9001 is served by myfish_server.js (Raw WS)
-    target: 'http://127.0.0.1:9001',
-    ws: true,
-    changeOrigin: true,
-    pathRewrite: { '^/fish-socket': '' }
-});
-app.use('/fish-socket', fishSocketProxy);
+// [MOVED] Socket Proxy moved to top
 
-// [PROXY] Proxy requests to Fish Master Socket Server (127.0.0.1:9000)
-app.use('/socket.io', createProxyMiddleware({
-    target: 'http://127.0.0.1:9000',
-    ws: true,
-    changeOrigin: true
-}));
-
-// [PROXY] Proxy Fish Master REST API calls (guest, login, etc.) to Port 9000
-// [DEBUG] Log all game-related requests
-app.use((req, res, next) => {
-    if (req.url.startsWith('/guest') || req.url.startsWith('/login') || req.url.startsWith('/api/game')) {
-        console.log(`[Proxy Debug] Request: ${req.method} ${req.url}`);
-    }
-    next();
-});
-
-// [PROXY] Proxy Fish Master REST API calls individually to ensure matching
-const gameProxy = createProxyMiddleware({
-    target: 'http://127.0.0.1:9000',
-    changeOrigin: true,
-    logLevel: 'debug'
-});
-
-app.use('/guest', gameProxy);
-app.use('/login', gameProxy);
-app.use('/api/game', gameProxy);
+// [MOVED] Game Proxy moved to top
 
 // Serve Games Static Files (Directly from source, skipping build copy)
 app.use('/games/slot-machine', express.static(path.join(__dirname, '../games/slot-machine')));
