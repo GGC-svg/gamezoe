@@ -299,13 +299,28 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
       setActiveTab('form');
    };
 
-   function handleDragEnd(event: DragEndEvent) {
+   async function handleDragEnd(event: DragEndEvent) {
       const { active, over } = event;
       if (active.id !== over?.id) {
          const oldIndex = localGames.findIndex((item) => item.id === active.id);
          const newIndex = localGames.findIndex((item) => item.id === over?.id);
-         setLocalGames(arrayMove(localGames, oldIndex, newIndex));
-         // Optional: Save new order to backend
+         const newOrder = arrayMove(localGames, oldIndex, newIndex);
+         setLocalGames(newOrder);
+
+         // Save new order to backend
+         try {
+            const orderedIds = newOrder.map(g => g.id);
+            const res = await fetch('/api/games/reorder', {
+               method: 'PUT',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ orderedIds })
+            });
+            if (!res.ok) {
+               console.error('Failed to save order');
+            }
+         } catch (err) {
+            console.error('Error saving order:', err);
+         }
       }
    }
 
