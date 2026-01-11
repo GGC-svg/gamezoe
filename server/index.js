@@ -57,13 +57,20 @@ app.use('/index.css', express.static(path.join(__dirname, '../index.css')));
 // [FIX] Serve /get_serverinfo directly
 app.get('/get_serverinfo', (req, res) => {
     // Return the public domain and port (443 for HTTPS)
-    // The client likely uses this to construct the socket URL
+    // Matching format from Port 9000 exactly to ensure client compatibility
     res.json({
+        code: 0,
+        msg: "success",
+        status: 1,
         ip: "gamezoe.com",
         host: "gamezoe.com",
         port: 443,
+        hall_ip: "gamezoe.com",
+        hall_port: 443,
+        hall: "gamezoe.com:443",
         wss_port: 443,
-        secure: true
+        secure: true,
+        version: 1
     });
 });
 
