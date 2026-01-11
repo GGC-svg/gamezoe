@@ -369,7 +369,7 @@ ports.forEach(port => {
 
         const callPlatform = async () => {
             try {
-                const platformUrl = 'http://localhost:3002/api/bridge/transaction/withdraw';
+                const platformUrl = 'http://127.0.0.1:3000/api/bridge/transaction/withdraw';
                 const payload = {
                     order_id,
                     user_id,
@@ -1000,6 +1000,31 @@ ports.forEach(port => {
                         });
 
                     console.log(`[Charge] Success! Deducted ${toDisplayFloat(amountGold)} Gold, Added ${toDisplayFloat(amountScore)} Score.`);
+
+                    // [FIX] Send success reply to update client UI
+                    socket.emit('charge_reply', {
+                        success: true,
+                        gold: toDisplayFloat(user.gold),
+                        score: toDisplayFloat(user.score),
+                        msg: "Success"
+                    });
+
+                    // [FIX] Also broadcast updated user info to sync UI
+                    socket.emit('new_user_comes_push', {
+                        odis: socket.odis || 0,
+                        odis_sum: socket.odis_sum || 0,
+                        seatIndex: user.seatIndex || 0,
+                        odisStatus: 0,
+                        odisKind: 0,
+                        userId: socket.userId,
+                        name: user.name,
+                        headimg: user.headimg || 1,
+                        score: toDisplayFloat(user.score),
+                        gold: toDisplayFloat(user.gold),
+                        lv: user.lv || 1,
+                        vip: user.vip || 0,
+                        sex: user.sex || 1
+                    });
 
                 } else {
                     console.warn(`[Charge] Failed. Insufficient Gold.`);
