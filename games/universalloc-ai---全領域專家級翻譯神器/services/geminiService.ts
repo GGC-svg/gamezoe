@@ -40,13 +40,23 @@ const callWithRetry = async (fn: () => Promise<any>, retries = 3, delay = 2000):
  * Wait for window.currentUser to be available (handles timing issues)
  */
 const waitForUser = async (maxWait = 5000): Promise<string> => {
+  // 1. Check URL parameters (Primary method from GamePlayer iframe)
+  const urlParams = new URLSearchParams(window.location.search);
+  const paramId = urlParams.get('userId');
+  if (paramId) return paramId;
+
+  // 2. Check window globals (Fallback)
   const start = Date.now();
   while (Date.now() - start < maxWait) {
-    const userId = (window as any).currentUser?.id || (window as any).GameZoe?.currentUser?.id;
+    const userId = (window as any).currentUser?.id ||
+      (window as any).GameZoe?.currentUser?.id ||
+      // Try accessing parent if in iframe (and same origin)
+      (window.parent !== window && (window.parent as any).currentUser?.id);
+
     if (userId) return String(userId);
     await new Promise(resolve => setTimeout(resolve, 100)); // Check every 100ms
   }
-  throw new Error("未登入：請先登入使用此功能（逾時）");
+  throw new Error("未登入：請先登入使用此功能（無法獲取用戶 ID）");
 };
 
 /**
