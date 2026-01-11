@@ -24,7 +24,8 @@ const VIP_LEVELS = [
     { level: 3, minGold: 200000 },   // 200 RMB
     { level: 4, minGold: 1000000 },  // 1000 RMB
     { level: 5, minGold: 5000000 },  // 5000 RMB
-    { level: 6, minGold: 20000000 }  // 20000 RMB
+    { level: 6, minGold: 20000000 }, // 20000 RMB
+    { level: 7, minGold: 50000000 }  // VIP 7 (Max)
 ];
 
 function calculateVip(totalRecharge) {
@@ -439,6 +440,11 @@ ports.forEach(port => {
 
     app.get('/guest', (req, res) => {
         // [FIX] Guest should also try to read DB balance if account is provided
+        handleLogin(req, res, 4002);
+    });
+
+    // [FIX] Client sends POST for guest login, we must handle it
+    app.post('/guest', (req, res) => {
         handleLogin(req, res, 4002);
     });
 
