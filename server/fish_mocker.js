@@ -239,13 +239,23 @@ ports.forEach(port => {
                     if (err) console.error("Failed to update tx status", err);
 
                     // 5. MEMORY & SOCKET SYNC (Fixing Client UI Lag)
-                    const room = RoomState[1];
+                    // [FIX] Find user's room using roomManager instead of RoomState
+                    let userRoom = null;
                     let currentScore = 0;
 
+                    if (roomManager) {
+                        for (const [roomId, room] of roomManager.rooms) {
+                            if (room.users && room.users[user_id]) {
+                                userRoom = room;
+                                break;
+                            }
+                        }
+                    }
+
                     // Update Memory if user is online/loaded
-                    if (room.users[user_id]) {
-                        room.users[user_id].score = (room.users[user_id].score || 0) + amount;
-                        currentScore = room.users[user_id].score;
+                    if (userRoom && userRoom.users[user_id]) {
+                        userRoom.users[user_id].score = (userRoom.users[user_id].score || 0) + amount;
+                        currentScore = userRoom.users[user_id].score;
                         console.log(`[Deposit] Updated Memory for ${user_id}. New Score: ${currentScore}`);
                     }
 
@@ -254,9 +264,9 @@ ports.forEach(port => {
                         ioInst.sockets.sockets.forEach((s) => {
                             if (s.userId === user_id) {
                                 console.log(`[Deposit] Pushing update to socket ${s.id}`);
-                                if (room.users[user_id]) {
+                                if (userRoom && userRoom.users[user_id]) {
                                     // Force refresh seat info including score
-                                    s.emit('new_user_comes_push', { ...room.users[user_id], seatIndex: 0 });
+                                    s.emit('new_user_comes_push', { ...userRoom.users[user_id], seatIndex: 0 });
                                 }
                             }
                         });
@@ -293,13 +303,21 @@ ports.forEach(port => {
         const order_id = `W_${user_id}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
         // 2. Check Balance & Rule (Must keep 500)
-        // 2. Check Balance & Rule (Must keep 500)
         // CRITICAL FIX: Check Memory First to avoid Race Condition
-        const room = RoomState[1];
+        // [FIX] Find user's room using roomManager instead of RoomState
+        let room = null;
+        if (roomManager) {
+            for (const [roomId, r] of roomManager.rooms) {
+                if (r.users && r.users[user_id]) {
+                    room = r;
+                    break;
+                }
+            }
+        }
         let currentBalance = 0;
         let isOnline = false;
 
-        if (room.users[user_id]) {
+        if (room && room.users[user_id]) {
             // User is ONLINE - Memory is the source of truth
             currentBalance = room.users[user_id].score;
             isOnline = true;
