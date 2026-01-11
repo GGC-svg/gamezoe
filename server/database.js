@@ -156,6 +156,22 @@ function initDb() {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )`);
+
+        // User Game Balances Table (Per-game point balances)
+        db.run(`CREATE TABLE IF NOT EXISTS user_game_balances (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            game_id TEXT NOT NULL,
+            balance INTEGER DEFAULT 0,
+            total_deposited INTEGER DEFAULT 0,
+            total_consumed INTEGER DEFAULT 0,
+            total_withdrawn INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, game_id),
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (game_id) REFERENCES games(id)
+        )`);
     });
 }
 

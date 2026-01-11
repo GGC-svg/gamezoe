@@ -759,6 +759,301 @@ app.post('/api/bridge/transfer', verifyBridgeKey, (req, res) => {
 });
 
 
+// ============================================
+// PER-GAME BALANCE SYSTEM
+// Each game has independent point balance per user
+// ============================================
+
+// Get user's balance for a specific game
+app.get('/api/game-balance/:userId/:gameId', (req, res) => {
+    const { userId, gameId } = req.params;
+
+    db.get(
+        "SELECT * FROM user_game_balances WHERE user_id = ? AND game_id = ?",
+        [userId, gameId],
+        (err, row) => {
+            if (err) {
+                res.status(500).json({ error: err.message });
+                return;
+            }
+
+            if (!row) {
+                // No balance record yet, return 0
+                res.json({
+                    success: true,
+                    user_id: userId,
+                    game_id: gameId,
+                    balance: 0,
+                    total_deposited: 0,
+                    total_consumed: 0,
+                    total_withdrawn: 0
+                });
+                return;
+            }
+
+            res.json({
+                success: true,
+                ...row
+            });
+        }
+    );
+});
+
+// Transfer G coins from platform to a specific game
+app.post('/api/game-balance/deposit', (req, res) => {
+    const { userId, gameId, amount } = req.body;
+
+    if (!userId || !gameId || !amount || amount <= 0) {
+        res.status(400).json({ error: "Invalid parameters" });
+        return;
+    }
+
+    const amountInt = Math.floor(amount);
+
+    db.serialize(() => {
+        // Check user's G coin balance
+        db.get("SELECT gold_balance FROM users WHERE id = ?", [userId], (err, user) => {
+            if (err || !user) {
+                res.status(404).json({ error: "User not found" });
+                return;
+            }
+
+            if (user.gold_balance < amountInt) {
+                res.status(402).json({ error: "Insufficient G coins", current: user.gold_balance, required: amountInt });
+                return;
+            }
+
+            db.run("BEGIN TRANSACTION");
+
+            // 1. Deduct from user's G coin balance
+            db.run("UPDATE users SET gold_balance = gold_balance - ? WHERE id = ?", [amountInt, userId], (err) => {
+                if (err) {
+                    db.run("ROLLBACK");
+                    res.status(500).json({ error: err.message });
+                    return;
+                }
+
+                // 2. Add to game-specific balance (upsert)
+                db.run(`
+                    INSERT INTO user_game_balances (user_id, game_id, balance, total_deposited, updated_at)
+                    VALUES (?, ?, ?, ?, datetime('now', '+8 hours'))
+                    ON CONFLICT(user_id, game_id) DO UPDATE SET
+                        balance = balance + ?,
+                        total_deposited = total_deposited + ?,
+                        updated_at = datetime('now', '+8 hours')
+                `, [userId, gameId, amountInt, amountInt, amountInt, amountInt], (err) => {
+                    if (err) {
+                        db.run("ROLLBACK");
+                        res.status(500).json({ error: err.message });
+                        return;
+                    }
+
+                    // 3. Log transaction
+                    const orderId = `GDEP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                    db.run(
+                        "INSERT INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, game_id, created_at) VALUES (?, ?, ?, 'gold', 'game_deposit', ?, 'COMPLETED', ?, datetime('now', '+8 hours'))",
+                        [orderId, userId, -amountInt, `轉入遊戲: ${gameId}`, gameId],
+                        (err) => {
+                            if (err) {
+                                db.run("ROLLBACK");
+                                res.status(500).json({ error: err.message });
+                                return;
+                            }
+
+                            db.run("COMMIT", (err) => {
+                                if (err) {
+                                    res.status(500).json({ error: err.message });
+                                    return;
+                                }
+
+                                // Get updated balances
+                                db.get("SELECT gold_balance FROM users WHERE id = ?", [userId], (err, updatedUser) => {
+                                    db.get("SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = ?", [userId, gameId], (err, gameBalance) => {
+                                        res.json({
+                                            success: true,
+                                            order_id: orderId,
+                                            platform_balance: updatedUser?.gold_balance || 0,
+                                            game_balance: gameBalance?.balance || 0,
+                                            amount_transferred: amountInt
+                                        });
+                                    });
+                                });
+                            });
+                        }
+                    );
+                });
+            });
+        });
+    });
+});
+
+// Withdraw from game balance back to platform G coins
+app.post('/api/game-balance/withdraw', (req, res) => {
+    const { userId, gameId, amount } = req.body;
+
+    if (!userId || !gameId || !amount || amount <= 0) {
+        res.status(400).json({ error: "Invalid parameters" });
+        return;
+    }
+
+    const amountInt = Math.floor(amount);
+
+    db.serialize(() => {
+        // Check game balance
+        db.get("SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = ?", [userId, gameId], (err, gameRow) => {
+            if (err) {
+                res.status(500).json({ error: err.message });
+                return;
+            }
+
+            if (!gameRow || gameRow.balance < amountInt) {
+                res.status(402).json({ error: "Insufficient game balance", current: gameRow?.balance || 0, required: amountInt });
+                return;
+            }
+
+            db.run("BEGIN TRANSACTION");
+
+            // 1. Deduct from game balance
+            db.run(
+                "UPDATE user_game_balances SET balance = balance - ?, total_withdrawn = total_withdrawn + ?, updated_at = datetime('now', '+8 hours') WHERE user_id = ? AND game_id = ?",
+                [amountInt, amountInt, userId, gameId],
+                (err) => {
+                    if (err) {
+                        db.run("ROLLBACK");
+                        res.status(500).json({ error: err.message });
+                        return;
+                    }
+
+                    // 2. Add to platform G coins
+                    db.run("UPDATE users SET gold_balance = gold_balance + ? WHERE id = ?", [amountInt, userId], (err) => {
+                        if (err) {
+                            db.run("ROLLBACK");
+                            res.status(500).json({ error: err.message });
+                            return;
+                        }
+
+                        // 3. Log transaction
+                        const orderId = `GWTH-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                        db.run(
+                            "INSERT INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, game_id, created_at) VALUES (?, ?, ?, 'gold', 'game_withdraw', ?, 'COMPLETED', ?, datetime('now', '+8 hours'))",
+                            [orderId, userId, amountInt, `從遊戲提出: ${gameId}`, gameId],
+                            (err) => {
+                                if (err) {
+                                    db.run("ROLLBACK");
+                                    res.status(500).json({ error: err.message });
+                                    return;
+                                }
+
+                                db.run("COMMIT", (err) => {
+                                    if (err) {
+                                        res.status(500).json({ error: err.message });
+                                        return;
+                                    }
+
+                                    // Get updated balances
+                                    db.get("SELECT gold_balance FROM users WHERE id = ?", [userId], (err, updatedUser) => {
+                                        db.get("SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = ?", [userId, gameId], (err, gameBalance) => {
+                                            res.json({
+                                                success: true,
+                                                order_id: orderId,
+                                                platform_balance: updatedUser?.gold_balance || 0,
+                                                game_balance: gameBalance?.balance || 0,
+                                                amount_withdrawn: amountInt
+                                            });
+                                        });
+                                    });
+                                });
+                            }
+                        );
+                    });
+                }
+            );
+        });
+    });
+});
+
+// Update game balance (for games to report consumption/wins)
+// This is called by games to sync their internal balance with the platform
+app.post('/api/game-balance/sync', verifyBridgeKey, (req, res) => {
+    const { userId, gameId, newBalance, consumed, won } = req.body;
+
+    if (!userId || !gameId || newBalance === undefined) {
+        res.status(400).json({ error: "Invalid parameters" });
+        return;
+    }
+
+    const balanceInt = Math.floor(newBalance);
+    const consumedInt = Math.floor(consumed || 0);
+    const wonInt = Math.floor(won || 0);
+
+    db.run(`
+        INSERT INTO user_game_balances (user_id, game_id, balance, total_consumed, updated_at)
+        VALUES (?, ?, ?, ?, datetime('now', '+8 hours'))
+        ON CONFLICT(user_id, game_id) DO UPDATE SET
+            balance = ?,
+            total_consumed = total_consumed + ?,
+            updated_at = datetime('now', '+8 hours')
+    `, [userId, gameId, balanceInt, consumedInt, balanceInt, consumedInt], (err) => {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+
+        res.json({
+            success: true,
+            user_id: userId,
+            game_id: gameId,
+            balance: balanceInt
+        });
+    });
+});
+
+// Get all game balances for a user (for profile/wallet display)
+app.get('/api/game-balances/:userId', (req, res) => {
+    const { userId } = req.params;
+
+    db.all(`
+        SELECT ugb.*, g.title as game_title, g.thumbnailUrl as game_thumbnail
+        FROM user_game_balances ugb
+        LEFT JOIN games g ON ugb.game_id = g.id
+        WHERE ugb.user_id = ?
+        ORDER BY ugb.updated_at DESC
+    `, [userId], (err, rows) => {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+
+        res.json({
+            success: true,
+            balances: rows || []
+        });
+    });
+});
+
+// Get transaction history for a specific game
+app.get('/api/game-transactions/:userId/:gameId', (req, res) => {
+    const { userId, gameId } = req.params;
+    const limit = parseInt(req.query.limit) || 50;
+
+    db.all(
+        "SELECT * FROM wallet_transactions WHERE user_id = ? AND game_id = ? ORDER BY created_at DESC LIMIT ?",
+        [userId, gameId, limit],
+        (err, rows) => {
+            if (err) {
+                res.status(500).json({ error: err.message });
+                return;
+            }
+
+            res.json({
+                success: true,
+                transactions: rows || []
+            });
+        }
+    );
+});
+
+
 // --- GAME PRICING & ACCESS API ---
 
 // Get Game Pricing Tiers

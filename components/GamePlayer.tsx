@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Maximize2, Minimize2, RefreshCw, ExternalLink } from 'lucide-react';
-import { Game } from '../types';
-
-import { User } from '../types';
+import { X, Maximize2, Minimize2, RefreshCw, ExternalLink, Coins } from 'lucide-react';
+import { Game, User } from '../types';
+import GameBalanceModal from './GameBalanceModal';
 
 interface GamePlayerProps {
     game: Game;
@@ -15,6 +14,22 @@ const GamePlayer: React.FC<GamePlayerProps> = ({ game, onClose, currentUser, exp
     const [loading, setLoading] = useState(true);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [iframeError, setIframeError] = useState(false);
+    const [showBalanceModal, setShowBalanceModal] = useState(false);
+    const [gameBalance, setGameBalance] = useState<number>(0);
+
+    // Fetch game-specific balance
+    useEffect(() => {
+        if (currentUser && game.id) {
+            fetch(`/api/game-balance/${currentUser.id}/${game.id}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        setGameBalance(data.balance || 0);
+                    }
+                })
+                .catch(err => console.error('Failed to fetch game balance', err));
+        }
+    }, [currentUser, game.id]);
 
     // Tracking Logic
     useEffect(() => {
@@ -133,6 +148,18 @@ const GamePlayer: React.FC<GamePlayerProps> = ({ game, onClose, currentUser, exp
                     })()}
                 </div>
                 <div className="flex items-center gap-2 md:gap-4">
+                    {/* Game Balance Button */}
+                    {currentUser && (
+                        <button
+                            onClick={() => setShowBalanceModal(true)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-nexus-accent rounded-lg transition-colors"
+                            title="遊戲點數管理"
+                        >
+                            <Coins className="h-4 w-4 text-nexus-accent" />
+                            <span className="text-nexus-accent font-bold">{gameBalance.toLocaleString()}</span>
+                            <span className="text-slate-500 text-xs hidden md:inline">點</span>
+                        </button>
+                    )}
                     <button onClick={handleOpenExternal} className="text-slate-400 hover:text-white flex items-center gap-1 text-xs md:text-sm px-2 py-1 rounded hover:bg-slate-800 transition-colors" title="在新視窗開啟">
                         <ExternalLink className="h-4 w-4" />
                         <span className="hidden md:inline">新視窗開啟</span>
@@ -200,6 +227,27 @@ const GamePlayer: React.FC<GamePlayerProps> = ({ game, onClose, currentUser, exp
                     </div>
                 )}
             </div>
+
+            {/* Game Balance Modal */}
+            {currentUser && (
+                <GameBalanceModal
+                    isOpen={showBalanceModal}
+                    onClose={() => setShowBalanceModal(false)}
+                    userId={currentUser.id}
+                    gameId={game.id}
+                    gameTitle={game.title}
+                    onBalanceChange={() => {
+                        // Refresh balance display
+                        fetch(`/api/game-balance/${currentUser.id}/${game.id}`)
+                            .then(res => res.json())
+                            .then(data => {
+                                if (data.success) {
+                                    setGameBalance(data.balance || 0);
+                                }
+                            });
+                    }}
+                />
+            )}
         </div>
     );
 };
