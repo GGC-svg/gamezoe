@@ -76,6 +76,25 @@ db.serialize(() => {
         }
     });
 
+    // Fix: Insert 'fish-master' game if missing (Required for Foreign Key constraint on activity logging)
+    db.get("SELECT id FROM games WHERE id = 'fish-master'", (err, row) => {
+        if (err) {
+            console.error("Failed to check for fish-master game:", err.message);
+            return;
+        }
+        if (!row) {
+            console.log("Inserting missing game: fish-master");
+            const sql = `INSERT INTO games (id, title, description, fullDescription, thumbnailUrl, coverUrl, gameUrl, developer, price, isFree, category, rating, releaseDate, displayOrder) 
+                         VALUES ('fish-master', '捕魚大師 (Fish Master)', '最刺激的深海捕魚體驗！', '探索深海寶藏，捕捉傳說中的大魚。', '/games/fish-master/icon.png', '/games/fish-master/cover.png', '/games/fish-master/index.html', 'GameZoe', 0, 1, 'Arcade', 5.0, '2025-01-01', 1)`;
+            db.run(sql, (err) => {
+                if (err) console.error("Failed to insert fish-master:", err.message);
+                else console.log("Success: Inserted fish-master");
+            });
+        } else {
+            console.log("Game 'fish-master' already exists.");
+        }
+    });
+
 });
 
 // Close later
