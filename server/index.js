@@ -29,7 +29,8 @@ const gameProxy = createProxyMiddleware({
     target: 'http://127.0.0.1:9000',
     changeOrigin: true,
     logLevel: 'debug',
-    pathFilter: ['/guest', '/login', '/api/game']
+    // [FIX] Add trailing slash to '/api/game/' to avoid matching '/api/games'
+    pathFilter: ['/guest', '/login', '/api/game/']
 });
 
 // [CRITICAL] Mount at root to prevent path stripping by Express
