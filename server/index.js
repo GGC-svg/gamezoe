@@ -134,9 +134,8 @@ app.use('/resource', express.static(path.join(__dirname, '../games/my-fish/resou
 // [FIX] Generic Route for ALL other games
 // This allows /games/racing-1/index.html to look inside ../games/racing-1/index.html
 app.use('/games', express.static(path.join(__dirname, '../games')));
-// Serve specific static files or other assets if needed
-// Serve specific static files or other assets if needed
-app.use(express.static(path.join(__dirname, '../dist')));
+// [MOVED] Static file serving moved to end of file (after all API routes) to prevent catch-all interference
+// app.use(express.static(path.join(__dirname, '../dist')));
 
 // --- AI PROXY (Secure) ---
 import { GoogleGenerativeAI } from '@google/generative-ai';

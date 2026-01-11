@@ -75,24 +75,20 @@
         XMLHttpRequest.prototype.open = function (method, url, async, user, password) {
           // [FIX] URL Patching for Broken Configs
           if (url && typeof url === 'string') {
-            // Fix 1: Protocol Relative URL (//get_serverinfo -> /api/get_serverinfo)
-            if (url.startsWith('//get_serverinfo')) {
+            // Fix 1: Protocol Relative URL (// -> /)
+            if (url.startsWith('//')) {
               console.warn("[FishFix] Patching Protocol Relative URL:", url);
-              url = '/api/get_serverinfo' + url.substring('//get_serverinfo'.length);
-            } else if (url.startsWith('//')) {
-              url = url.substring(1); // Remove leading //
+              url = url.substring(1);
             }
-
             // Fix 2: Bad Domain (fish.blzz.shop -> Relative)
             if (url.includes('fish.blzz.shop')) {
               console.warn("[FishFix] Patching Bad Domain:", url);
               url = url.replace(/http:\/\/fish\.blzz\.shop(:\d+)?/, '');
             }
-
-            // Fix 3: Absolute /get_serverinfo -> /api/get_serverinfo
-            if (url === '/get_serverinfo' || url.startsWith('/get_serverinfo?')) {
-              console.warn("[FishFix] Redirecting to API:", url);
-              url = url.replace('/get_serverinfo', '/api/get_serverinfo');
+            // Fix 3: Localhost:9000 -> Relative
+            if (url.includes('localhost:9000')) {
+              console.warn("[FishFix] Removing localhost:9000:", url);
+              url = url.replace('http://localhost:9000', '');
             }
           }
 
