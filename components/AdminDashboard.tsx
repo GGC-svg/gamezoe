@@ -137,6 +137,8 @@ const SortableRow = ({ game, onEdit, onDelete }: SortableRowProps) => {
 const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDeleteGame }: AdminDashboardProps) => {
    const [activeTab, setActiveTab] = useState<'list' | 'form' | 'logs' | 'purchases' | 'activities' | 'analytics' | 'users'>('list');
    const [editingId, setEditingId] = useState<string | null>(null);
+   const [isReorderMode, setIsReorderMode] = useState<boolean>(false);
+   const [isSavingOrder, setIsSavingOrder] = useState<boolean>(false);
 
    // Prevent body scroll when modal is open
    useEffect(() => {
@@ -184,8 +186,11 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
    );
 
    useEffect(() => {
-      setLocalGames(games);
-   }, [games]);
+      // Don't reset local order when in reorder mode
+      if (!isReorderMode) {
+         setLocalGames(games);
+      }
+   }, [games, isReorderMode]);
 
    // Fetch tiers when editing a game
    useEffect(() => {
@@ -299,29 +304,45 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
       setActiveTab('form');
    };
 
-   async function handleDragEnd(event: DragEndEvent) {
+   function handleDragEnd(event: DragEndEvent) {
+      if (!isReorderMode) return;
       const { active, over } = event;
       if (active.id !== over?.id) {
          const oldIndex = localGames.findIndex((item) => item.id === active.id);
          const newIndex = localGames.findIndex((item) => item.id === over?.id);
          const newOrder = arrayMove(localGames, oldIndex, newIndex);
          setLocalGames(newOrder);
-
-         // Save new order to backend
-         try {
-            const orderedIds = newOrder.map(g => g.id);
-            const res = await fetch('/api/games/reorder', {
-               method: 'PUT',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ orderedIds })
-            });
-            if (!res.ok) {
-               console.error('Failed to save order');
-            }
-         } catch (err) {
-            console.error('Error saving order:', err);
-         }
       }
+   }
+
+   async function handleSaveOrder() {
+      setIsSavingOrder(true);
+      try {
+         const orderedIds = localGames.map(g => g.id);
+         const res = await fetch('/api/games/reorder', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderedIds })
+         });
+         if (res.ok) {
+            alert('排序已儲存！');
+            setIsReorderMode(false);
+            // Refresh games list from parent
+            window.location.reload();
+         } else {
+            alert('儲存失敗，請重試');
+         }
+      } catch (err) {
+         console.error('Error saving order:', err);
+         alert('儲存失敗，請重試');
+      } finally {
+         setIsSavingOrder(false);
+      }
+   }
+
+   function handleCancelReorder() {
+      setLocalGames(games); // Reset to original order
+      setIsReorderMode(false);
    }
 
    const handleSubmit = (e: React.FormEvent) => {
@@ -701,6 +722,39 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
             {/* Content - List */}
             {activeTab === 'list' && (
                <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl">
+                  {/* Reorder Mode Toolbar */}
+                  <div className="p-4 border-b border-slate-700 flex items-center justify-between bg-slate-900/50">
+                     <span className="text-slate-400 text-sm">
+                        {isReorderMode ? '拖曳遊戲調整排序，完成後點擊儲存' : `共 ${localGames.length} 款遊戲`}
+                     </span>
+                     <div className="flex gap-2">
+                        {isReorderMode ? (
+                           <>
+                              <button
+                                 onClick={handleCancelReorder}
+                                 className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-bold transition-colors"
+                              >
+                                 取消
+                              </button>
+                              <button
+                                 onClick={handleSaveOrder}
+                                 disabled={isSavingOrder}
+                                 className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+                              >
+                                 {isSavingOrder ? '儲存中...' : '儲存排序'}
+                              </button>
+                           </>
+                        ) : (
+                           <button
+                              onClick={() => setIsReorderMode(true)}
+                              className="px-4 py-2 bg-nexus-accent hover:bg-nexus-accentHover text-white rounded-lg text-sm font-bold transition-colors flex items-center gap-2"
+                           >
+                              <GripVertical className="h-4 w-4" />
+                              調整排序
+                           </button>
+                        )}
+                     </div>
+                  </div>
                   <table className="w-full text-left border-collapse">
                      <thead>
                         <tr className="bg-slate-900/50 text-slate-400 text-sm uppercase tracking-wider">
