@@ -1018,6 +1018,18 @@ app.post('/api/auth/login', (req, res) => {
     });
 });
 
+// 2. Get All Games
+app.get('/api/games', (req, res) => {
+    const sql = "SELECT * FROM games WHERE is_active = 1";
+    db.all(sql, [], (err, rows) => {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        res.json({ games: rows });
+    });
+});
+
 // 6. Get User Session (By ID)
 app.get('/api/users/:id', (req, res) => {
     const id = req.params.id;
