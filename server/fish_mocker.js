@@ -503,17 +503,17 @@ ports.forEach(port => {
         const account = req.query.account || req.body.account || "guest_10086";
         console.log(`[HTTP] Login Request: ${account}`);
 
-        // DB Query for Real Balance AND Name (FIXED: Removing 'token' column which doesn't exist)
-        db.get("SELECT name, fish_balance FROM users WHERE id = ?", [account], (err, row) => {
+        // Read from user_game_balances (new per-game balance system)
+        db.get("SELECT u.name, COALESCE(g.balance, 0) as game_balance FROM users u LEFT JOIN user_game_balances g ON u.id = g.user_id AND g.game_id = 'fish' WHERE u.id = ?", [account], (err, row) => {
             let balance = 0;
             let name = null;
             if (err) {
                 console.error("[HTTP] Login DB Error:", err);
             } else if (row) {
-                // FIXED: Scale * 1000 so game displays integer (1 Gold = 1000 Score)
-                balance = (row.fish_balance || 0) * 1000;
+                // Use per-game balance, scale x1000 for game display
+                balance = (row.game_balance || 0) * 1000;
                 name = row.name;
-                console.log(`[HTTP] Login Success. User: ${account}, Balance: ${balance} (Scaled x1000), Name: ${name}`);
+                console.log(`[HTTP] Login Success. User: ${account}, Balance: ${balance} (from user_game_balances, Scaled x1000), Name: ${name}`);
             } else {
                 console.log(`[HTTP] Login User Not Found in DB: ${account} (Using 0)`);
             }
@@ -623,11 +623,21 @@ ports.forEach(port => {
         // Convert integer balance back to float for DB storage
         const balanceToSave = toDisplayFloat(score);
 
-        // [CRITICAL] Only update fish_balance. 
+        // [CRITICAL] Only update fish_balance.
         // gold_balance is Platform Coin and should ONLY change via explicit Deposit/Withdraw.
         db.run("UPDATE users SET fish_balance = ? WHERE id = ?", [balanceToSave, userId], (err) => {
             if (err) console.error(`[DB] Failed to save score for ${userId}:`, err);
         });
+
+        // [SYNC] Also update user_game_balances for new per-game balance system
+        db.run(`INSERT INTO user_game_balances (user_id, game_id, balance, created_at, updated_at)
+                VALUES (?, 'fish', ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))
+                ON CONFLICT(user_id, game_id) DO UPDATE SET
+                balance = excluded.balance,
+                updated_at = datetime('now', '+8 hours')`,
+            [userId, balanceToSave], (err) => {
+                if (err) console.error(`[DB] Failed to sync to user_game_balances for ${userId}:`, err);
+            });
     }
 
     // -------------------------------------------------------------------------
@@ -919,10 +929,12 @@ ports.forEach(port => {
                 // No need to call startFishLoop here
             };
 
-            // Query DB
+            // Query DB - Read from user_game_balances for game balance
             if (userId !== 'guest') {
-                // [FIX] Select gold_balance explicitly
-                db.get("SELECT name, fish_balance, gold_balance FROM users WHERE id = ?", [userId], (err, row) => {
+                db.get(`SELECT u.name, u.gold_balance, COALESCE(g.balance, 0) as fish_balance
+                        FROM users u
+                        LEFT JOIN user_game_balances g ON u.id = g.user_id AND g.game_id = 'fish'
+                        WHERE u.id = ?`, [userId], (err, row) => {
                     if (err) console.error("Login DB Error", err);
                     finalizeLogin(row);
                 });

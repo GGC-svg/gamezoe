@@ -612,25 +612,38 @@ const verifyBridgeKey = (req, res, next) => {
     next();
 };
 
-// 1. Get Balance (Bridge)
+// 1. Get Balance (Bridge) - Updated to use per-game balance table
 app.get('/api/bridge/balance/:userId', verifyBridgeKey, (req, res) => {
     const { userId } = req.params;
-    db.get("SELECT gold_balance, silver_balance, fish_balance FROM users WHERE id = ?", [userId], (err, row) => {
+    const gameId = req.query.gameId || 'fish';  // Default to 'fish' for backward compatibility
+
+    db.get("SELECT gold_balance, silver_balance FROM users WHERE id = ?", [userId], (err, userRow) => {
         if (err) {
             res.status(500).json({ success: false, error: err.message });
             return;
         }
-        if (!row) {
+        if (!userRow) {
             res.status(404).json({ success: false, error: "User not found" });
             return;
         }
-        res.json({ success: true, gold: row.gold_balance, silver: row.silver_balance, gameScore: row.fish_balance || 0 });
+
+        // Get game-specific balance from new table
+        db.get("SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = ?", [userId, gameId], (err, gameRow) => {
+            const gameBalance = gameRow ? gameRow.balance : 0;
+            res.json({
+                success: true,
+                gold: userRow.gold_balance,
+                silver: userRow.silver_balance,
+                gameScore: gameBalance
+            });
+        });
     });
 });
 
-// 1.5 Deposit to Game (Specific for Fish Master Passthrough)
+// 1.5 Deposit to Game (Specific for Fish Master Passthrough) - Updated to use per-game balance table
 app.post('/api/bridge/deposit', verifyBridgeKey, (req, res) => {
     const { userId, amount, gameId } = req.body;
+    const targetGameId = gameId || 'fish';  // Default to 'fish' for backward compatibility
 
     // Rate: 1 Gold = 1 Game Point (1:1)
     if (!userId || !amount || amount <= 0) {
@@ -660,10 +673,14 @@ app.post('/api/bridge/deposit', verifyBridgeKey, (req, res) => {
                     return;
                 }
 
-                // 2. Add to Fish Balance (Crucial Step!)
-                // Note: Fish Master Client divides by 1000? No, we set 1:1 in DB now.
-                // Assuming we want 1 Gold = 1 Gem in game.
-                db.run("UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?", [amount, userId], (err) => {
+                // 2. Add to per-game balance (using new user_game_balances table)
+                db.run(`INSERT INTO user_game_balances (user_id, game_id, balance, total_deposited, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))
+                        ON CONFLICT(user_id, game_id) DO UPDATE SET
+                        balance = balance + excluded.balance,
+                        total_deposited = total_deposited + excluded.total_deposited,
+                        updated_at = datetime('now', '+8 hours')`,
+                    [userId, targetGameId, amount, amount], (err) => {
                     if (err) {
                         db.run("ROLLBACK");
                         res.status(500).json({ error: "Failed to update game balance" });
@@ -671,9 +688,11 @@ app.post('/api/bridge/deposit', verifyBridgeKey, (req, res) => {
                     }
 
                     // 3. Log Transaction
-                    const logDesc = `Deposit to Fish Master`;
-                    db.run("INSERT INTO wallet_transactions (user_id, amount, currency, type, description, created_at) VALUES (?, ?, 'gold', 'casino_deposit', ?, datetime('now', '+8 hours'))",
-                        [userId, -amount, logDesc], (err) => {
+                    const gameNames = { 'fish': 'Fish Master', 'slot-machine': 'Slot Machine' };
+                    const gameName = gameNames[targetGameId] || targetGameId;
+                    const logDesc = `Deposit to ${gameName}`;
+                    db.run("INSERT INTO wallet_transactions (user_id, amount, currency, type, description, game_id, created_at) VALUES (?, ?, 'gold', 'casino_deposit', ?, ?, datetime('now', '+8 hours'))",
+                        [userId, -amount, logDesc, targetGameId], (err) => {
                             if (err) {
                                 db.run("ROLLBACK");
                                 res.status(500).json({ error: err.message });
@@ -682,11 +701,13 @@ app.post('/api/bridge/deposit', verifyBridgeKey, (req, res) => {
 
                             db.run("COMMIT", () => {
                                 // Return new balances
-                                db.get("SELECT gold_balance, fish_balance FROM users WHERE id = ?", [userId], (err, finalRow) => {
-                                    res.json({
-                                        success: true,
-                                        newGold: finalRow.gold_balance,
-                                        newGame: finalRow.fish_balance
+                                db.get("SELECT gold_balance FROM users WHERE id = ?", [userId], (err, userRow) => {
+                                    db.get("SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = ?", [userId, targetGameId], (err, gameRow) => {
+                                        res.json({
+                                            success: true,
+                                            newGold: userRow.gold_balance,
+                                            newGame: gameRow ? gameRow.balance : 0
+                                        });
                                     });
                                 });
                             });
@@ -1830,60 +1851,8 @@ import { generateSignature, verifySignature } from './utils/signature.js';
 
 // --- ROBUST TRANSACTION API (Two-Phase Commit) ---
 
-// 0. BALANCE CHECK (Sync UI)
-app.get('/api/bridge/balance/:userId', verifyBridgeKey, (req, res) => {
-    const { userId } = req.params;
-    db.get("SELECT gold_balance, fish_balance FROM users WHERE id = ?", [userId], (err, row) => {
-        if (err) return res.status(500).json({ success: false, error: "DB Error" });
-        if (!row) return res.status(404).json({ success: false, error: "User Not Found" });
-
-        res.json({
-            success: true,
-            gold: row.gold_balance || 0,
-            gameScore: row.fish_balance || 0
-        });
-    });
-});
-
-// SLOT MACHINE: Sync balance from localStorage to database
-app.post('/api/slot/sync-balance', (req, res) => {
-    // Handle both JSON and sendBeacon (which sends as text)
-    let userId, balance;
-
-    if (typeof req.body === 'string') {
-        try {
-            const parsed = JSON.parse(req.body);
-            userId = parsed.userId;
-            balance = parsed.balance;
-        } catch (e) {
-            return res.status(400).json({ success: false, error: "Invalid JSON" });
-        }
-    } else {
-        userId = req.body.userId;
-        balance = req.body.balance;
-    }
-
-    if (!userId || balance === undefined) {
-        return res.status(400).json({ success: false, error: "Missing userId or balance" });
-    }
-
-    // Ensure balance is a valid number and floor it
-    const balanceNum = Math.floor(parseFloat(balance) || 0);
-
-    console.log(`[SlotSync] User: ${userId}, Balance: ${balanceNum}`);
-
-    // Update fish_balance in database (shared with Fish game)
-    db.run("UPDATE users SET fish_balance = ? WHERE id = ?", [balanceNum, userId], function(err) {
-        if (err) {
-            console.error("[SlotSync] DB Error:", err);
-            return res.status(500).json({ success: false, error: "DB Error" });
-        }
-        if (this.changes === 0) {
-            return res.status(404).json({ success: false, error: "User not found" });
-        }
-        res.json({ success: true, balance: balanceNum });
-    });
-});
+// NOTE: /api/bridge/balance/:userId is now defined earlier using per-game balance table
+// NOTE: /api/slot/sync-balance is deprecated - slot-machine now uses /api/game-balance/sync
 
 // 1. DEPOSIT (Platform Initiates) -> Step 01
 app.post('/api/bridge/transaction/deposit', verifyBridgeKey, (req, res) => {
@@ -1949,6 +1918,15 @@ app.post('/api/bridge/transaction/deposit', verifyBridgeKey, (req, res) => {
                         console.log(`[Platform] Game Server Response:`, gameRes);
                         if (gameRes.code === 200) {
                             db.run("UPDATE wallet_transactions SET status = 'COMPLETED' WHERE order_id = ?", [orderId]);
+                            // Also update per-game balance table for tracking
+                            const targetGameId = gameId || 'fish';
+                            db.run(`INSERT INTO user_game_balances (user_id, game_id, balance, total_deposited, created_at, updated_at)
+                                    VALUES (?, ?, ?, ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))
+                                    ON CONFLICT(user_id, game_id) DO UPDATE SET
+                                    balance = balance + excluded.balance,
+                                    total_deposited = total_deposited + excluded.total_deposited,
+                                    updated_at = datetime('now', '+8 hours')`,
+                                [userId, targetGameId, amount, amount]);
                             res.json({ success: true, orderId, message: "Deposit Successful" });
                         } else {
                             console.warn(`[Platform] Game Rejected Deposit: ${gameRes.message}`);
@@ -1983,9 +1961,19 @@ app.post('/api/bridge/transaction/withdraw', (req, res) => {
     // TODO: Verify Signature using verifySignature(req.body, signature)
 
     const processWithdrawal = (isUpdate) => {
+        const gameId = req.body.game_id || 'fish';
+
         // Add Gold
         db.run("UPDATE users SET gold_balance = gold_balance + ? WHERE id = ?", [amount, user_id], (err) => {
             if (err) return res.status(500).json({ code: 500, message: "DB Error" });
+
+            // Also update per-game balance table (deduct withdrawn amount)
+            db.run(`UPDATE user_game_balances
+                    SET balance = MAX(0, balance - ?),
+                        total_withdrawn = total_withdrawn + ?,
+                        updated_at = datetime('now', '+8 hours')
+                    WHERE user_id = ? AND game_id = ?`,
+                [amount, amount, user_id, gameId]);
 
             // Log / Update Log
             const gameNames = {
@@ -1994,7 +1982,6 @@ app.post('/api/bridge/transaction/withdraw', (req, res) => {
                 'g1': 'Star Voyage',
                 'g2': 'Abyss Dungeon'
             };
-            const gameId = req.body.game_id || 'fish';
             const gameName = gameNames[gameId] || gameId || 'Game';
             const desc = `Settlement from ${gameName}`;
 
