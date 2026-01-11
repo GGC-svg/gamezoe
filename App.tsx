@@ -8,6 +8,7 @@ import PaymentModal from './components/PaymentModal';
 import WalletModal from './components/WalletModal';
 import GamePlayer from './components/GamePlayer';
 import AdminDashboard from './components/AdminDashboard';
+import ProfileModal from './components/ProfileModal';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
 import { gameService } from './services/gameService';
@@ -32,6 +33,7 @@ function App() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [showAdmin, setShowAdmin] = useState<boolean>(false);
   const [isWalletOpen, setIsWalletOpen] = useState<boolean>(false);
+  const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   // View Routing
@@ -297,6 +299,7 @@ function App() {
         onLogout={handleLogout}
         onOpenAdmin={() => setShowAdmin(true)}
         onOpenWallet={() => setIsWalletOpen(true)}
+        onOpenProfile={() => setIsProfileOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -474,6 +477,15 @@ function App() {
             // Optional: Update global balance or trigger Navbar refresh
             setUser({ ...user, ...newBal });
           }}
+        />
+      )}
+
+      {/* Profile Modal */}
+      {user && (
+        <ProfileModal
+          isOpen={isProfileOpen}
+          onClose={() => setIsProfileOpen(false)}
+          user={user}
         />
       )}
 

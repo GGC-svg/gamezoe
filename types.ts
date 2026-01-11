@@ -7,6 +7,8 @@ export interface User {
   role?: 'admin' | 'user';
   gold_balance: number;
   silver_balance: number;
+  fish_balance?: number;
+  created_at?: string;
   library?: { gameId: string; expiresAt: string | null }[];
 }
 

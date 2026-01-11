@@ -11,9 +11,10 @@ interface NavbarProps {
   onLogout: () => void;
   onOpenAdmin?: () => void;
   onOpenWallet: () => void;
+  onOpenProfile?: () => void;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ user, onLogin, onLogout, onOpenAdmin, onOpenWallet }) => {
+const Navbar: React.FC<NavbarProps> = ({ user, onLogin, onLogout, onOpenAdmin, onOpenWallet, onOpenProfile }) => {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [balance, setBalance] = useState({ gold: 0, silver: 0 });
 
@@ -90,14 +91,17 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogin, onLogout, onOpenAdmin, o
                     </button>
                   )}
 
-                  <div className="hidden md:flex items-center gap-2 text-slate-300">
+                  <button
+                    onClick={onOpenProfile}
+                    className="hidden md:flex items-center gap-2 text-slate-300 hover:bg-slate-800 rounded-lg p-1 transition-colors"
+                    title="查看個人資料"
+                  >
                     <img
                       src={user.avatar}
                       alt={user.name}
-                      className="h-8 w-8 rounded-full border border-slate-600"
+                      className="h-8 w-8 rounded-full border-2 border-slate-600 hover:border-nexus-accent transition-colors"
                     />
-                    {/* <span className="text-sm font-medium">{user.name}</span> */}
-                  </div>
+                  </button>
                   <button
                     onClick={onLogout}
                     className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"

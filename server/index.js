@@ -509,9 +509,10 @@ app.post('/api/auth/google-verify', async (req, res) => {
                 // Register new user
                 const provider = 'google';
                 const role = 'user'; // Default role
+                const created_at = new Date().toISOString();
                 // Initialize with 0 balance
-                const sql = `INSERT INTO users (id, name, email, avatar, provider, role, gold_balance, silver_balance, fish_balance) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 500)`;
-                db.run(sql, [id, name, email, avatar, provider, role], function (err) {
+                const sql = `INSERT INTO users (id, name, email, avatar, provider, role, gold_balance, silver_balance, fish_balance, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 500, ?)`;
+                db.run(sql, [id, name, email, avatar, provider, role, created_at], function (err) {
                     if (err) {
                         res.status(500).json({ error: err.message });
                         return;
@@ -522,7 +523,7 @@ app.post('/api/auth/google-verify', async (req, res) => {
 
                     // Return new user (ID already string from Google API)
                     res.json({
-                        user: { id: String(id), name, email, avatar, provider, role, gold_balance: 0, silver_balance: 0 },
+                        user: { id: String(id), name, email, avatar, provider, role, gold_balance: 0, silver_balance: 0, created_at },
                         purchasedGames: []
                     });
                 });
@@ -1020,8 +1021,9 @@ app.post('/api/auth/login', (req, res) => {
             });
         } else {
             // Register new user
-            const sql = `INSERT INTO users (id, name, email, avatar, provider, role, fish_balance) VALUES (?, ?, ?, ?, ?, ?, 500)`;
-            db.run(sql, [id, name, email, avatar, provider, role], function (err) {
+            const created_at = new Date().toISOString();
+            const sql = `INSERT INTO users (id, name, email, avatar, provider, role, fish_balance, created_at) VALUES (?, ?, ?, ?, ?, ?, 500, ?)`;
+            db.run(sql, [id, name, email, avatar, provider, role, created_at], function (err) {
                 if (err) {
                     res.status(500).json({ error: err.message });
                     return;
@@ -1030,7 +1032,7 @@ app.post('/api/auth/login', (req, res) => {
                 // Log Login
                 db.run("INSERT INTO login_logs (user_id, ip_address, login_time) VALUES (?, ?, datetime('now', '+8 hours'))", [id, req.ip]);
 
-                res.json({ user: req.body, purchasedGames: [] });
+                res.json({ user: { ...req.body, created_at }, purchasedGames: [] });
             });
         }
     });
