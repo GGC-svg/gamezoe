@@ -54,11 +54,34 @@ app.use(helmet({
 app.use('/index.css', express.static(path.join(__dirname, '../index.css')));
 
 // [PROXY] Proxy Fish Game server info to localhost:9000
-// [PROXY] Proxy Fish Game server info to 127.0.0.1:9000
-app.use('/get_serverinfo', createProxyMiddleware({
-    target: 'http://127.0.0.1:9000',
-    changeOrigin: true
-}));
+// [FIX] Serve /get_serverinfo directly
+app.get('/get_serverinfo', (req, res) => {
+    // Return the public domain and port (443 for HTTPS)
+    // The client likely uses this to construct the socket URL
+    res.json({
+        ip: "gamezoe.com",
+        host: "gamezoe.com",
+        port: 443,
+        wss_port: 443,
+        secure: true
+    });
+});
+
+// [SAFEGUARD] Ensure game_activities table has required columns on startup
+db.serialize(() => {
+    db.all("PRAGMA table_info(game_activities)", (err, cols) => {
+        if (!err && cols) {
+            if (!cols.find(c => c.name === 'ip_address')) {
+                console.log("[Startup] Adding ip_address to game_activities");
+                db.run("ALTER TABLE game_activities ADD COLUMN ip_address TEXT");
+            }
+            if (!cols.find(c => c.name === 'last_heartbeat')) {
+                console.log("[Startup] Adding last_heartbeat to game_activities");
+                db.run("ALTER TABLE game_activities ADD COLUMN last_heartbeat DATETIME DEFAULT CURRENT_TIMESTAMP");
+            }
+        }
+    });
+});
 
 // [PROXY] Proxy Raw WebSocket for Fish Game (ws://127.0.0.1:9001)
 const fishSocketProxy = createProxyMiddleware({
@@ -1053,9 +1076,13 @@ app.get('/api/admin/purchases', (req, res) => {
 // 9. Game Activity Tracking (Client)
 app.post('/api/activity/start', (req, res) => {
     const { userId, gameId } = req.body;
+    // Log request for debugging
+    console.log(`[Activity] Start: User=${userId}, Game=${gameId}, IP=${req.ip}`);
+
     const sql = `INSERT INTO game_activities (user_id, game_id, start_time, last_heartbeat, ip_address) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)`;
     db.run(sql, [userId, gameId, req.ip], function (err) {
         if (err) {
+            console.error("[Activity] Insert Error:", err.message);
             res.status(500).json({ error: err.message });
             return;
         }
