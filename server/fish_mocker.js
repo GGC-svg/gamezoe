@@ -344,24 +344,27 @@ ports.forEach(port => {
 
             // 3. Deduct Balance
             if (isOnline) {
-                // Deduct from Memory IMMEDIATELY
-                room.users[user_id].score -= withdrawAmount;
-                console.log(`[GameServer] Deducted from Memory. New Score: ${room.users[user_id].score}`);
+                // Deduct from Memory IMMEDIATELY (INT format)
+                room.users[user_id].score = safeSub(room.users[user_id].score, toStorageInt(withdrawAmount));
+                console.log(`[GameServer] Deducted from Memory. New Score (INT): ${room.users[user_id].score}, Display: ${toDisplayFloat(room.users[user_id].score)}`);
 
-                // Sync to DB (Optimistic)
-                // We still run the DB Update to ensure persistence
+                // Sync to DB (Optimistic) - Convert INT to FLOAT for DB storage
                 db.serialize(() => {
-                    db.run("UPDATE users SET fish_balance = ? WHERE id = ?", [room.users[user_id].score, user_id], (err) => {
-                        if (err) console.error("Failed to sync memory deduction to DB");
+                    const dbScore = toDisplayFloat(room.users[user_id].score);
+                    db.run("UPDATE users SET fish_balance = ? WHERE id = ?", [dbScore, user_id], (err) => {
+                        if (err) console.error("Failed to sync memory deduction to DB:", err);
+                        else console.log(`[GameServer] Synced to DB. fish_balance = ${dbScore}`);
                     });
                     // Continue to Transaction Log
                     createTransactionLog();
                 });
             } else {
-                // Deduct from DB (use display value for DB which stores floats)
+                // Deduct from DB (DB stores FLOAT, withdrawAmount is INT input from user)
+                // User enters integer game points, DB stores as float
                 db.serialize(() => {
-                    db.run("UPDATE users SET fish_balance = fish_balance - ? WHERE id = ?", [withdrawAmountDisplay, user_id], (err) => {
+                    db.run("UPDATE users SET fish_balance = fish_balance - ? WHERE id = ?", [withdrawAmount, user_id], (err) => {
                         if (err) return res.status(500).json({ code: 500, message: "Deduct Failed" });
+                        console.log(`[GameServer] Deducted ${withdrawAmount} from DB fish_balance`);
                         createTransactionLog();
                     });
                 });
@@ -374,11 +377,13 @@ ports.forEach(port => {
                     VALUES (?, ?, ?, 'gold', 'WITHDRAW', ?, 'PENDING_PLATFORM', datetime('now', '+8 hours'))`,
                 [order_id, user_id, withdrawAmountDisplay, desc], async (err) => {
                     if (err) {
-                        // Rollback logic is complex for memory, but for now assume insert works or critical fail
+                        // Rollback logic
                         if (isOnline) {
-                            room.users[user_id].score += withdrawAmount; // Revert Memory (storage int)
+                            room.users[user_id].score = safeAdd(room.users[user_id].score, toStorageInt(withdrawAmount));
+                            const dbScore = toDisplayFloat(room.users[user_id].score);
+                            db.run("UPDATE users SET fish_balance = ? WHERE id = ?", [dbScore, user_id]);
                         } else {
-                            db.run("UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?", [withdrawAmountDisplay, user_id]);
+                            db.run("UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?", [withdrawAmount, user_id]);
                         }
                         return res.status(500).json({ code: 500, message: "Transaction logging failed" });
                     }
@@ -435,29 +440,43 @@ ports.forEach(port => {
                 } else {
                     // Fail - Rollback
                     console.warn("Platform Rejected Withdraw");
-                    if (isOnline) room.users[user_id].score += withdrawAmount;  // Revert memory (storage int)
-                    else db.run("UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?", [withdrawAmountDisplay, user_id]);
+                    if (isOnline) {
+                        room.users[user_id].score = safeAdd(room.users[user_id].score, toStorageInt(withdrawAmount));
+                        const dbScore = toDisplayFloat(room.users[user_id].score);
+                        db.run("UPDATE users SET fish_balance = ? WHERE id = ?", [dbScore, user_id]);
+                    } else {
+                        db.run("UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?", [withdrawAmount, user_id]);
+                    }
 
                     db.run("UPDATE wallet_transactions SET status = 'FAILED' WHERE order_id = ?", [order_id]);
                     res.status(400).json({ code: 400, message: platformData.message || "Platform Rejected" });
                 }
             } catch (e) {
                 console.error("Platform Call Failed", e);
-                if (isOnline) room.users[user_id].score += withdrawAmount;  // Revert memory (storage int)
-                else db.run("UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?", [withdrawAmountDisplay, user_id]);
+                if (isOnline) {
+                    room.users[user_id].score = safeAdd(room.users[user_id].score, toStorageInt(withdrawAmount));
+                    const dbScore = toDisplayFloat(room.users[user_id].score);
+                    db.run("UPDATE users SET fish_balance = ? WHERE id = ?", [dbScore, user_id]);
+                } else {
+                    db.run("UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?", [withdrawAmount, user_id]);
+                }
                 res.status(500).json({ message: "Platform Error" });
             }
         };
 
         // Execution Start
-        if (room.users[user_id]) {
+        // [FIX] Check if room exists AND user is in room
+        if (room && room.users && room.users[user_id]) {
             proceedWithWithdraw(room.users[user_id].score, "Memory");
         } else {
+            // User not online, query DB
             db.get("SELECT fish_balance FROM users WHERE id = ?", [user_id], (err, row) => {
                 if (err) return res.status(500).json({ code: 500, message: "DB Error" });
                 if (!row) return res.status(404).json({ code: 404, message: "User not found" });
-                // Game points are integers
-                proceedWithWithdraw(Math.floor(row.fish_balance || 0), "DB");
+                // Game points are stored as float in DB, convert to INT for comparison
+                // fish_balance stores display value (e.g., 47.92), multiply by 1000 for INT
+                const balanceInt = toStorageInt(row.fish_balance || 0);
+                proceedWithWithdraw(balanceInt, "DB");
             });
         }
         return; // End of main function body, rest is callbacks

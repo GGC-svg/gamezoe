@@ -29,8 +29,18 @@ const gameProxy = createProxyMiddleware({
     target: 'http://127.0.0.1:9000',
     changeOrigin: true,
     logLevel: 'debug',
-    // [FIX] Add trailing slash to '/api/game/' to avoid matching '/api/games'
-    pathFilter: ['/guest', '/login', '/api/game/', '/enter_public_room']
+    // [FIX] Add all Fish Master game API endpoints to proxy
+    pathFilter: [
+        '/guest',
+        '/login',
+        '/api/game/',
+        '/enter_public_room',
+        '/enter_private_room',
+        '/get_user_status',
+        '/get_message',
+        '/leave_room',
+        '/charge'
+    ]
 });
 
 // [CRITICAL] Mount at root to prevent path stripping by Express
