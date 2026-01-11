@@ -79,6 +79,7 @@
     <div class="modal-content">
       <h3>金幣換取遊戲點數 (換碼)</h3>
       <p>1 金幣 = 1 點數</p>
+      <p>您有 <span id="modal-gold">0</span> 金幣</p>
       <input type="number" id="deposit-amount" placeholder="輸入數量" />
       <div class="modal-buttons">
         <button onclick="confirmDeposit()">確認</button>
@@ -185,77 +186,116 @@
   </style>
 
   <script>
-    // --- CORE SYNC LOGIC ---
-    const GAME_INTERNAL_KEY = 'smg-balance'; // The key main.js hardcodedly uses
+    // --- DATABASE-BACKED BALANCE SYSTEM ---
+    const GAME_INTERNAL_KEY = 'smg-balance'; // The key main.js uses
     const userId = new URLSearchParams(window.location.search).get('userId');
-    const USER_STORAGE_KEY = userId ? `smg-balance-${userId}` : null;
     const API_BASE = window.location.origin + '/api/bridge';
 
-    console.log("Slot Machine Boot. UserID:", userId);
+    // Track last synced balance to detect changes
+    let lastSyncedBalance = 0;
+    let dbBalance = 0;  // Balance from database
+    let sysGold = 0;    // Platform gold
 
-    // 1. PRE-GAME INJECTION: Prepare the environment before main.js reads it
-    function initGameSession() {
-      if (!USER_STORAGE_KEY) {
-        // Guest: Force Game to see 0
+    console.log("[SlotMachine] Boot. UserID:", userId);
+
+    // 1. INIT: Load balance from DATABASE, not localStorage
+    async function initGameSession() {
+      if (!userId) {
+        console.warn("[SlotMachine] No userId, guest mode");
         localStorage.setItem(GAME_INTERNAL_KEY, 0);
-      } else {
-        // User: Load their personal balance
-        let userBal = localStorage.getItem(USER_STORAGE_KEY);
+        document.getElementById('game-balance-display').innerText = '請先登入';
+        return;
+      }
 
-        // RULE: "New user gets 500"
-        if (userBal === null) {
-          userBal = 500;
-          localStorage.setItem(USER_STORAGE_KEY, 500);
+      try {
+        // Fetch balance from database
+        const res = await fetch(`${API_BASE}/balance/${userId}`, {
+          headers: { 'x-api-key': 'gamezoe-secure-bridge-key' }
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          // gameScore is fish_balance from DB (shared with Fish game)
+          dbBalance = Math.floor(data.gameScore || 0);
+          sysGold = Math.floor(data.gold || 0);
+
+          // Inject into localStorage for main.js to read
+          localStorage.setItem(GAME_INTERNAL_KEY, dbBalance);
+          lastSyncedBalance = dbBalance;
+
+          console.log(`[SlotMachine] Loaded from DB: ${dbBalance} points, ${sysGold} gold`);
+
+          // Update UI
+          document.getElementById('game-balance-display').innerText = dbBalance.toLocaleString();
+          document.getElementById('gold-display').innerText = sysGold.toLocaleString();
+        } else {
+          console.error("[SlotMachine] API Error:", data);
+          // Fallback: use localStorage if exists, otherwise 0
+          const localBal = parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
+          localStorage.setItem(GAME_INTERNAL_KEY, localBal);
         }
-
-        // Inject into Game's expected key
-        localStorage.setItem(GAME_INTERNAL_KEY, userBal);
-        console.log(`Session Loaded. Balance ${userBal} synced to game.`);
+      } catch (e) {
+        console.error("[SlotMachine] Init failed:", e);
+        document.getElementById('game-balance-display').innerText = '連線失敗';
       }
     }
 
-    // Run immediately
-    initGameSession();
+    // 2. SYNC: Periodically sync localStorage changes back to database
+    async function syncBalanceToDatabase() {
+      if (!userId) return;
 
-    // 2. STATE WATCHER: Sync Game's changes back to User Storage
-    // The game writes to GAME_INTERNAL_KEY. We must copy that to USER_STORAGE_KEY.
-    setInterval(updateBalanceDisplay, 500); // Faster polling for smoother UI
+      const currentBal = parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
 
-    function updateBalanceDisplay() {
-      // Logic: The "Truth" is now what the game is doing (GAME_INTERNAL_KEY), 
-      // because the user is spinning. We explicitly trust the game's key while playing.
+      // Only sync if balance changed
+      if (Math.abs(currentBal - lastSyncedBalance) < 0.01) return;
 
-      let currentBal = parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
+      const diff = currentBal - lastSyncedBalance;
+      console.log(`[SlotMachine] Balance changed: ${lastSyncedBalance} -> ${currentBal} (diff: ${diff})`);
 
-      // Verify Sync
-      if (USER_STORAGE_KEY) {
-        // Persist current game state to user storage
-        localStorage.setItem(USER_STORAGE_KEY, currentBal);
+      try {
+        // Update fish_balance in database
+        const res = await fetch(`/api/slot/sync-balance`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': 'gamezoe-secure-bridge-key'
+          },
+          body: JSON.stringify({
+            userId: userId,
+            balance: currentBal
+          })
+        });
+
+        if (res.ok) {
+          lastSyncedBalance = currentBal;
+          console.log(`[SlotMachine] Synced to DB: ${currentBal}`);
+        }
+      } catch (e) {
+        console.error("[SlotMachine] Sync failed:", e);
       }
+    }
 
-      // Update Top Bar UI
-      document.getElementById('game-balance-display').innerText = currentBal.toFixed(2);
+    // 3. UI UPDATE: Update display from localStorage
+    function updateBalanceDisplay() {
+      const currentBal = parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
+      document.getElementById('game-balance-display').innerText = Math.floor(currentBal).toLocaleString();
 
-      // Update Withdraw Modal if open
+      // Update withdraw modal if open
       const withdrawModal = document.getElementById('withdraw-modal');
       if (withdrawModal && withdrawModal.style.display === 'flex') {
-        const max = Math.max(0, currentBal - 500);
-        document.getElementById('max-withdraw').innerText = max.toFixed(2);
+        const max = Math.max(0, Math.floor(currentBal) - 500);
+        document.getElementById('max-withdraw').innerText = max.toLocaleString();
       }
     }
-    // --- END SYNC LOGIC ---
 
-    // Old helpers updated to use the new "Trust Game Key" philosophy
+    // --- HELPERS ---
     function getGameBalance() {
       return parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
     }
 
     function setGameBalance(amount) {
-      // Write to BOTH to ensure consistency across reload
       localStorage.setItem(GAME_INTERNAL_KEY, amount);
-      if (USER_STORAGE_KEY) {
-        localStorage.setItem(USER_STORAGE_KEY, amount);
-      }
+      // Reload to let main.js pick up the new balance
       window.location.reload();
     }
 
@@ -271,7 +311,10 @@
         if (!res.ok) throw new Error("API Error " + res.status);
         const data = await res.json();
         if (data.success) {
-          document.getElementById('gold-display').innerText = Math.floor(data.gold).toLocaleString();
+          sysGold = Math.floor(data.gold);
+          dbBalance = Math.floor(data.gameScore || 0);
+          document.getElementById('gold-display').innerText = sysGold.toLocaleString();
+          document.getElementById('game-balance-display').innerText = dbBalance.toLocaleString();
         } else {
           document.getElementById('gold-display').innerText = '錯誤';
         }
@@ -281,14 +324,18 @@
       }
     }
 
+    // --- MODALS ---
     function openDepositModal() {
+      document.getElementById('modal-gold').innerText = sysGold.toLocaleString();
       document.getElementById('deposit-modal').style.display = 'flex';
     }
 
     function openWithdrawModal() {
+      // Sync first to get accurate balance
+      syncBalanceToDatabase();
       const bal = getGameBalance();
-      const max = Math.max(0, bal - 500);
-      document.getElementById('max-withdraw').innerText = max.toFixed(2);
+      const max = Math.max(0, Math.floor(bal) - 500);
+      document.getElementById('max-withdraw').innerText = max.toLocaleString();
       document.getElementById('withdraw-modal').style.display = 'flex';
     }
 
@@ -296,43 +343,51 @@
       document.getElementById(id).style.display = 'none';
     }
 
+    // --- DEPOSIT (入金) ---
     async function confirmDeposit() {
-      const amount = parseFloat(document.getElementById('deposit-amount').value);
+      const amount = parseInt(document.getElementById('deposit-amount').value);
       if (!amount || amount <= 0) return alert('請輸入有效數量');
+      if (amount > sysGold) return alert('金幣不足');
 
-      // START BLOCKER
       const btn = event.target;
       const originalText = btn.innerText;
       btn.innerText = "處理中...";
       btn.disabled = true;
       document.getElementById('game-blocker').style.display = 'flex';
 
+      // Sync current balance first
+      await syncBalanceToDatabase();
+
       try {
-        const res = await fetch(`${API_BASE}/transfer`, {
+        const res = await fetch(`${API_BASE}/transaction/deposit`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'x-api-key': 'gamezoe-secure-bridge-key'
           },
           body: JSON.stringify({
-            userId,
+            userId: userId,
             amount: amount,
-            type: 'DEPOSIT', // Gold -> Game
-            externalTransactionId: 'slot-' + Date.now(),
-            description: 'Transfer to Slot Machine'
+            gameId: 'slot'
           })
         });
         const data = await res.json();
-        if (data.success) {
+
+        if (res.ok && data.success) {
+          // Update local balance
           const currentBal = getGameBalance();
-          // We fake the update in localStorage. The game reads this on load.
-          // We don't send balance TO server in this simplified model, 
-          // the server only tracks Gold. Game tracks Game Balance locally.
-          setGameBalance(currentBal + amount);
+          const newBal = currentBal + amount;
+          localStorage.setItem(GAME_INTERNAL_KEY, newBal);
+          lastSyncedBalance = newBal;
+
           alert('換碼成功！');
           closeModal('deposit-modal');
+
+          // Refresh and reload
+          await refreshGold();
+          window.location.reload();
         } else {
-          alert('換碼失敗: ' + data.message);
+          alert('換碼失敗: ' + (data.message || 'Unknown Error'));
         }
       } catch (e) {
         alert('連線失敗，請稍後再試');
@@ -344,11 +399,14 @@
       }
     }
 
+    // --- WITHDRAW (出金) ---
     async function confirmWithdraw() {
-      // 1. Critical Check: Re-read balance immediately before logic
+      // Sync first
+      await syncBalanceToDatabase();
+
       const currentBal = getGameBalance();
-      const max = Math.max(0, currentBal - 500);
-      const amount = parseFloat(document.getElementById('withdraw-amount').value);
+      const max = Math.max(0, Math.floor(currentBal) - 500);
+      const amount = parseInt(document.getElementById('withdraw-amount').value);
 
       if (!amount || amount <= 0) return alert('請輸入有效數量');
       if (amount > max) return alert('無法提領超過可轉換金額: ' + max);
@@ -357,65 +415,74 @@
       const originalText = btn.innerText;
       btn.innerText = "處理中...";
       btn.disabled = true;
-
-      // START BLOCKER
       document.getElementById('game-blocker').style.display = 'flex';
 
-      // 2. SAFETY LOCK: DEDUCT BALANCE LOCAL FIRST (Optimistic Deletion)
-      setGameBalance(currentBal - amount);
+      // Deduct locally first (optimistic)
+      const newBal = currentBal - amount;
+      localStorage.setItem(GAME_INTERNAL_KEY, newBal);
 
       try {
-        const res = await fetch(`${API_BASE}/transfer`, {
+        const res = await fetch(`/api/game/v1/transaction/withdraw`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': 'gamezoe-secure-bridge-key'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            userId,
-            amount: amount, // Withdraw adds Gold
-            type: 'WITHDRAW', // Game -> Gold
-            externalTransactionId: 'slot-wd-' + Date.now(),
-            description: 'Transfer from Slot Machine'
+            user_id: userId,
+            amount: amount
           })
         });
         const data = await res.json();
-        if (data.success) {
-          // 3a. Success: Credits are already gone. Just update Gold UI.
-          alert('出金成功！');
+
+        if (res.ok && data.code === 200) {
+          lastSyncedBalance = newBal;
+          alert('出金成功！\n單號: ' + data.data.order_id);
           closeModal('withdraw-modal');
-          refreshGold();
-          setTimeout(() => window.location.reload(), 500);
+          await refreshGold();
+          window.location.reload();
         } else {
           throw new Error(data.message || 'Unknown Error');
         }
       } catch (e) {
-        // 3b. Failure: REFUND the credits back to the game.
         console.error(e);
-        alert('出金失敗: ' + e.message + '\n點數已退回遊戲帳戶');
+        alert('出金失敗: ' + e.message + '\n點數已退回');
 
-        // Re-read current balance (in case they somehow gained more?) and add back
-        // Actually safer to add to what we deducted from.
-        // We know we deducted 'amount'. So we add 'amount' back.
-        // Re-reading localStorage is safest in case weird race, but let's stick to simple refund.
-        const refundBal = getGameBalance();
-        setGameBalance(refundBal + amount);
+        // Refund locally
+        localStorage.setItem(GAME_INTERNAL_KEY, currentBal);
       } finally {
         btn.innerText = originalText;
         btn.disabled = false;
-        // Only hide blocker if we aren't reloading (failure or deposit success without reload)
-        // But logic above has reload on success. 
-        // Logic: if success, we reload, so keeping blocker is fine. 
-        // If fail, we hide blocker.
-        // Actually deposit success sets timeout reload too now.
-        // Let's hide it for consistency.
         document.getElementById('game-blocker').style.display = 'none';
       }
     }
 
-    // Init
-    refreshGold();
-    updateBalanceDisplay();
+    // --- LIFECYCLE ---
+
+    // Init on load
+    initGameSession();
+
+    // Update UI every 500ms
+    setInterval(updateBalanceDisplay, 500);
+
+    // Sync to database every 10 seconds
+    setInterval(syncBalanceToDatabase, 10000);
+
+    // Sync on page unload
+    window.addEventListener('beforeunload', () => {
+      // Use sendBeacon for reliable delivery
+      if (userId) {
+        const currentBal = parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
+        navigator.sendBeacon('/api/slot/sync-balance', JSON.stringify({
+          userId: userId,
+          balance: currentBal
+        }));
+      }
+    });
+
+    // Also sync on visibility change (tab switch)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        syncBalanceToDatabase();
+      }
+    });
   </script>
 </body>
 

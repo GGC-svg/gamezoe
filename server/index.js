@@ -58,6 +58,7 @@ app.use(fishSocketProxy);
 
 // IMPORTANT: Increase payload limit for Base64 images
 app.use(express.json({ limit: '10mb' }));
+app.use(express.text({ type: 'text/plain' }));  // For sendBeacon support
 const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:3001',
@@ -1538,6 +1539,46 @@ app.get('/api/bridge/balance/:userId', verifyBridgeKey, (req, res) => {
             gold: row.gold_balance || 0,
             gameScore: row.fish_balance || 0
         });
+    });
+});
+
+// SLOT MACHINE: Sync balance from localStorage to database
+app.post('/api/slot/sync-balance', (req, res) => {
+    // Handle both JSON and sendBeacon (which sends as text)
+    let userId, balance;
+
+    if (typeof req.body === 'string') {
+        try {
+            const parsed = JSON.parse(req.body);
+            userId = parsed.userId;
+            balance = parsed.balance;
+        } catch (e) {
+            return res.status(400).json({ success: false, error: "Invalid JSON" });
+        }
+    } else {
+        userId = req.body.userId;
+        balance = req.body.balance;
+    }
+
+    if (!userId || balance === undefined) {
+        return res.status(400).json({ success: false, error: "Missing userId or balance" });
+    }
+
+    // Ensure balance is a valid number and floor it
+    const balanceNum = Math.floor(parseFloat(balance) || 0);
+
+    console.log(`[SlotSync] User: ${userId}, Balance: ${balanceNum}`);
+
+    // Update fish_balance in database (shared with Fish game)
+    db.run("UPDATE users SET fish_balance = ? WHERE id = ?", [balanceNum, userId], function(err) {
+        if (err) {
+            console.error("[SlotSync] DB Error:", err);
+            return res.status(500).json({ success: false, error: "DB Error" });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ success: false, error: "User not found" });
+        }
+        res.json({ success: true, balance: balanceNum });
     });
 });
 
