@@ -91,14 +91,15 @@ app.use('/games', express.static(path.join(__dirname, '../games')));
 app.use(express.static(path.join(__dirname, '../dist')));
 
 // --- AI PROXY (Secure) ---
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Initialize GenAI
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "YOUR_API_KEY_HERE" });
+// Note: We initialize inside the request or use a global client.
+// For @google/generative-ai, we create a client with the key.
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "YOUR_API_KEY_HERE");
 
 app.post('/api/ai/generate', async (req, res) => {
     // [SECURITY] Check if user is authenticated (Google OAuth)
-    // Note: This relies on the frontend including userId in the request body after Google Auth
     const { userId } = req.body;
 
     if (!userId) {
@@ -106,8 +107,10 @@ app.post('/api/ai/generate', async (req, res) => {
         return res.status(401).json({ error: "未授權：請先登入使用此功能" });
     }
 
-    // Expecting: { model, contents, config } matching the SDK signature
-    const { model, contents, config } = req.body;
+    // Expecting: { model, contents, config }
+    // Frontend sends 'contents' as a single string prompt.
+    // 'config' contains: { systemInstruction, responseMimeType, responseSchema, ... }
+    const { model: modelName, contents, config } = req.body;
 
     if (!process.env.GEMINI_API_KEY) {
         return res.status(500).json({ error: "Server missing API Key config" });
@@ -115,14 +118,28 @@ app.post('/api/ai/generate', async (req, res) => {
 
     try {
         console.log(`[AI API] Request from user: ${userId}`);
-        const response = await genAI.models.generateContent({
-            model: model || "gemini-1.5-flash",
-            contents: contents, // String or Part[]
-            config: config
+
+        // Extract systemInstruction if present
+        const systemInstruction = config?.systemInstruction;
+
+        // Create model instance
+        const model = genAI.getGenerativeModel({
+            model: modelName || "gemini-1.5-flash",
+            systemInstruction: systemInstruction
         });
 
-        // The SDK response.text() is a helper, but response structure might be complex
-        // We'll return the full text.
+        // Prepare generation config (excluding systemInstruction)
+        const generationConfig = { ...config };
+        delete generationConfig.systemInstruction;
+
+        // Generate content
+        // contents from frontend is a string prompt
+        const result = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: contents }] }],
+            generationConfig: generationConfig
+        });
+
+        const response = await result.response;
         res.json({ text: response.text() });
     } catch (error) {
         console.error("AI Generation Error:", error);
