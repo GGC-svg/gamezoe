@@ -294,16 +294,18 @@
 
       init: function () {
         this.refresh();
-        // [FIX] Disabled aggressive polling - causes network spam
-        // setInterval(() => this.refresh(), 3000);
-        // setInterval(() => this.fetchGameScore(), 1000);
+        // [FIX] Moderate polling for balance sync (every 5 seconds)
+        setInterval(() => this.refresh(), 5000);
+        // [FIX] Fast polling for game score during gameplay (every 2 seconds)
+        setInterval(() => this.fetchGameScore(), 2000);
       },
 
       fetchGameScore: function () {
         if (window.cc && window.cc.yqs && window.cc.yqs.userMgr && window.cc.yqs.userMgr.user) {
-          this.gameScore = window.cc.yqs.userMgr.user.score;
-          // [FIX] Game score is stored as x1000 integer, divide to get display value
-          document.getElementById('ui-score').innerText = Math.floor(this.gameScore / 1000).toLocaleString();
+          // Game engine stores score as x1000 integer (e.g., 52676049 = 52676.049)
+          const rawScore = window.cc.yqs.userMgr.user.score;
+          this.gameScore = Math.floor(rawScore / 1000);  // Store as display integer
+          document.getElementById('ui-score').innerText = this.gameScore.toLocaleString();
         }
       },
 
@@ -318,9 +320,9 @@
             this.sysGold = Math.floor(data.gold);
             document.getElementById('ui-gold').innerText = this.sysGold.toLocaleString();
             if (data.gameScore !== undefined) {
-              this.gameScore = data.gameScore;
-              // [FIX] Game score from API is also x1000 integer
-              document.getElementById('ui-score').innerText = Math.floor(data.gameScore / 1000).toLocaleString();
+              // API returns float (e.g., 52676.049), just floor it
+              this.gameScore = Math.floor(data.gameScore);
+              document.getElementById('ui-score').innerText = this.gameScore.toLocaleString();
             }
           }
         } catch (e) { console.error(e); }
@@ -329,15 +331,13 @@
       openDeposit: function () {
         this.refresh();
         document.getElementById('modal-gold-av').innerText = this.sysGold;
-        // [FIX] Display value is score / 1000
-        document.getElementById('ui-score').innerText = Math.floor(this.gameScore / 1000);
         document.getElementById('modal-deposit').style.display = 'flex';
       },
 
       openWithdraw: function () {
         this.fetchGameScore();
-        // [FIX] Display value is score / 1000
-        document.getElementById('modal-score-av').innerText = Math.floor(this.gameScore / 1000);
+        // this.gameScore is already display integer after fetchGameScore
+        document.getElementById('modal-score-av').innerText = this.gameScore.toLocaleString();
         document.getElementById('modal-withdraw').style.display = 'flex';
       },
 
