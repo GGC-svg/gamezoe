@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, User as UserIcon, Mail, Calendar, Hash, Coins, Gamepad2 } from 'lucide-react';
+import { X, Mail, Calendar, Hash, Coins } from 'lucide-react';
 import { User } from '../types';
 
 interface ProfileModalProps {
@@ -108,27 +108,19 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, user }) =>
                   </div>
                </div>
 
-               {/* Balances */}
-               <div className="grid grid-cols-2 gap-3">
-                  <div className="flex items-center gap-3 p-3 bg-slate-900/50 rounded-xl border border-slate-700">
-                     <div className="p-2 bg-yellow-500/20 rounded-lg">
-                        <Coins className="h-4 w-4 text-yellow-500" />
-                     </div>
-                     <div>
-                        <p className="text-xs text-slate-500">G 幣</p>
-                        <p className="text-lg text-yellow-500 font-bold">{user.gold_balance?.toLocaleString() || 0}</p>
-                     </div>
+               {/* Platform Balance */}
+               <div className="flex items-center justify-center gap-3 p-4 bg-slate-900/50 rounded-xl border border-yellow-500/30">
+                  <div className="p-2 bg-yellow-500/20 rounded-lg">
+                     <Coins className="h-5 w-5 text-yellow-500" />
                   </div>
-                  <div className="flex items-center gap-3 p-3 bg-slate-900/50 rounded-xl border border-slate-700">
-                     <div className="p-2 bg-blue-500/20 rounded-lg">
-                        <Gamepad2 className="h-4 w-4 text-blue-400" />
-                     </div>
-                     <div>
-                        <p className="text-xs text-slate-500">遊戲點數</p>
-                        <p className="text-lg text-blue-400 font-bold">{user.fish_balance?.toLocaleString() || 0}</p>
-                     </div>
+                  <div>
+                     <p className="text-xs text-slate-500">平台 G 幣</p>
+                     <p className="text-2xl text-yellow-500 font-bold">{user.gold_balance?.toLocaleString() || 0}</p>
                   </div>
                </div>
+               <p className="text-xs text-slate-500 text-center">
+                  遊戲點數已改為各遊戲獨立儲存，請在遊戲中查看
+               </p>
 
                {/* Library Count */}
                {user.library && user.library.length > 0 && (

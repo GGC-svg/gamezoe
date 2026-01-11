@@ -186,19 +186,19 @@
   </style>
 
   <script>
-    // --- DATABASE-BACKED BALANCE SYSTEM ---
+    // --- PER-GAME BALANCE SYSTEM (V2) ---
     const GAME_INTERNAL_KEY = 'smg-balance'; // The key main.js uses
+    const GAME_ID = 'slot-machine';  // This game's unique ID
     const userId = new URLSearchParams(window.location.search).get('userId');
-    const API_BASE = window.location.origin + '/api/bridge';
 
     // Track last synced balance to detect changes
     let lastSyncedBalance = 0;
-    let dbBalance = 0;  // Balance from database
-    let sysGold = 0;    // Platform gold
+    let gameBalance = 0;  // This game's specific balance
+    let sysGold = 0;      // Platform gold
 
-    console.log("[SlotMachine] Boot. UserID:", userId);
+    console.log("[SlotMachine] Boot. UserID:", userId, "GameID:", GAME_ID);
 
-    // 1. INIT: Load balance from DATABASE, not localStorage
+    // 1. INIT: Load game-specific balance from new API
     async function initGameSession() {
       if (!userId) {
         console.warn("[SlotMachine] No userId, guest mode");
@@ -208,31 +208,28 @@
       }
 
       try {
-        // Fetch balance from database
-        const res = await fetch(`${API_BASE}/balance/${userId}`, {
-          headers: { 'x-api-key': 'gamezoe-secure-bridge-key' }
-        });
-        const data = await res.json();
+        // Fetch platform G coin balance
+        const goldRes = await fetch(`/api/wallet/balance/${userId}`);
+        const goldData = await goldRes.json();
+        sysGold = Math.floor(goldData.gold_balance || 0);
+        document.getElementById('gold-display').innerText = sysGold.toLocaleString();
 
-        if (data.success) {
-          // gameScore is fish_balance from DB (shared with Fish game)
-          dbBalance = Math.floor(data.gameScore || 0);
-          sysGold = Math.floor(data.gold || 0);
+        // Fetch this game's specific balance
+        const gameRes = await fetch(`/api/game-balance/${userId}/${GAME_ID}`);
+        const gameData = await gameRes.json();
+
+        if (gameData.success) {
+          gameBalance = Math.floor(gameData.balance || 0);
 
           // Inject into localStorage for main.js to read
-          localStorage.setItem(GAME_INTERNAL_KEY, dbBalance);
-          lastSyncedBalance = dbBalance;
+          localStorage.setItem(GAME_INTERNAL_KEY, gameBalance);
+          lastSyncedBalance = gameBalance;
 
-          console.log(`[SlotMachine] Loaded from DB: ${dbBalance} points, ${sysGold} gold`);
-
-          // Update UI
-          document.getElementById('game-balance-display').innerText = dbBalance.toLocaleString();
-          document.getElementById('gold-display').innerText = sysGold.toLocaleString();
+          console.log(`[SlotMachine] Loaded: ${gameBalance} game points, ${sysGold} G coins`);
+          document.getElementById('game-balance-display').innerText = gameBalance.toLocaleString();
         } else {
-          console.error("[SlotMachine] API Error:", data);
-          // Fallback: use localStorage if exists, otherwise 0
-          const localBal = parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
-          localStorage.setItem(GAME_INTERNAL_KEY, localBal);
+          console.error("[SlotMachine] API Error:", gameData);
+          localStorage.setItem(GAME_INTERNAL_KEY, 0);
         }
       } catch (e) {
         console.error("[SlotMachine] Init failed:", e);
@@ -249,12 +246,11 @@
       // Only sync if balance changed
       if (Math.abs(currentBal - lastSyncedBalance) < 0.01) return;
 
-      const diff = currentBal - lastSyncedBalance;
-      console.log(`[SlotMachine] Balance changed: ${lastSyncedBalance} -> ${currentBal} (diff: ${diff})`);
+      const consumed = Math.max(0, lastSyncedBalance - currentBal);
+      console.log(`[SlotMachine] Balance changed: ${lastSyncedBalance} -> ${currentBal} (consumed: ${consumed})`);
 
       try {
-        // Update fish_balance in database
-        const res = await fetch(`/api/slot/sync-balance`, {
+        const res = await fetch(`/api/game-balance/sync`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -262,7 +258,9 @@
           },
           body: JSON.stringify({
             userId: userId,
-            balance: currentBal
+            gameId: GAME_ID,
+            newBalance: currentBal,
+            consumed: consumed
           })
         });
 
@@ -293,36 +291,33 @@
       return parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
     }
 
-    function setGameBalance(amount) {
-      localStorage.setItem(GAME_INTERNAL_KEY, amount);
-      // Reload to let main.js pick up the new balance
-      window.location.reload();
-    }
-
-    async function refreshGold() {
+    async function refreshBalances() {
       if (!userId) {
         document.getElementById('gold-display').innerText = '未登入';
         return;
       }
       try {
-        const res = await fetch(`${API_BASE}/balance/${userId}`, {
-          headers: { 'x-api-key': 'gamezoe-secure-bridge-key' }
-        });
-        if (!res.ok) throw new Error("API Error " + res.status);
-        const data = await res.json();
-        if (data.success) {
-          sysGold = Math.floor(data.gold);
-          dbBalance = Math.floor(data.gameScore || 0);
-          document.getElementById('gold-display').innerText = sysGold.toLocaleString();
-          document.getElementById('game-balance-display').innerText = dbBalance.toLocaleString();
-        } else {
-          document.getElementById('gold-display').innerText = '錯誤';
+        // Fetch platform G coins
+        const goldRes = await fetch(`/api/wallet/balance/${userId}`);
+        const goldData = await goldRes.json();
+        sysGold = Math.floor(goldData.gold_balance || 0);
+        document.getElementById('gold-display').innerText = sysGold.toLocaleString();
+
+        // Fetch game balance
+        const gameRes = await fetch(`/api/game-balance/${userId}/${GAME_ID}`);
+        const gameData = await gameRes.json();
+        if (gameData.success) {
+          gameBalance = Math.floor(gameData.balance || 0);
+          document.getElementById('game-balance-display').innerText = gameBalance.toLocaleString();
         }
       } catch (e) {
         console.error(e);
         document.getElementById('gold-display').innerText = '連線失敗';
       }
     }
+
+    // Alias for backward compatibility
+    const refreshGold = refreshBalances;
 
     // --- MODALS ---
     function openDepositModal() {
@@ -331,7 +326,6 @@
     }
 
     function openWithdrawModal() {
-      // Sync first to get accurate balance
       syncBalanceToDatabase();
       const bal = getGameBalance();
       const max = Math.max(0, Math.floor(bal) - 500);
@@ -343,7 +337,7 @@
       document.getElementById(id).style.display = 'none';
     }
 
-    // --- DEPOSIT (入金) ---
+    // --- DEPOSIT (入金) - Use new per-game API ---
     async function confirmDeposit() {
       const amount = parseInt(document.getElementById('deposit-amount').value);
       if (!amount || amount <= 0) return alert('請輸入有效數量');
@@ -359,35 +353,29 @@
       await syncBalanceToDatabase();
 
       try {
-        const res = await fetch(`${API_BASE}/transaction/deposit`, {
+        const res = await fetch(`/api/game-balance/deposit`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': 'gamezoe-secure-bridge-key'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             userId: userId,
-            amount: amount,
-            gameId: 'slot'
+            gameId: GAME_ID,
+            amount: amount
           })
         });
         const data = await res.json();
 
         if (res.ok && data.success) {
           // Update local balance
-          const currentBal = getGameBalance();
-          const newBal = currentBal + amount;
+          const newBal = data.game_balance;
           localStorage.setItem(GAME_INTERNAL_KEY, newBal);
           lastSyncedBalance = newBal;
+          sysGold = data.platform_balance;
 
-          alert('換碼成功！');
+          alert('換碼成功！轉入 ' + amount + ' 點');
           closeModal('deposit-modal');
-
-          // Refresh and reload
-          await refreshGold();
           window.location.reload();
         } else {
-          alert('換碼失敗: ' + (data.message || 'Unknown Error'));
+          alert('換碼失敗: ' + (data.error || 'Unknown Error'));
         }
       } catch (e) {
         alert('連線失敗，請稍後再試');
@@ -399,9 +387,8 @@
       }
     }
 
-    // --- WITHDRAW (出金) ---
+    // --- WITHDRAW (出金) - Use new per-game API ---
     async function confirmWithdraw() {
-      // Sync first
       await syncBalanceToDatabase();
 
       const currentBal = getGameBalance();
@@ -417,36 +404,33 @@
       btn.disabled = true;
       document.getElementById('game-blocker').style.display = 'flex';
 
-      // Deduct locally first (optimistic)
-      const newBal = currentBal - amount;
-      localStorage.setItem(GAME_INTERNAL_KEY, newBal);
-
       try {
-        const res = await fetch(`/api/game/v1/transaction/withdraw`, {
+        const res = await fetch(`/api/game-balance/withdraw`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            user_id: userId,
+            userId: userId,
+            gameId: GAME_ID,
             amount: amount
           })
         });
         const data = await res.json();
 
-        if (res.ok && data.code === 200) {
+        if (res.ok && data.success) {
+          const newBal = data.game_balance;
+          localStorage.setItem(GAME_INTERNAL_KEY, newBal);
           lastSyncedBalance = newBal;
-          alert('出金成功！\n單號: ' + data.data.order_id);
+          sysGold = data.platform_balance;
+
+          alert('出金成功！提出 ' + amount + ' 點\n單號: ' + data.order_id);
           closeModal('withdraw-modal');
-          await refreshGold();
           window.location.reload();
         } else {
-          throw new Error(data.message || 'Unknown Error');
+          alert('出金失敗: ' + (data.error || 'Unknown Error'));
         }
       } catch (e) {
         console.error(e);
-        alert('出金失敗: ' + e.message + '\n點數已退回');
-
-        // Refund locally
-        localStorage.setItem(GAME_INTERNAL_KEY, currentBal);
+        alert('出金失敗: ' + e.message);
       } finally {
         btn.innerText = originalText;
         btn.disabled = false;
@@ -467,12 +451,14 @@
 
     // Sync on page unload
     window.addEventListener('beforeunload', () => {
-      // Use sendBeacon for reliable delivery
       if (userId) {
         const currentBal = parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
-        navigator.sendBeacon('/api/slot/sync-balance', JSON.stringify({
+        const consumed = Math.max(0, lastSyncedBalance - currentBal);
+        navigator.sendBeacon('/api/game-balance/sync', JSON.stringify({
           userId: userId,
-          balance: currentBal
+          gameId: GAME_ID,
+          newBalance: currentBal,
+          consumed: consumed
         }));
       }
     });
