@@ -297,7 +297,9 @@ ports.forEach(port => {
             return res.status(400).json({ code: 400, message: "Invalid parameters" });
         }
 
+        // Game points are integers, no decimal. Use amount directly.
         const withdrawAmount = parseInt(amount);
+        const withdrawAmountDisplay = withdrawAmount;  // Same value for DB (which stores integers for game points)
 
         // 1. Generate Order ID
         const order_id = `W_${user_id}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
@@ -329,12 +331,13 @@ ports.forEach(port => {
             // To keep diff small, we will use the existing DB callback structure but modify the flow.
         }
 
+        const minRetainBalance = 500;  // Must keep 500 game points (integer)
         const proceedWithWithdraw = (balance, source) => {
             if (balance < withdrawAmount) {
-                console.warn(`[GameServer] Insufficient Balance (${source})`);
+                console.warn(`[GameServer] Insufficient Balance (${source}): ${balance} < ${withdrawAmount}`);
                 return res.status(400).json({ code: 400, message: "Insufficient balance" });
             }
-            if (balance - withdrawAmount < 500) {
+            if (balance - withdrawAmount < minRetainBalance) {
                 console.warn(`[GameServer] Rule Violation: Must retain 500. Current: ${balance}, After: ${balance - withdrawAmount}`);
                 return res.status(400).json({ code: 400, message: "Must keep at least 500 coins" });
             }
@@ -355,9 +358,9 @@ ports.forEach(port => {
                     createTransactionLog();
                 });
             } else {
-                // Deduct from DB
+                // Deduct from DB (use display value for DB which stores floats)
                 db.serialize(() => {
-                    db.run("UPDATE users SET fish_balance = fish_balance - ? WHERE id = ?", [withdrawAmount, user_id], (err) => {
+                    db.run("UPDATE users SET fish_balance = fish_balance - ? WHERE id = ?", [withdrawAmountDisplay, user_id], (err) => {
                         if (err) return res.status(500).json({ code: 500, message: "Deduct Failed" });
                         createTransactionLog();
                     });
@@ -367,15 +370,15 @@ ports.forEach(port => {
 
         const createTransactionLog = () => {
             const desc = "Settlement from Fish Master";
-            db.run(`INSERT INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at) 
+            db.run(`INSERT INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at)
                     VALUES (?, ?, ?, 'gold', 'WITHDRAW', ?, 'PENDING_PLATFORM', datetime('now', '+8 hours'))`,
-                [order_id, user_id, withdrawAmount, desc], async (err) => {
+                [order_id, user_id, withdrawAmountDisplay, desc], async (err) => {
                     if (err) {
                         // Rollback logic is complex for memory, but for now assume insert works or critical fail
                         if (isOnline) {
-                            room.users[user_id].score += withdrawAmount; // Revert Memory
+                            room.users[user_id].score += withdrawAmount; // Revert Memory (storage int)
                         } else {
-                            db.run("UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?", [withdrawAmount, user_id]);
+                            db.run("UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?", [withdrawAmountDisplay, user_id]);
                         }
                         return res.status(500).json({ code: 500, message: "Transaction logging failed" });
                     }
@@ -391,7 +394,7 @@ ports.forEach(port => {
                 const payload = {
                     order_id,
                     user_id,
-                    amount: withdrawAmount,
+                    amount: withdrawAmountDisplay,  // Platform expects display value
                     timestamp: Date.now()
                 };
                 const signature = generateSignature(payload);
@@ -411,14 +414,14 @@ ports.forEach(port => {
 
                     // Helper to sync client UI logic (if needed)
                     if (isOnline && room && room.users[user_id]) {
-                        // Broadcast new score to client with proper float conversion
+                        // Broadcast new score to client (game points are integers)
                         ioInstances.forEach(ioInst => {
                             ioInst.sockets.sockets.forEach(s => {
                                 if (s.userId === user_id) {
                                     s.emit('new_user_comes_push', {
                                         ...room.users[user_id],
-                                        score: toDisplayFloat(room.users[user_id].score),
-                                        gold: toDisplayFloat(room.users[user_id].gold),
+                                        score: room.users[user_id].score,
+                                        gold: room.users[user_id].gold,
                                         seatIndex: room.users[user_id].seatIndex || 0
                                     });
                                 }
@@ -426,22 +429,22 @@ ports.forEach(port => {
                         });
                     }
 
-                    // [FIX] Return balance as display float, not raw integer
+                    // Return balance as integer (game points are integers)
                     const finalBalance = isOnline ? room.users[user_id].score : (currentBalance - withdrawAmount);
-                    res.json({ code: 200, message: "SUCCESS", data: { order_id, balance: toDisplayFloat(finalBalance) } });
+                    res.json({ code: 200, message: "SUCCESS", data: { order_id, balance: finalBalance } });
                 } else {
                     // Fail - Rollback
                     console.warn("Platform Rejected Withdraw");
-                    if (isOnline) room.users[user_id].score += withdrawAmount;
-                    else db.run("UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?", [withdrawAmount, user_id]);
+                    if (isOnline) room.users[user_id].score += withdrawAmount;  // Revert memory (storage int)
+                    else db.run("UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?", [withdrawAmountDisplay, user_id]);
 
                     db.run("UPDATE wallet_transactions SET status = 'FAILED' WHERE order_id = ?", [order_id]);
                     res.status(400).json({ code: 400, message: platformData.message || "Platform Rejected" });
                 }
             } catch (e) {
                 console.error("Platform Call Failed", e);
-                if (isOnline) room.users[user_id].score += withdrawAmount;
-                else db.run("UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?", [withdrawAmount, user_id]);
+                if (isOnline) room.users[user_id].score += withdrawAmount;  // Revert memory (storage int)
+                else db.run("UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?", [withdrawAmountDisplay, user_id]);
                 res.status(500).json({ message: "Platform Error" });
             }
         };
@@ -453,7 +456,8 @@ ports.forEach(port => {
             db.get("SELECT fish_balance FROM users WHERE id = ?", [user_id], (err, row) => {
                 if (err) return res.status(500).json({ code: 500, message: "DB Error" });
                 if (!row) return res.status(404).json({ code: 404, message: "User not found" });
-                proceedWithWithdraw(row.fish_balance || 0, "DB");
+                // Game points are integers
+                proceedWithWithdraw(Math.floor(row.fish_balance || 0), "DB");
             });
         }
         return; // End of main function body, rest is callbacks
