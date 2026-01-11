@@ -4526,7 +4526,7 @@ require = function t(e, n, i) {
                     location.href = t.qqLoginUrl
                     return
                 }
-                0 !== t.errcode ? console.log(t.errmsg) : (e.account = t.account, e.sign = t.sign, cc.yqs.http.url = "http://" + cc.yqs.SI.hall, e.login())
+                0 !== t.errcode ? console.log(t.errmsg) : (e.account = t.account, e.sign = t.sign, cc.yqs.http.url = "https://" + cc.yqs.SI.hall, e.login())
             },
             login: function () {
                 var t = this;

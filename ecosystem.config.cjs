@@ -24,6 +24,18 @@ module.exports = {
                 NODE_ENV: "production",
                 TZ: "Asia/Taipei"
             }
+        },
+        {
+            name: "gamezoe-myfish-server",
+            script: "./server/myfish_server.js",
+            instances: 1,
+            autorestart: true,
+            watch: false,
+            max_memory_restart: '500M',
+            env: {
+                NODE_ENV: "production",
+                TZ: "Asia/Taipei"
+            }
         }
     ]
 };

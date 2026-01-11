@@ -302,7 +302,8 @@
       fetchGameScore: function () {
         if (window.cc && window.cc.yqs && window.cc.yqs.userMgr && window.cc.yqs.userMgr.user) {
           this.gameScore = window.cc.yqs.userMgr.user.score;
-          document.getElementById('ui-score').innerText = Math.floor(this.gameScore).toLocaleString();
+          // [FIX] Game score is stored as x1000 integer, divide to get display value
+          document.getElementById('ui-score').innerText = Math.floor(this.gameScore / 1000).toLocaleString();
         }
       },
 
@@ -318,7 +319,8 @@
             document.getElementById('ui-gold').innerText = Math.floor(data.gold).toLocaleString();
             if (data.gameScore !== undefined) {
               this.gameScore = data.gameScore;
-              document.getElementById('ui-score').innerText = Math.floor(data.gameScore).toLocaleString();
+              // [FIX] Game score from API is also x1000 integer
+              document.getElementById('ui-score').innerText = Math.floor(data.gameScore / 1000).toLocaleString();
             }
           }
         } catch (e) { console.error(e); }
@@ -327,13 +329,15 @@
       openDeposit: function () {
         this.refresh();
         document.getElementById('modal-gold-av').innerText = this.sysGold;
-        document.getElementById('ui-score').innerText = Math.floor(this.gameScore);
+        // [FIX] Display value is score / 1000
+        document.getElementById('ui-score').innerText = Math.floor(this.gameScore / 1000);
         document.getElementById('modal-deposit').style.display = 'flex';
       },
 
       openWithdraw: function () {
         this.fetchGameScore();
-        document.getElementById('modal-score-av').innerText = Math.floor(this.gameScore);
+        // [FIX] Display value is score / 1000
+        document.getElementById('modal-score-av').innerText = Math.floor(this.gameScore / 1000);
         document.getElementById('modal-withdraw').style.display = 'flex';
       },
 

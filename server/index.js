@@ -30,7 +30,7 @@ const gameProxy = createProxyMiddleware({
     changeOrigin: true,
     logLevel: 'debug',
     // [FIX] Add trailing slash to '/api/game/' to avoid matching '/api/games'
-    pathFilter: ['/guest', '/login', '/api/game/']
+    pathFilter: ['/guest', '/login', '/api/game/', '/enter_public_room']
 });
 
 // [CRITICAL] Mount at root to prevent path stripping by Express
