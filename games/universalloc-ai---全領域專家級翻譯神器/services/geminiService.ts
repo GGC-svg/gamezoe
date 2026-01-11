@@ -180,12 +180,17 @@ export const translateBatch = async (
 
   try {
     const response = await callWithRetry(async () => {
+      // Get userId from window (exposed by main app)
+      const userId = (window as any).currentUser?.id;
+      if (!userId) throw new Error("未登入：請先登入使用此功能");
+
       const res = await fetch('/api/ai/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
+          userId,
           model: "gemini-1.5-flash",
           contents: `LOCALIZATION TASK: ${JSON.stringify(inputList)}\n\nGLOSSARY:\n${glossaryLines}`,
           config: {
@@ -295,10 +300,15 @@ export const generateGlossarySuggestions = async (
 
   try {
     const response = await callWithRetry(async () => {
+      // Get userId from window (exposed by main app)
+      const userId = (window as any).currentUser?.id;
+      if (!userId) throw new Error("未登入：請先登入使用此功能");
+
       const res = await fetch('/api/ai/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          userId,
           model: "gemini-1.5-flash",
           contents: prompt,
           config: {
