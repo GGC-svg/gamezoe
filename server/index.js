@@ -74,6 +74,24 @@ app.get('/get_serverinfo', (req, res) => {
     });
 });
 
+// [ALIAS] Also serve on /api/get_serverinfo to support cleaner routing
+app.get('/api/get_serverinfo', (req, res) => {
+    res.json({
+        code: 0,
+        msg: "success",
+        status: 1,
+        ip: "gamezoe.com",
+        host: "gamezoe.com",
+        port: 443,
+        hall_ip: "gamezoe.com",
+        hall_port: 443,
+        hall: "gamezoe.com:443",
+        wss_port: 443,
+        secure: true,
+        version: 1
+    });
+});
+
 // [SAFEGUARD] Ensure game_activities table has required columns on startup
 db.serialize(() => {
     db.all("PRAGMA table_info(game_activities)", (err, cols) => {
