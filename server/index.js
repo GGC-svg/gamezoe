@@ -126,11 +126,24 @@ app.use('/socket.io', createProxyMiddleware({
 }));
 
 // [PROXY] Proxy Fish Master REST API calls (guest, login, etc.) to Port 9000
-app.use(['/guest', '/login', '/api/game'], createProxyMiddleware({
+// [DEBUG] Log all game-related requests
+app.use((req, res, next) => {
+    if (req.url.startsWith('/guest') || req.url.startsWith('/login') || req.url.startsWith('/api/game')) {
+        console.log(`[Proxy Debug] Request: ${req.method} ${req.url}`);
+    }
+    next();
+});
+
+// [PROXY] Proxy Fish Master REST API calls individually to ensure matching
+const gameProxy = createProxyMiddleware({
     target: 'http://127.0.0.1:9000',
     changeOrigin: true,
     logLevel: 'debug'
-}));
+});
+
+app.use('/guest', gameProxy);
+app.use('/login', gameProxy);
+app.use('/api/game', gameProxy);
 
 // Serve Games Static Files (Directly from source, skipping build copy)
 app.use('/games/slot-machine', express.static(path.join(__dirname, '../games/slot-machine')));
