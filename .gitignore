@@ -38,7 +38,11 @@ yarn-error.log*
 *.sln
 *.sw?
 
-# GameZoe Specific
-# server/gamezoe.db
+# GameZoe Specific - CRITICAL: Database must NEVER be in git!
+server/gamezoe.db
 server/gamezoe.db-journal
+server/gamezoe.db-wal
+server/gamezoe.db-shm
+server/*.db
+server/*.db-*
 *.log
