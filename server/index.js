@@ -17,30 +17,33 @@ const PORT = process.env.PORT || 3000; // Default to 3000 for Nginx
 
 // [PROXY] Proxy requests to Fish Master Socket Server (127.0.0.1:9000)
 // Moved to TOP to avoid body-parser issues
-app.use('/socket.io', createProxyMiddleware({
+// [FIX] Use V3 pathFilter to preserve path when forwarding
+app.use(createProxyMiddleware({
     target: 'http://127.0.0.1:9000',
     ws: true,
-    changeOrigin: true
+    changeOrigin: true,
+    pathFilter: ['/socket.io']
 }));
 
 const gameProxy = createProxyMiddleware({
     target: 'http://127.0.0.1:9000',
     changeOrigin: true,
-    logLevel: 'debug'
+    logLevel: 'debug',
+    pathFilter: ['/guest', '/login', '/api/game']
 });
 
-app.use('/guest', gameProxy);
-app.use('/login', gameProxy);
-app.use('/api/game', gameProxy);
+// [CRITICAL] Mount at root to prevent path stripping by Express
+app.use(gameProxy);
 
 // [PROXY] Proxy Raw WebSocket for Fish Game (ws://127.0.0.1:9001)
 const fishSocketProxy = createProxyMiddleware({
     target: 'http://127.0.0.1:9001',
     ws: true,
     changeOrigin: true,
-    pathRewrite: { '^/fish-socket': '' }
+    pathRewrite: { '^/fish-socket': '' },
+    pathFilter: ['/fish-socket']
 });
-app.use('/fish-socket', fishSocketProxy);
+app.use(fishSocketProxy);
 
 // IMPORTANT: Increase payload limit for Base64 images
 app.use(express.json({ limit: '10mb' }));
