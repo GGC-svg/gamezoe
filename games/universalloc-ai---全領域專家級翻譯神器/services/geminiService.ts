@@ -312,9 +312,8 @@ export const generateGlossarySuggestions = async (
 
   try {
     const response = await callWithRetry(async () => {
-      // Get userId from window (exposed by main app)
-      const userId = (window as any).currentUser?.id;
-      if (!userId) throw new Error("未登入：請先登入使用此功能");
+      // Wait for user to be available (handles timing issues)
+      const userId = await waitForUser();
 
       const res = await fetch('/api/ai/generate', {
         method: 'POST',
