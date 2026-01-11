@@ -92,6 +92,12 @@ app.use(helmet({
     contentSecurityPolicy: false // Disable CSP for now to prevent upgrade-insecure-requests
 }));
 
+// [FIX] Explicitly set COOP header to allow Google OAuth popups
+app.use((req, res, next) => {
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    next();
+});
+
 // [FIX] Serve index.css explicitly from root
 app.use('/index.css', express.static(path.join(__dirname, '../index.css')));
 
