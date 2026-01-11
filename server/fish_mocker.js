@@ -410,15 +410,25 @@ ports.forEach(port => {
                     db.run("UPDATE wallet_transactions SET status = 'COMPLETED' WHERE order_id = ?", [order_id]);
 
                     // Helper to sync client UI logic (if needed)
-                    if (isOnline) {
-                        // Broadcast new score? Already updated in memory, usually game loop handles it or we force push
-                        // We should likely push the new score to client
-                        const s = ioInstances.find(io => true)?.sockets.sockets.forEach(s => {
-                            if (s.userId === user_id) s.emit('new_user_comes_push', { ...room.users[user_id], seatIndex: 0 });
+                    if (isOnline && room && room.users[user_id]) {
+                        // Broadcast new score to client with proper float conversion
+                        ioInstances.forEach(ioInst => {
+                            ioInst.sockets.sockets.forEach(s => {
+                                if (s.userId === user_id) {
+                                    s.emit('new_user_comes_push', {
+                                        ...room.users[user_id],
+                                        score: toDisplayFloat(room.users[user_id].score),
+                                        gold: toDisplayFloat(room.users[user_id].gold),
+                                        seatIndex: room.users[user_id].seatIndex || 0
+                                    });
+                                }
+                            });
                         });
                     }
 
-                    res.json({ code: 200, message: "SUCCESS", data: { order_id, balance: isOnline ? room.users[user_id].score : (currentBalance - withdrawAmount) } });
+                    // [FIX] Return balance as display float, not raw integer
+                    const finalBalance = isOnline ? room.users[user_id].score : (currentBalance - withdrawAmount);
+                    res.json({ code: 200, message: "SUCCESS", data: { order_id, balance: toDisplayFloat(finalBalance) } });
                 } else {
                     // Fail - Rollback
                     console.warn("Platform Rejected Withdraw");
