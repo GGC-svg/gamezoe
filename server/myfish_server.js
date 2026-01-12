@@ -6,6 +6,7 @@ const db = new sqlite3.Database('./server/gamezoe.db');
 
 // Protocol Constants
 const MSG_LOGIN = 30001;
+const MSG_FIRE = 20001;      // [NEW] Fire bullet
 const MSG_PRODUCE_FISH = 20002;
 const MSG_CATCH_FISH = 20003;
 const MSG_HEARTBEAT = 22;
@@ -20,6 +21,7 @@ wss.on('connection', function connection(ws) {
     console.log('Client connected');
 
     let userId = null; // Store authenticated user
+    let userBalance = 0; // Track balance in memory for quick deduction
 
     // Start Fish Loop
     const fishInterval = setInterval(() => {
@@ -65,6 +67,7 @@ wss.on('connection', function connection(ws) {
                         }
 
                         userId = user.id; // Store for later
+                        userBalance = user.game_balance; // Store balance in memory
                         const balanceInGame = Math.round(user.game_balance * 1000);
 
                         console.log(`[Login] Success - userId: ${userId}, gameId: ${GAME_ID}, balance: ${user.game_balance} (${balanceInGame} in-game)`);
@@ -75,6 +78,50 @@ wss.on('connection', function connection(ws) {
                             code: 0
                         };
                         ws.send(JSON.stringify(response));
+                    }
+                );
+            }
+            // [NEW] Handle bullet fire - deduct cost
+            else if (json.Msg === MSG_FIRE) {
+                if (!userId) {
+                    console.error("[Fire] Not logged in");
+                    return;
+                }
+
+                // Calculate bullet cost (client sends bulletMulti or we use default)
+                const bulletMulti = json.bulletMulti || json.multi || 1;
+                const baseCost = 0.1; // Base cost per bullet
+                const cost = baseCost * bulletMulti;
+                const costInGame = Math.round(cost * 1000);
+
+                console.log(`[Fire] userId: ${userId}, bulletMulti: ${bulletMulti}, cost: ${cost}`);
+
+                // Deduct from database
+                db.run(
+                    `UPDATE user_game_balances SET balance = balance - ?, updated_at = datetime('now', '+8 hours')
+                     WHERE user_id = ? AND game_id = ? AND balance >= ?`,
+                    [cost, userId, GAME_ID, cost],
+                    function (err) {
+                        if (err) {
+                            console.error('[Fire] DB Error:', err);
+                            return;
+                        }
+
+                        if (this.changes === 0) {
+                            console.warn(`[Fire] Insufficient balance for user ${userId}`);
+                            // Could send error response to client
+                            return;
+                        }
+
+                        userBalance -= cost;
+                        console.log(`[Fire] Deducted ${cost}, new balance: ${userBalance}`);
+
+                        // Send confirmation (optional - depends on client expectation)
+                        ws.send(JSON.stringify({
+                            Msg: MSG_FIRE,
+                            code: 0,
+                            _gold: Math.round(userBalance * 1000)
+                        }));
                     }
                 );
             }
@@ -148,6 +195,10 @@ wss.on('connection', function connection(ws) {
                 } else {
                     console.log("[Catch] Miss!");
                 }
+            }
+            // [DEBUG] Log unknown messages to understand client protocol
+            else {
+                console.log(`[Unknown Msg] Type: ${json.Msg}, Data:`, JSON.stringify(json).substring(0, 200));
             }
 
         } catch (e) {
