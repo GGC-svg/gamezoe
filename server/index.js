@@ -518,6 +518,20 @@ app.post('/api/auth/google-verify', async (req, res) => {
                         return;
                     }
 
+                    // Initialize 500 balance for specific games in user_game_balances
+                    const initialGames = ['fish', 'my-fish-egret', 'slot-machine'];
+                    const initialBalance = 500;
+                    initialGames.forEach(gameId => {
+                        db.run(
+                            `INSERT INTO user_game_balances (user_id, game_id, balance, created_at, updated_at) VALUES (?, ?, ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))`,
+                            [id, gameId, initialBalance],
+                            (err) => {
+                                if (err) console.error(`[Register] Failed to init balance for ${gameId}:`, err.message);
+                                else console.log(`[Register] Initialized ${initialBalance} for user ${id} game ${gameId}`);
+                            }
+                        );
+                    });
+
                     // Log Login
                     db.run("INSERT INTO login_logs (user_id, ip_address, login_time) VALUES (?, ?, datetime('now', '+8 hours'))", [id, req.ip]);
 
@@ -1344,6 +1358,20 @@ app.post('/api/auth/login', (req, res) => {
                     res.status(500).json({ error: err.message });
                     return;
                 }
+
+                // Initialize 500 balance for specific games in user_game_balances
+                const initialGames = ['fish', 'my-fish-egret', 'slot-machine'];
+                const initialBalance = 500;
+                initialGames.forEach(gameId => {
+                    db.run(
+                        `INSERT INTO user_game_balances (user_id, game_id, balance, created_at, updated_at) VALUES (?, ?, ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))`,
+                        [id, gameId, initialBalance],
+                        (err) => {
+                            if (err) console.error(`[Register] Failed to init balance for ${gameId}:`, err.message);
+                            else console.log(`[Register] Initialized ${initialBalance} for user ${id} game ${gameId}`);
+                        }
+                    );
+                });
 
                 // Log Login
                 db.run("INSERT INTO login_logs (user_id, ip_address, login_time) VALUES (?, ?, datetime('now', '+8 hours'))", [id, req.ip]);
