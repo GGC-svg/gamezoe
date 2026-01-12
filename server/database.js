@@ -151,11 +151,22 @@ function initDb() {
             currency TEXT DEFAULT 'gold',
             type TEXT,
             description TEXT,
+            reference_id TEXT,
             status TEXT,
             game_id TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
-        )`);
+        )`, (err) => {
+            if (!err) {
+                // Migration: Ensure wallet_transactions has reference_id
+                db.all("PRAGMA table_info(wallet_transactions)", (err, cols) => {
+                    if (cols && !cols.find(c => c.name === 'reference_id')) {
+                        console.log("Migrating: Adding reference_id column to wallet_transactions...");
+                        db.run("ALTER TABLE wallet_transactions ADD COLUMN reference_id TEXT");
+                    }
+                });
+            }
+        });
 
         // User Game Balances Table (Per-game point balances)
         db.run(`CREATE TABLE IF NOT EXISTS user_game_balances (
