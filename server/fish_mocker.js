@@ -503,17 +503,40 @@ ports.forEach(port => {
         const account = req.query.account || req.body.account || "guest_10086";
         console.log(`[HTTP] Login Request: ${account}`);
 
-        // Read from user_game_balances (new per-game balance system)
-        db.get("SELECT u.name, COALESCE(g.balance, 0) as game_balance FROM users u LEFT JOIN user_game_balances g ON u.id = g.user_id AND g.game_id = 'fish' WHERE u.id = ?", [account], (err, row) => {
+        // Read from both user_game_balances AND fish_balance (for migration)
+        db.get(`SELECT u.name, u.fish_balance, COALESCE(g.balance, 0) as game_balance
+                FROM users u
+                LEFT JOIN user_game_balances g ON u.id = g.user_id AND g.game_id = 'fish'
+                WHERE u.id = ?`, [account], (err, row) => {
             let balance = 0;
             let name = null;
             if (err) {
                 console.error("[HTTP] Login DB Error:", err);
             } else if (row) {
-                // Use per-game balance, scale x1000 for game display
-                balance = (row.game_balance || 0) * 1000;
                 name = row.name;
-                console.log(`[HTTP] Login Success. User: ${account}, Balance: ${balance} (from user_game_balances, Scaled x1000), Name: ${name}`);
+
+                // Check if user_game_balances has data, otherwise fallback to fish_balance
+                if (row.game_balance > 0) {
+                    balance = row.game_balance * 1000;
+                    console.log(`[HTTP] Login: ${account}, Balance: ${balance} (from user_game_balances)`);
+                } else if (row.fish_balance > 0) {
+                    // Migrate fish_balance to user_game_balances
+                    balance = row.fish_balance * 1000;
+                    console.log(`[HTTP] Login: ${account}, Balance: ${balance} (from fish_balance, migrating...)`);
+
+                    // Auto-migrate to new table
+                    db.run(`INSERT INTO user_game_balances (user_id, game_id, balance, created_at, updated_at)
+                            VALUES (?, 'fish', ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))
+                            ON CONFLICT(user_id, game_id) DO UPDATE SET
+                            balance = excluded.balance,
+                            updated_at = datetime('now', '+8 hours')`,
+                        [account, row.fish_balance], (err) => {
+                            if (err) console.error(`[HTTP] Migration failed for ${account}:`, err);
+                            else console.log(`[HTTP] Migrated fish_balance to user_game_balances for ${account}`);
+                        });
+                } else {
+                    console.log(`[HTTP] Login: ${account}, Balance: 0 (no balance found)`);
+                }
             } else {
                 console.log(`[HTTP] Login User Not Found in DB: ${account} (Using 0)`);
             }
@@ -929,13 +952,34 @@ ports.forEach(port => {
                 // No need to call startFishLoop here
             };
 
-            // Query DB - Read from user_game_balances for game balance
+            // Query DB - Read from user_game_balances, fallback to fish_balance for migration
             if (userId !== 'guest') {
-                db.get(`SELECT u.name, u.gold_balance, COALESCE(g.balance, 0) as fish_balance
+                db.get(`SELECT u.name, u.gold_balance, u.fish_balance as old_fish_balance, COALESCE(g.balance, 0) as game_balance
                         FROM users u
                         LEFT JOIN user_game_balances g ON u.id = g.user_id AND g.game_id = 'fish'
                         WHERE u.id = ?`, [userId], (err, row) => {
                     if (err) console.error("Login DB Error", err);
+
+                    // Use game_balance if available, otherwise fallback to old fish_balance
+                    if (row) {
+                        if (row.game_balance > 0) {
+                            row.fish_balance = row.game_balance;
+                            console.log(`[Socket Login] ${userId}: Using game_balance ${row.fish_balance}`);
+                        } else if (row.old_fish_balance > 0) {
+                            row.fish_balance = row.old_fish_balance;
+                            console.log(`[Socket Login] ${userId}: Using old fish_balance ${row.fish_balance}, migrating...`);
+
+                            // Auto-migrate to new table
+                            db.run(`INSERT INTO user_game_balances (user_id, game_id, balance, created_at, updated_at)
+                                    VALUES (?, 'fish', ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))
+                                    ON CONFLICT(user_id, game_id) DO UPDATE SET
+                                    balance = excluded.balance,
+                                    updated_at = datetime('now', '+8 hours')`,
+                                [userId, row.old_fish_balance]);
+                        } else {
+                            row.fish_balance = 0;
+                        }
+                    }
                     finalizeLogin(row);
                 });
             } else {
