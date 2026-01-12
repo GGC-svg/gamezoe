@@ -10,6 +10,9 @@ const MSG_PRODUCE_FISH = 20002;
 const MSG_CATCH_FISH = 20003;
 const MSG_HEARTBEAT = 22;
 
+// [GAME_ID_FIX] This game's ID in user_game_balances
+const GAME_ID = 'my-fish-egret';
+
 console.log("MyFish Mock Server running on port 9001");
 console.log("[DB] Connected to gamezoe.db");
 
@@ -33,10 +36,13 @@ wss.on('connection', function connection(ws) {
             if (json.Msg === MSG_LOGIN) {
                 console.log("[Login] Request from userId:", json.userId);
 
-                // Query database for user
+                // [GAME_ID_FIX] Query from user_game_balances instead of users.fish_balance
                 db.get(
-                    'SELECT id, fish_balance FROM users WHERE id = ?',
-                    [json.userId],
+                    `SELECT u.id, COALESCE(g.balance, 0) as game_balance
+                     FROM users u
+                     LEFT JOIN user_game_balances g ON u.id = g.user_id AND g.game_id = ?
+                     WHERE u.id = ?`,
+                    [GAME_ID, json.userId],
                     (err, user) => {
                         if (err) {
                             console.error("[Login] DB Error:", err);
@@ -59,9 +65,9 @@ wss.on('connection', function connection(ws) {
                         }
 
                         userId = user.id; // Store for later
-                        const balanceInGame = Math.round(user.fish_balance * 1000);
+                        const balanceInGame = Math.round(user.game_balance * 1000);
 
-                        console.log(`[Login] Success - userId: ${userId}, balance: ${user.fish_balance} (${balanceInGame} in-game)`);
+                        console.log(`[Login] Success - userId: ${userId}, gameId: ${GAME_ID}, balance: ${user.game_balance} (${balanceInGame} in-game)`);
 
                         const response = {
                             Msg: MSG_LOGIN,
@@ -87,29 +93,34 @@ wss.on('connection', function connection(ws) {
                     const rewardInGame = 100 * (json.fishNo || 1);
                     const rewardInDB = rewardInGame / 1000;
 
-                    // Update database
+                    // [GAME_ID_FIX] Update user_game_balances instead of users.fish_balance
                     db.run(
-                        'UPDATE users SET fish_balance = fish_balance + ? WHERE id = ?',
-                        [rewardInDB, userId],
+                        `INSERT INTO user_game_balances (user_id, game_id, balance, created_at, updated_at)
+                         VALUES (?, ?, ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))
+                         ON CONFLICT(user_id, game_id) DO UPDATE SET
+                         balance = balance + ?,
+                         updated_at = datetime('now', '+8 hours')`,
+                        [userId, GAME_ID, rewardInDB, rewardInDB],
                         function (err) {
                             if (err) {
                                 console.error('[Catch] DB Update Error:', err);
                                 return;
                             }
 
-                            // Read updated balance
+                            // [GAME_ID_FIX] Read updated balance from user_game_balances
                             db.get(
-                                'SELECT fish_balance FROM users WHERE id = ?',
-                                [userId],
-                                (err, user) => {
+                                'SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = ?',
+                                [userId, GAME_ID],
+                                (err, row) => {
                                     if (err) {
                                         console.error('[Catch] DB Read Error:', err);
                                         return;
                                     }
 
-                                    const newBalanceInGame = Math.round(user.fish_balance * 1000);
+                                    const newBalance = row ? row.balance : rewardInDB;
+                                    const newBalanceInGame = Math.round(newBalance * 1000);
 
-                                    console.log(`[Catch] Success! Reward: ${rewardInDB}, New Balance: ${user.fish_balance} (${newBalanceInGame} in-game)`);
+                                    console.log(`[Catch] Success! Reward: ${rewardInDB}, New Balance: ${newBalance} (${newBalanceInGame} in-game)`);
 
                                     const response = {
                                         Msg: MSG_CATCH_FISH,

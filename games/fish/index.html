@@ -57,9 +57,10 @@
   <!-- LOGIN DATA SYNC -->
   <script>
     (function () {
-      // 1. Get Platform User ID from URL
+      // 1. Get Platform User ID and Game ID from URL
       const urlParams = new URLSearchParams(window.location.search);
       let platformUserId = urlParams.get('userId');
+      let platformGameId = urlParams.get('gameId') || 'fish';  // Default to 'fish'
 
       // [FIX] Fallback for Dev/Refresh
       if (!platformUserId) {
@@ -67,75 +68,125 @@
         platformUserId = "102746929077306565219";
       }
 
-      if (platformUserId) {
-        console.log("[LoginSync] Detected Platform User:", platformUserId);
+      // Store globally for socket.io to use
+      window.__PLATFORM_USER_ID__ = platformUserId;
+      window.__PLATFORM_GAME_ID__ = platformGameId;
 
-        // 2. Intercept XMLHttpRequest (Cocos usually uses this)
-        const originalOpen = XMLHttpRequest.prototype.open;
-        XMLHttpRequest.prototype.open = function (method, url, async, user, password) {
-          // [FIX] URL Patching for Broken Configs
-          if (url && typeof url === 'string') {
-            // Fix 1: Protocol Relative URL (// -> /)
-            if (url.startsWith('//')) {
-              console.warn("[FishFix] Patching Protocol Relative URL:", url);
-              url = url.substring(1);
-            }
-            // Fix 2: Bad Domain (fish.blzz.shop -> Relative)
-            if (url.includes('fish.blzz.shop')) {
-              console.warn("[FishFix] Patching Bad Domain:", url);
-              url = url.replace(/http:\/\/fish\.blzz\.shop(:\d+)?/, '');
-            }
-            // Fix 3: Localhost:9000 -> Relative
-            if (url.includes('localhost:9000')) {
-              console.warn("[FishFix] Removing localhost:9000:", url);
-              url = url.replace('http://localhost:9000', '');
-            }
+      console.log("[LoginSync] Platform User:", platformUserId, "Game:", platformGameId);
+
+      // 2. Intercept XMLHttpRequest (Cocos usually uses this)
+      const originalOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (method, url, async, user, password) {
+        // [FIX] URL Patching for Broken Configs
+        if (url && typeof url === 'string') {
+          // Fix 1: Protocol Relative URL (// -> /)
+          if (url.startsWith('//')) {
+            console.warn("[FishFix] Patching Protocol Relative URL:", url);
+            url = url.substring(1);
           }
+          // Fix 2: Bad Domain (fish.blzz.shop -> Relative)
+          if (url.includes('fish.blzz.shop')) {
+            console.warn("[FishFix] Patching Bad Domain:", url);
+            url = url.replace(/http:\/\/fish\.blzz\.shop(:\d+)?/, '');
+          }
+          // Fix 3: Localhost:9000 -> Relative
+          if (url.includes('localhost:9000')) {
+            console.warn("[FishFix] Removing localhost:9000:", url);
+            url = url.replace('http://localhost:9000', '');
+          }
+        }
 
-          // [Login Logic] Inject Account ID for Guest/Login (FORCE OVERWRITE)
-          if (url && (typeof url === 'string') && (url.includes('/guest') || url.includes('/login'))) {
-            // If account param exists, replace it. If not, add it.
+        // [Login Logic] Inject Account ID AND Game ID for Guest/Login
+        if (url && (typeof url === 'string') && (url.includes('/guest') || url.includes('/login'))) {
+          // Inject/replace account
+          if (url.includes('account=')) {
+            url = url.replace(/account=[^&]+/, 'account=' + encodeURIComponent(platformUserId));
+          } else {
+            const separator = url.includes('?') ? '&' : '?';
+            url = url + separator + 'account=' + encodeURIComponent(platformUserId);
+          }
+          // Inject gameId
+          if (!url.includes('gameId=')) {
+            url = url + '&gameId=' + encodeURIComponent(platformGameId);
+          }
+          console.log("[LoginSync] Injected Account & GameId:", url);
+        }
+
+        // Use 'arguments' to ensure all params are passed, but override url
+        const args = Array.from(arguments);
+        args[1] = url;
+        return originalOpen.apply(this, args);
+      };
+
+      // 3. Intercept Fetch (just in case)
+      const originalFetch = window.fetch;
+      window.fetch = function (input, init) {
+        let url = input;
+        if (typeof url === 'string') {
+          // Patching
+          if (url.startsWith('//')) url = url.substring(1);
+          if (url.includes('fish.blzz.shop')) url = url.replace(/http:\/\/fish\.blzz\.shop(:\d+)?/, '');
+
+          // Login Logic
+          if ((url.includes('/guest') || url.includes('/login'))) {
             if (url.includes('account=')) {
               url = url.replace(/account=[^&]+/, 'account=' + encodeURIComponent(platformUserId));
-              console.log("[LoginSync] Force-Overwrote Account ID:", url);
             } else {
               const separator = url.includes('?') ? '&' : '?';
               url = url + separator + 'account=' + encodeURIComponent(platformUserId);
-              console.log("[LoginSync] Injected Account ID:", url);
             }
-          }
-
-          // Use 'arguments' to ensure all params are passed, but override url
-          const args = Array.from(arguments);
-          args[1] = url;
-          return originalOpen.apply(this, args);
-        };
-
-        // 3. Intercept Fetch (just in case)
-        const originalFetch = window.fetch;
-        window.fetch = function (input, init) {
-          let url = input;
-          if (typeof url === 'string') {
-            // Patching
-            if (url.startsWith('//')) url = url.substring(1);
-            if (url.includes('fish.blzz.shop')) url = url.replace(/http:\/\/fish\.blzz\.shop(:\d+)?/, '');
-
-            // Login Logic (FORCE OVERWRITE)
-            if ((url.includes('/guest') || url.includes('/login'))) {
-              if (url.includes('account=')) {
-                url = url.replace(/account=[^&]+/, 'account=' + encodeURIComponent(platformUserId));
-                console.log("[LoginSync] Force-Overwrote Fetch Account ID:", url);
-              } else {
-                const separator = url.includes('?') ? '&' : '?';
-                url = url + separator + 'account=' + encodeURIComponent(platformUserId);
-                console.log("[LoginSync] Hijacked Fetch:", url);
-              }
+            if (!url.includes('gameId=')) {
+              url = url + '&gameId=' + encodeURIComponent(platformGameId);
             }
+            console.log("[LoginSync] Fetch with GameId:", url);
           }
-          return originalFetch.call(this, url, init);
-        };
-      }
+        }
+        return originalFetch.call(this, url, init);
+      };
 
+      // 4. Socket.io patching moved to unified block below
+    })();
+  </script>
+
+  <!-- [UNIFIED] Single Socket.io Patch - Prevents duplicate patching issues -->
+  <script>
+    (function() {
+      let patchAttempts = 0;
+      const maxAttempts = 50; // Stop after 5 seconds (50 * 100ms)
+
+      const patchSocketIo = setInterval(() => {
+        patchAttempts++;
+
+        // Safety: Stop trying after maxAttempts
+        if (patchAttempts >= maxAttempts) {
+          clearInterval(patchSocketIo);
+          console.warn("[SocketPatch] Max attempts reached, stopping patch");
+          return;
+        }
+
+        if (typeof io !== 'undefined' && !io.__gamezoe_patched__) {
+          const originalIo = io;
+          window.io = function(url, opts) {
+            opts = opts || {};
+            opts.query = opts.query || {};
+            opts.query.gameId = window.__PLATFORM_GAME_ID__ || 'fish';
+            opts.query.userId = window.__PLATFORM_USER_ID__;
+            // [FIX] Limit reconnection attempts to prevent infinite loop
+            opts.reconnectionAttempts = opts.reconnectionAttempts || 10;
+            console.log("[SocketPatch] Connecting with gameId:", opts.query.gameId, "reconnectionAttempts:", opts.reconnectionAttempts);
+            return originalIo(url, opts);
+          };
+          // Copy static properties
+          Object.keys(originalIo).forEach(key => {
+            if (typeof originalIo[key] !== 'undefined') {
+              window.io[key] = originalIo[key];
+            }
+          });
+          window.io.__gamezoe_patched__ = true;
+          clearInterval(patchSocketIo);
+          console.log("[SocketPatch] Socket.io patched successfully");
+        }
+      }, 100);
     })();
   </script>
 

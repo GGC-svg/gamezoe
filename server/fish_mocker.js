@@ -501,16 +501,16 @@ ports.forEach(port => {
 
     function handleLogin(req, res, port) {
         const account = req.query.account || req.body.account || "guest_10086";
-        console.log(`[HTTP] Login Request: ${account}`);
+        // [GAME_ID_FIX] Read gameId from query parameter (injected by client)
+        const gameId = req.query.gameId || req.body.gameId || 'fish';
+        console.log(`[HTTP] Login Request: ${account}, GameID: ${gameId}`);
 
-        // Read from user_game_balances - check BOTH 'fish' and 'fish-master', use highest
+        // [GAME_ID_FIX] Read balance ONLY from the specified gameId
         db.get(`SELECT u.name, u.fish_balance,
-                       COALESCE(g1.balance, 0) as fish_balance_new,
-                       COALESCE(g2.balance, 0) as fish_master_balance
+                       COALESCE(g.balance, 0) as game_balance
                 FROM users u
-                LEFT JOIN user_game_balances g1 ON u.id = g1.user_id AND g1.game_id = 'fish'
-                LEFT JOIN user_game_balances g2 ON u.id = g2.user_id AND g2.game_id = 'fish-master'
-                WHERE u.id = ?`, [account], (err, row) => {
+                LEFT JOIN user_game_balances g ON u.id = g.user_id AND g.game_id = ?
+                WHERE u.id = ?`, [gameId, account], (err, row) => {
             let balance = 0;
             let name = null;
             if (err) {
@@ -518,20 +518,14 @@ ports.forEach(port => {
             } else if (row) {
                 name = row.name;
 
-                // Use the highest balance from: fish-master, fish (new), fish_balance (old)
-                const fishMasterBal = row.fish_master_balance || 0;
-                const fishNewBal = row.fish_balance_new || 0;
-                const fishOldBal = row.fish_balance || 0;
+                // [GAME_ID_FIX] Use ONLY the specific game's balance
+                const gameBal = row.game_balance || 0;
 
-                const maxBal = Math.max(fishMasterBal, fishNewBal, fishOldBal);
-
-                if (maxBal > 0) {
-                    balance = maxBal * 1000;
-                    const source = fishMasterBal >= fishNewBal && fishMasterBal >= fishOldBal ? 'fish-master' :
-                                   fishNewBal >= fishOldBal ? 'fish' : 'fish_balance(old)';
-                    console.log(`[HTTP] Login: ${account}, Balance: ${balance} (from ${source})`);
+                if (gameBal > 0) {
+                    balance = gameBal * 1000;
+                    console.log(`[HTTP] Login: ${account}, GameID: ${gameId}, Balance: ${balance}`);
                 } else {
-                    console.log(`[HTTP] Login: ${account}, Balance: 0 (no balance found)`);
+                    console.log(`[HTTP] Login: ${account}, GameID: ${gameId}, Balance: 0 (no balance found)`);
                 }
             } else {
                 console.log(`[HTTP] Login User Not Found in DB: ${account} (Using 0)`);
@@ -636,7 +630,8 @@ ports.forEach(port => {
 
     // Helper to save user score to DB
     // [ARCH FIX] ONLY update fish_balance (Game Points). NEVER touch gold_balance (Platform Coins) here.
-    function saveUserToDB(userId, score) {
+    // [GAME_ID_FIX] Now accepts gameId parameter to save to specific game only
+    function saveUserToDB(userId, score, gameId = 'fish') {
         if (!userId || userId === 'guest') return;
 
         // Convert integer balance back to float for DB storage
@@ -648,18 +643,16 @@ ports.forEach(port => {
             if (err) console.error(`[DB] Failed to save score for ${userId}:`, err);
         });
 
-        // [SYNC] Update BOTH 'fish' and 'fish-master' in user_game_balances to keep them in sync
-        const gameIds = ['fish', 'fish-master'];
-        gameIds.forEach(gameId => {
-            db.run(`INSERT INTO user_game_balances (user_id, game_id, balance, created_at, updated_at)
-                    VALUES (?, ?, ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))
-                    ON CONFLICT(user_id, game_id) DO UPDATE SET
-                    balance = excluded.balance,
-                    updated_at = datetime('now', '+8 hours')`,
-                [userId, gameId, balanceToSave], (err) => {
-                    if (err) console.error(`[DB] Failed to sync ${gameId} for ${userId}:`, err);
-                });
-        });
+        // [GAME_ID_FIX] Update ONLY the specific game's balance in user_game_balances
+        db.run(`INSERT INTO user_game_balances (user_id, game_id, balance, created_at, updated_at)
+                VALUES (?, ?, ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))
+                ON CONFLICT(user_id, game_id) DO UPDATE SET
+                balance = excluded.balance,
+                updated_at = datetime('now', '+8 hours')`,
+            [userId, gameId, balanceToSave], (err) => {
+                if (err) console.error(`[DB] Failed to sync ${gameId} for ${userId}:`, err);
+                else console.log(`[DB] Saved ${userId}'s ${gameId} balance: ${balanceToSave}`);
+            });
     }
 
     // -------------------------------------------------------------------------
@@ -705,7 +698,10 @@ ports.forEach(port => {
             // This is vital for the client to match "My User ID" with "Seat User ID"
             userId = String(userId);
 
-            console.log(`[DEBUG] Login Parsed UserID: ${userId}`);
+            // [GAME_ID_FIX] Get gameId from socket handshake query (injected by client socket.io patch)
+            const gameId = socket.handshake?.query?.gameId || reqData.gameId || 'fish';
+            socket.gameId = gameId; // Store for later use (e.g., saveUserToDB)
+            console.log(`[DEBUG] Login Parsed UserID: ${userId}, GameID: ${gameId}`);
 
             // [GO_STRICT_MODE] Like Go server: One Socket = One Room
             // Go code sets client.Room once and never changes it
@@ -812,6 +808,7 @@ ports.forEach(port => {
 
                     room.users[socket.userId] = {
                         userId: userId, // Ensure userId is set here
+                        gameId: gameId, // [GAME_ID_FIX] Store gameId for periodic saves
                         score: currentBalance, // Game Points (INT)
                         gold: currentGold,     // Platform Coin (INT) - Read Only in Game
                         seatIndex: freeIdx,    // [FIXED] Use Calculated Seat Index!
@@ -823,7 +820,7 @@ ports.forEach(port => {
                         power: 0,
                         bullet: 0
                     };
-                    console.log(`[BALANCE_SYNC] User ${socket.userId} login. Seat: ${freeIdx}, VIP: 0`);
+                    console.log(`[BALANCE_SYNC] User ${socket.userId} login. GameID: ${gameId}, Seat: ${freeIdx}, VIP: 0`);
                 }
 
                 // [VIP_FIX] Calculate VIP based on mock recharge (Simple Logic)
@@ -951,29 +948,19 @@ ports.forEach(port => {
                 // No need to call startFishLoop here
             };
 
-            // Query DB - Read from user_game_balances, check both 'fish' and 'fish-master'
+            // [GAME_ID_FIX] Query DB - Read balance ONLY from the specified gameId
             if (userId !== 'guest') {
-                db.get(`SELECT u.name, u.gold_balance, u.fish_balance as old_fish_balance,
-                               COALESCE(g1.balance, 0) as fish_balance_new,
-                               COALESCE(g2.balance, 0) as fish_master_balance
+                db.get(`SELECT u.name, u.gold_balance,
+                               COALESCE(g.balance, 0) as game_balance
                         FROM users u
-                        LEFT JOIN user_game_balances g1 ON u.id = g1.user_id AND g1.game_id = 'fish'
-                        LEFT JOIN user_game_balances g2 ON u.id = g2.user_id AND g2.game_id = 'fish-master'
-                        WHERE u.id = ?`, [userId], (err, row) => {
+                        LEFT JOIN user_game_balances g ON u.id = g.user_id AND g.game_id = ?
+                        WHERE u.id = ?`, [gameId, userId], (err, row) => {
                     if (err) console.error("Login DB Error", err);
 
-                    // Use the highest balance from: fish-master, fish (new), fish_balance (old)
+                    // [GAME_ID_FIX] Use ONLY the specific game's balance
                     if (row) {
-                        const fishMasterBal = row.fish_master_balance || 0;
-                        const fishNewBal = row.fish_balance_new || 0;
-                        const fishOldBal = row.old_fish_balance || 0;
-
-                        const maxBal = Math.max(fishMasterBal, fishNewBal, fishOldBal);
-                        row.fish_balance = maxBal;
-
-                        const source = fishMasterBal >= fishNewBal && fishMasterBal >= fishOldBal ? 'fish-master' :
-                                       fishNewBal >= fishOldBal ? 'fish' : 'fish_balance(old)';
-                        console.log(`[Socket Login] ${userId}: Balance ${maxBal} (from ${source})`);
+                        row.fish_balance = row.game_balance || 0;
+                        console.log(`[Socket Login] ${userId}: GameID: ${gameId}, Balance: ${row.fish_balance}`);
                     }
                     finalizeLogin(row);
                 });
@@ -1370,8 +1357,8 @@ ports.forEach(port => {
 
             // 3. Clean up room memory
             if (room && room.users[socket.userId]) {
-                // Save score before cleanup
-                saveUserToDB(socket.userId, room.users[socket.userId].score);
+                // Save score before cleanup - [GAME_ID_FIX] Pass socket.gameId
+                saveUserToDB(socket.userId, room.users[socket.userId].score, socket.gameId);
                 delete room.users[socket.userId];
                 console.log(`[EXIT] Removed user ${socket.userId} from room ${socket.currentRoomId} memory`);
             }
@@ -1787,7 +1774,8 @@ ports.forEach(port => {
                 const userInRoom = room?.users[socket.userId];
 
                 if (userInRoom && userInRoom.score !== undefined) {
-                    saveUserToDB(socket.userId, userInRoom.score);
+                    // [GAME_ID_FIX] Pass socket.gameId or user's stored gameId
+                    saveUserToDB(socket.userId, userInRoom.score, socket.gameId || userInRoom.gameId);
                 }
             }
 
@@ -1805,7 +1793,8 @@ ports.forEach(port => {
                         console.log(`[DISCONNECT] Cleaned up ${bulletIds.length} bullets for user ${socket.userId}`);
                     }
 
-                    saveUserToDB(socket.userId, room.users[socket.userId].score);
+                    // [GAME_ID_FIX] Pass socket.gameId or user's stored gameId
+                    saveUserToDB(socket.userId, room.users[socket.userId].score, socket.gameId || room.users[socket.userId].gameId);
                     delete room.users[socket.userId]; // Cleanup memory
                 }
             }
@@ -1831,7 +1820,8 @@ ports.forEach(port => {
                 if (room.users) {
                     Object.values(room.users).forEach(u => {
                         if (u.userId !== 'guest' && u.online) {
-                            saveUserToDB(u.userId, u.score);
+                            // [GAME_ID_FIX] Pass user's stored gameId
+                            saveUserToDB(u.userId, u.score, u.gameId);
                         }
                     });
                 }
