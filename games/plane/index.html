@@ -374,29 +374,148 @@
 	<script>
 		// --- 1943 Data ---
 		const BOSS_DATA = [
-			// Stage 1: Standard
-			{ name: "TONE", type: "Heavy Cruiser", hp: 600, w: 120, h: 250, enter: 'top' },
-			// Stage 2: Carrier
-			{ name: "KAGA", type: "Aircraft Carrier", hp: 800, w: 140, h: 300, enter: 'top' },
-			// Stage 3: Bomber (Bottom Chase?)
-			{ name: "AYAKO I", type: "Super Bomber", hp: 1000, w: 250, h: 180, enter: 'bottom' },
-			// Stage 4: Battleship
-			{ name: "FUSO", type: "Battleship", hp: 1400, w: 150, h: 320, enter: 'top' },
-			// Stage 5: Destroyer Fleet (Handled as one boss unit visually? Or unique logic. Let's make it a 'Fleet' type)
-			// For now, represent as one big unit or update draw to show multiple hulls if 'Fleet'
-			{ name: "DESRON 2", type: "Destroyer Fleet", hp: 1200, w: 300, h: 150, enter: 'top' },
-
-			{ name: "AKAGI", type: "Aircraft Carrier", hp: 1600, w: 160, h: 320, enter: 'top' },
-			{ name: "DAI-HIRYU", type: "Bomber Fleet", hp: 1500, w: 280, h: 200, enter: 'bottom' },
-			{ name: "ISE", type: "Aviation Battleship", hp: 1800, w: 160, h: 340, enter: 'top' },
-			{ name: "HIRYU", type: "Aircraft Carrier", hp: 2000, w: 160, h: 340, enter: 'top' },
-			{ name: "AYAKO II", type: "Super Bomber Mk.II", hp: 2500, w: 300, h: 220, enter: 'bottom' },
-			{ name: "MUTSU", type: "Battleship", hp: 3000, w: 180, h: 360, enter: 'top' },
-			{ name: "DAI-HIRYU II", type: "Bomber Fleet II", hp: 2800, w: 300, h: 220, enter: 'top' },
-			{ name: "YAMASHIRO", type: "Battleship", hp: 3500, w: 180, h: 380, enter: 'bottom' },
-			{ name: "SORYU", type: "Aircraft Carrier", hp: 3800, w: 180, h: 360, enter: 'top' },
-			{ name: "NAGATO", type: "Battleship", hp: 5000, w: 200, h: 400, enter: 'top' },
-			{ name: "YAMATO", type: "Super Battleship", hp: 8000, w: 220, h: 450, enter: 'bottom' } // Chase!
+			// Stage 1: Heavy Cruiser (Tone) - 2 Main Guns
+			{
+				name: "TONE", type: "Heavy Cruiser", hp: 3000, w: 120, h: 250, enter: 'top', parts: [
+					{ t: 'turret_main', x: 0, y: -40, cd: 50 },
+					{ t: 'turret_main', x: 0, y: 50, cd: 60 }
+				]
+			},
+			// Stage 2: Carrier (Kaga) - Bridge + AA
+			{
+				name: "KAGA", type: "Aircraft Carrier", hp: 4000, w: 160, h: 320, enter: 'top', parts: [
+					{ t: 'bridge', x: 50, y: -20 },
+					{ t: 'turret_aa', x: 60, y: 40, cd: 30 },
+					{ t: 'turret_aa', x: 60, y: -80, cd: 25 }
+				]
+			},
+			// Stage 3: Super Bomber (Ayako I) - Engines + Tail Gun
+			{
+				name: "AYAKO I", type: "Super Bomber", hp: 5000, w: 280, h: 180, enter: 'bottom', parts: [
+					{ t: 'propeller', x: -80, y: 10, spd: 0.5 }, { t: 'propeller', x: 80, y: 10, spd: -0.5 },
+					{ t: 'propeller', x: -40, y: 20, spd: 0.5 }, { t: 'propeller', x: 40, y: 20, spd: -0.5 },
+					{ t: 'turret_aa', x: 0, y: 80, cd: 20 } // Tail gun
+				]
+			},
+			// Stage 4: Battleship (Fuso) - 4 Turrets
+			{
+				name: "FUSO", type: "Battleship", hp: 7000, w: 140, h: 350, enter: 'top', parts: [
+					{ t: 'turret_main', x: 0, y: -80, cd: 60 },
+					{ t: 'turret_main', x: 0, y: -40, cd: 70 },
+					{ t: 'bridge', x: 0, y: 0 },
+					{ t: 'turret_main', x: 0, y: 60, cd: 80 },
+					{ t: 'turret_main', x: 0, y: 100, cd: 90 }
+				]
+			},
+			// Stage 5: Destroyer Fleet - Represented as one visual unit for now, but high fire rate
+			{
+				name: "DESRON 2", type: "Destroyer Flagship", hp: 6000, w: 100, h: 220, enter: 'top', parts: [
+					{ t: 'turret_aa', x: 0, y: -60, cd: 15 },
+					{ t: 'turret_aa', x: 0, y: 60, cd: 20 }
+				]
+			},
+			// Stage 6: Akagi
+			{
+				name: "AKAGI", type: "Aircraft Carrier", hp: 8000, w: 180, h: 360, enter: 'top', parts: [
+					{ t: 'bridge', x: -60, y: 0 },
+					{ t: 'turret_aa', x: -60, y: -80, cd: 50 },
+					{ t: 'turret_aa', x: -60, y: 80, cd: 50 },
+					{ t: 'turret_aa', x: 60, y: 0, cd: 40 }
+				]
+			},
+			// 7
+			{
+				name: "DAI-HIRYU", type: "Bomber Fleet", hp: 8500, w: 300, h: 220, enter: 'bottom', parts: [
+					{ t: 'turret_main', x: 0, y: 0, cd: 50 },
+					{ t: 'turret_aa', x: -50, y: 50, cd: 15 },
+					{ t: 'turret_aa', x: 50, y: 50, cd: 20 }
+				]
+			},
+			// 8 Ise
+			{
+				name: "ISE", type: "Aviation Battleship", hp: 9000, w: 160, h: 340, enter: 'top', parts: [
+					{ t: 'turret_main', x: 0, y: -80, cd: 120 },
+					{ t: 'bridge', x: 0, y: -20 },
+					{ t: 'deck', x: 0, y: 80 } // Flight deck back
+				]
+			},
+			// 9 Hiryu
+			{
+				name: "HIRYU", type: "Aircraft Carrier", hp: 10000, w: 160, h: 340, enter: 'top', parts: [
+					{ t: 'bridge', x: 50, y: 0 },
+					{ t: 'turret_aa', x: 60, y: -50, cd: 20 },
+					{ t: 'turret_aa', x: 60, y: 50, cd: 20 }
+				]
+			},
+			// 10 Ayako II
+			{
+				name: "AYAKO II", type: "Super Bomber Mk.II", hp: 12000, w: 320, h: 240, enter: 'bottom', parts: [
+					{ t: 'propeller', x: -100, y: 0, spd: 0.8 }, { t: 'propeller', x: 100, y: 0, spd: -0.8 },
+					{ t: 'turret_main', x: 0, y: 0, cd: 40 }, // Center heavy
+					{ t: 'turret_aa', x: -50, y: 80, cd: 15 },
+					{ t: 'turret_aa', x: 50, y: 80, cd: 15 }
+				]
+			},
+			// 11 Mutsu
+			{
+				name: "MUTSU", type: "Battleship", hp: 15000, w: 180, h: 360, enter: 'top', parts: [
+					{ t: 'turret_main', x: 0, y: -100, cd: 100 },
+					{ t: 'turret_main', x: 0, y: -50, cd: 100 },
+					{ t: 'turret_main', x: 0, y: 50, cd: 100 },
+					{ t: 'turret_main', x: 0, y: 100, cd: 100 }
+				]
+			},
+			// 12
+			{
+				name: "DAI-HIRYU II", type: "Bomber Fleet II", hp: 14000, w: 320, h: 240, enter: 'top', parts: [
+					{ t: 'turret_aa', x: 0, y: 0, cd: 10 }, // Machine gun
+					{ t: 'turret_aa', x: -80, y: 20, cd: 15 },
+					{ t: 'turret_aa', x: 80, y: 20, cd: 15 }
+				]
+			},
+			// 13 Yamashiro
+			{
+				name: "YAMASHIRO", type: "Battleship", hp: 18000, w: 180, h: 380, enter: 'bottom', parts: [
+					{ t: 'turret_main', x: 0, y: -100, cd: 90 },
+					{ t: 'turret_main', x: 0, y: -50, cd: 90 },
+					{ t: 'bridge', x: 0, y: 0 },
+					{ t: 'turret_main', x: 0, y: 80, cd: 90 },
+					{ t: 'turret_main', x: 0, y: 120, cd: 90 }
+				]
+			},
+			// 14 Soryu
+			{
+				name: "SORYU", type: "Aircraft Carrier", hp: 20000, w: 180, h: 360, enter: 'top', parts: [
+					{ t: 'bridge', x: -60, y: -20 },
+					{ t: 'turret_aa', x: -60, y: -80, cd: 30 },
+					{ t: 'turret_aa', x: -60, y: 80, cd: 30 }
+				]
+			},
+			// 15 Nagato
+			{
+				name: "NAGATO", type: "Battleship", hp: 30000, w: 200, h: 400, enter: 'top', parts: [
+					{ t: 'turret_main', x: 0, y: -120, cd: 40 },
+					{ t: 'turret_main', x: 0, y: -70, cd: 40 },
+					{ t: 'bridge', x: 0, y: -10 },
+					{ t: 'turret_main', x: 0, y: 60, cd: 40 },
+					{ t: 'turret_main', x: 0, y: 110, cd: 40 },
+					{ t: 'turret_aa', x: 50, y: 0, cd: 10 },
+					{ t: 'turret_aa', x: -50, y: 0, cd: 10 }
+				]
+			},
+			// 16 YAMATO
+			{
+				name: "YAMATO", type: "Imperial Flagship", hp: 50000, w: 240, h: 480, enter: 'bottom', parts: [
+					{ t: 'turret_main', x: 0, y: -150, cd: 30 }, // Front 1
+					{ t: 'turret_main', x: 0, y: -90, cd: 30 },  // Front 2
+					{ t: 'turret_aa', x: -60, y: -40, cd: 8 },
+					{ t: 'turret_aa', x: 60, y: -40, cd: 8 },
+					{ t: 'bridge', x: 0, y: 0 },
+					{ t: 'turret_aa', x: -60, y: 50, cd: 8 },
+					{ t: 'turret_aa', x: 60, y: 50, cd: 8 },
+					{ t: 'turret_main', x: 0, y: 120, cd: 30 }   // Rear
+				]
+			}
 		];
 
 		const WEAPONS = {
@@ -705,8 +824,11 @@
 					x: width / 2, y: startY, w: data.w, h: data.h,
 					hp: data.hp, maxHp: data.hp,
 					type: 'boss', subType: data.type, enter: data.enter || 'top', phase: 0,
-					vx: 0, vy: startVy
+					vx: 0, vy: startVy,
+					parts: data.parts ? JSON.parse(JSON.stringify(data.parts)) : [] // Deep copy parts
 				};
+				// Initial aim for turrents
+				boss.parts.forEach(p => { p.currCd = Math.random() * p.cd; p.angle = 0; });
 				enemies.push(boss);
 			}, 2000);
 		}
@@ -776,54 +898,126 @@
 					let targetY = 150;
 					if (e.enter === 'bottom') targetY = height - 250;
 
-					// Simple approach logic
-					if (Math.abs(e.y - targetY) > 5) {
-						e.y += (targetY - e.y) * 0.01; // Ease in
-					} else {
-						// Hover / Strafe
-						e.x += Math.sin(frame * 0.01) * 1.5;
-						// Bob vertically
-						e.y += Math.cos(frame * 0.02) * 0.5;
+					// Approach Phase
+					if (e.phase === 0) {
+						if (Math.abs(e.y - targetY) > 5) {
+							e.y += (targetY - e.y) * 0.005; // Very slow approach
+						} else {
+							e.phase = 1;
+							e.tick = 0;
+						}
+					}
+					// Battle Patterns (Vertical Sweep for Bottom Bosses)
+					else {
+						e.tick = (e.tick || 0) + 1;
+
+						if (e.enter === 'bottom') {
+							// Vertical Sweep: Cycle 1200 frames
+							const cycle = e.tick % 1200;
+							if (cycle < 400) e.y -= 0.3;      // Advance (Up)
+							else if (cycle < 600);            // Wait
+							else if (cycle < 1000) e.y += 0.3;// Retreat (Down)
+							else;                             // Wait
+
+							e.x = (width / 2) + Math.sin(e.tick * 0.01) * 30; // Mild sway
+						} else {
+							// Standard Horizontal Drift for Top Bosses
+							e.x = (width / 2) + Math.sin(e.tick * 0.005) * 50;
+							e.y = targetY + Math.sin(e.tick * 0.01) * 20;
+						}
 					}
 
 					// Boss Attack Logic
-					const isBattleship = e.subType.includes("Battleship") || e.subType.includes("Cruiser") || e.subType.includes("Destroyer");
+					// Boss Attack Logic (Turrets)
 					const isCarrier = e.subType.includes("Carrier");
-					const isBomber = e.subType.includes("Bomber") || e.subType.includes("Fleet");
 
-					if (frame % 60 === 0) {
-						const angle = Math.atan2(player.y - e.y, player.x - e.x);
-						const spd = isBomber ? 8 : 6;
-						fireBullet(e.x, e.y, Math.cos(angle) * spd, Math.sin(angle) * spd, '#ff0055');
-						if (isBattleship) {
-							fireBullet(e.x - 30, e.y, Math.cos(angle) * spd, Math.sin(angle) * spd, '#ff0055');
-							fireBullet(e.x + 30, e.y, Math.cos(angle) * spd, Math.sin(angle) * spd, '#ff0055');
-						}
+					// Update Parts
+					if (e.parts) {
+						e.parts.forEach(p => {
+							if (p.t === 'turret_main' || p.t === 'turret_aa') {
+								// Rotate towards player
+								// Compensate boss rotation if any (none yet)
+								let angleToPlayer = Math.atan2(player.y - (e.y + p.y), player.x - (e.x + p.x));
+								if (e.enter === 'bottom') {
+									// If chasing from bottom, y axis is flipped relative to "front" logic?
+									// Actually Math.atan2 works in world space, so it's fine.
+									// Just visual rotation needs care.
+								}
+								// Simple lerp rotation?
+								p.angle = angleToPlayer;
+
+								if (p.currCd > 0) p.currCd--;
+								else {
+									// FIRE
+									p.currCd = p.cd; // Reset CD
+									const spread = p.t === 'turret_main' ? 0.1 : 0.3;
+									const spd = p.t === 'turret_main' ? 8 : 6;
+									const color = p.t === 'turret_main' ? '#ff0055' : '#ffaa00';
+									const dmg = p.t === 'turret_main' ? 20 : 10;
+
+									// Main Turret: Heavy Shell
+									if (p.t === 'turret_main') {
+										fireBullet(e.x + p.x, e.y + p.y, Math.cos(p.angle) * spd, Math.sin(p.angle) * spd, color);
+									}
+									// AA Turret: 3-way spread
+									else {
+										fireBullet(e.x + p.x, e.y + p.y, Math.cos(p.angle) * spd, Math.sin(p.angle) * spd, color);
+										fireBullet(e.x + p.x, e.y + p.y, Math.cos(p.angle - 0.2) * spd, Math.sin(p.angle - 0.2) * spd, color);
+										fireBullet(e.x + p.x, e.y + p.y, Math.cos(p.angle + 0.2) * spd, Math.sin(p.angle + 0.2) * spd, color);
+									}
+								}
+							} else if (p.t === 'propeller') {
+								p.angle = (p.angle || 0) + (p.spd || 0.5);
+							}
+						});
 					}
-					if (frame % 25 === 0 && isCarrier) {
-						fireBullet(e.x + (Math.random() - 0.5) * e.w, e.y, (Math.random() - 0.5) * 4, 4, '#ffff00');
+
+					// Carrier logic spawn drones
+					if (frame % 100 === 0 && isCarrier) {
+						// Launch Green Plane
+						const launchX = e.x + (Math.random() - 0.5) * 40;
+						const launchY = e.y;
+						enemies.push({
+							x: launchX, y: launchY, hp: 5, w: 20, h: 20, type: 'green',
+							vx: (Math.random() - 0.5) * 4, vy: (Math.random() > 0.5 ? -4 : 4), phase: 0
+						});
 					}
-					if (frame % 40 === 0 && isBomber) {
-						fireBullet(e.x, e.y, -3, 5, '#ff5500');
-						fireBullet(e.x, e.y, 0, 5, '#ff5500');
-						fireBullet(e.x, e.y, 3, 5, '#ff5500');
-					}
-					updateBossBar(e.hp / e.maxHp * 100);
+
+					updateBossBar(Math.max(0, e.hp / e.maxHp * 100));
 
 				} else if (e.type === 'turret') {
-					e.y += e.vy; // Scroll with map
-					// Turret logic: aim slower
-					if (e.y > 0 && e.y < height && frame % 120 === 0) {
-						const angle = Math.atan2(player.y - e.y, player.x - e.x);
-						e.angle = angle;
-						fireBullet(e.x, e.y, Math.cos(angle) * 3, Math.sin(angle) * 3, '#ffaa00');
+					e.y += e.vy;
+					// Turret logic: Interval Continuous Fire (Burst), "Won't Move" (Static Visual)
+					if (e.y > 0 && e.y < height) {
+						if (!e.burst) e.burst = 0;
+						// Trigger burst every few seconds
+						if (frame % 200 === 0) {
+							e.burst = 3; // Queue 3 shots
+						}
+
+						if (e.burst > 0 && frame % 10 === 0) {
+							e.burst--;
+							// Aim at player for bullet velocity, but visual angle static?
+							const angle = Math.atan2(player.y - e.y, player.x - e.x);
+							// Do NOT update e.angle if we want it static visually
+							e.angle = Math.PI / 2; // Point down visually
+							fireBullet(e.x, e.y, Math.cos(angle) * 4, Math.sin(angle) * 4, '#ffaa00');
+						}
 					}
 				} else if (e.type === 'miniboss') {
-					if (e.y < 100) e.y += 2;
+					if (e.y < 100) e.y += 0.5; // Slower entry
 					else {
-						e.x += Math.cos(frame * 0.05) * 4;
-						if (frame % 40 === 0) {
-							for (let a = 0; a < Math.PI * 2; a += 0.5) fireBullet(e.x, e.y, Math.cos(a) * 4, Math.sin(a) * 4, '#ffaa00');
+						e.x += Math.cos(frame * 0.02) * 2; // Slower horizontal sway
+						if (frame % 150 === 0) { // Much slower fire rate (was 50)
+							// [TUNING] Early stages: Downward spread only. Later: Spin.
+							if (stage <= 3) {
+								for (let a = Math.PI * 0.25; a <= Math.PI * 0.75; a += 0.15) {
+									// Slower bullets (spd 3 instead of 4)
+									fireBullet(e.x, e.y, Math.cos(a) * 3, Math.sin(a) * 3, '#ffaa00');
+								}
+							} else {
+								for (let a = 0; a < Math.PI * 2; a += 0.6) fireBullet(e.x, e.y, Math.cos(a) * 3, Math.sin(a) * 3, '#ffaa00');
+							}
 						}
 					}
 				} else {
@@ -1042,16 +1236,27 @@
 			enemies.forEach(e => {
 				if (e.type !== 'turret') return;
 				ctx.save(); ctx.translate(e.x, e.y);
-				// Island Base
-				ctx.fillStyle = '#005522';
-				ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.fill();
+
+				// Island Base - Irregular shape
+				ctx.fillStyle = '#c2b280'; // Sand
+				ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI * 2); ctx.fill();
+				ctx.fillStyle = '#228b22'; // Forest Green
+				ctx.beginPath();
+				ctx.moveTo(-20, -10);
+				ctx.lineTo(10, -25);
+				ctx.lineTo(25, 5);
+				ctx.lineTo(10, 25);
+				ctx.lineTo(-25, 15);
+				ctx.fill();
+
 				// Turret
 				ctx.fillStyle = '#888';
 				ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
+				ctx.strokeStyle = '#444'; ctx.lineWidth = 2; ctx.stroke();
 				// Gun
 				ctx.fillStyle = '#444';
 				ctx.save(); ctx.rotate(e.angle || 0);
-				ctx.fillRect(0, -5, 25, 10);
+				ctx.fillRect(0, -5, 28, 10); // Longer barrel
 				ctx.restore();
 				ctx.restore();
 			});
@@ -1086,68 +1291,117 @@
 				ctx.shadowBlur = 0;
 
 				if (e.type === 'boss') {
-					const isBattleship = e.subType.includes("Battleship") || e.subType.includes("Cruiser") || e.subType.includes("Destroyer");
+					// Multi-Part Rendering
+					// 1. Draw Main Hull
 					const isCarrier = e.subType.includes("Carrier");
-					const isBomber = e.subType.includes("Bomber") || e.subType.includes("Fleet");
+					const isBomber = e.subType.includes("Bomber");
 
-					if (isBattleship) {
-						ctx.fillStyle = '#444'; ctx.fillRect(-e.w / 2, -e.h / 2, e.w, e.h);
-						ctx.fillStyle = '#333'; ctx.fillRect(-e.w / 2 + 5, -e.h / 2 + 5, e.w - 10, e.h - 10);
-						ctx.fillStyle = '#666';
-						ctx.beginPath(); ctx.arc(0, -e.h / 4, 20, 0, Math.PI * 2); ctx.fill();
-						ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill();
-						ctx.beginPath(); ctx.arc(0, e.h / 4, 20, 0, Math.PI * 2); ctx.fill();
-						ctx.strokeStyle = '#222'; ctx.lineWidth = 4;
-						let angle = Math.atan2(player.y - e.y, player.x - e.x);
-						// If bottom enter, turret faces inversely? 
-						if (e.enter === 'bottom') angle = Math.PI + angle; // Logic fix? No, atan2 points to player. Correct.
-
-						ctx.save(); ctx.translate(0, -e.h / 4); ctx.rotate(angle); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(30, 0); ctx.stroke(); ctx.restore();
-						ctx.save(); ctx.translate(0, 0); ctx.rotate(angle); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(30, 0); ctx.stroke(); ctx.restore();
-						ctx.save(); ctx.translate(0, e.h / 4); ctx.rotate(angle); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(30, 0); ctx.stroke(); ctx.restore();
-
-						ctx.fillStyle = '#555'; ctx.fillRect(-20, -e.h / 2 + 20, 40, 50);
-
-					} else if (isCarrier) {
-						ctx.fillStyle = '#334433'; ctx.fillRect(-e.w / 2, -e.h / 2, e.w, e.h);
-						ctx.fillStyle = '#666'; ctx.fillRect(-e.w / 4, -e.h / 2 + 10, e.w / 2, e.h - 20);
-						ctx.fillStyle = '#fff';
-						ctx.fillRect(-5, -e.h / 2 + 20, 10, 40); ctx.fillRect(-5, 0, 10, 40); ctx.fillRect(-5, e.h / 2 - 60, 10, 40);
-						ctx.fillStyle = '#444'; ctx.fillRect(e.w / 2 - 30, -50, 25, 80);
-					} else if (isBomber) {
+					if (isBomber) {
 						ctx.fillStyle = '#4a4';
+						// Wing shape
 						ctx.beginPath(); ctx.moveTo(0, -e.h / 2); ctx.lineTo(-e.w / 2, 0); ctx.lineTo(0, e.h / 2); ctx.lineTo(e.w / 2, 0); ctx.fill();
-						ctx.fillStyle = '#000'; ctx.globalAlpha = 0.5;
-						ctx.beginPath(); ctx.arc(-e.w / 3, 0, 30, 0, Math.PI * 2); ctx.fill();
-						ctx.beginPath(); ctx.arc(e.w / 3, 0, 30, 0, Math.PI * 2); ctx.fill();
-						ctx.globalAlpha = 1;
+					} else {
+						// Ship shape
+						ctx.fillStyle = '#444'; // Hull
+						ctx.beginPath(); ctx.moveTo(0, -e.h / 2 - 20); ctx.lineTo(-e.w / 2, -e.h / 4); ctx.lineTo(-e.w / 2, e.h / 2); ctx.lineTo(e.w / 2, e.h / 2); ctx.lineTo(e.w / 2, -e.h / 4); ctx.fill();
+
+						// Deck
+						ctx.fillStyle = isCarrier ? '#334433' : '#654321'; // Green for carrier, Wood for Battleship
+						ctx.fillRect(-e.w / 2 + 5, -e.h / 2 + 10, e.w - 10, e.h - 20);
+
+						// Flight lines
+						if (isCarrier) {
+							ctx.fillStyle = '#fff';
+							ctx.fillRect(-5, -e.h / 2 + 20, 10, e.h - 40);
+						}
 					}
+
+					// 2. Draw Parts
+					if (e.parts) {
+						e.parts.forEach(p => {
+							ctx.save(); ctx.translate(p.x, p.y);
+
+							if (p.t === 'turret_main') {
+								ctx.fillStyle = '#888'; ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
+								ctx.rotate(p.angle);
+								ctx.fillStyle = '#222'; ctx.fillRect(-5, -25, 10, 30); // Barrel
+								ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(-5, -25, 10, 30);
+							}
+							else if (p.t === 'turret_aa') {
+								ctx.fillStyle = '#666'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+								ctx.rotate(p.angle);
+								ctx.fillStyle = '#222'; ctx.fillRect(-3, -15, 6, 18);
+							}
+							else if (p.t === 'bridge') {
+								ctx.fillStyle = '#556'; ctx.fillRect(-15, -30, 30, 60);
+								ctx.fillStyle = '#000'; ctx.fillRect(-10, -10, 20, 5); // Windows
+							}
+							else if (p.t === 'propeller') {
+								ctx.rotate(p.angle);
+								ctx.fillStyle = 'rgba(255,255,255,0.5)';
+								ctx.fillRect(-20, -2, 40, 4);
+								ctx.fillRect(-2, -20, 4, 40);
+							}
+							ctx.restore();
+						});
+					}
+
 					if (e.hp < e.maxHp * 0.5) {
 						ctx.fillStyle = `rgba(100,100,100,${Math.random()})`;
 						ctx.beginPath(); ctx.arc((Math.random() - 0.5) * e.w, (Math.random() - 0.5) * e.h, 20, 0, Math.PI * 2); ctx.fill();
 					}
 
 				} else if (e.type === 'miniboss') {
-					ctx.fillStyle = '#884400';
-					ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(-40, 10); ctx.lineTo(40, 10); ctx.fill();
-					ctx.fillStyle = '#ffaa00';
-					ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
+					// B-17 Flying Fortress Style
+					ctx.fillStyle = '#556655'; // Olive Drab
+					// Main Fuselage
+					ctx.beginPath(); ctx.ellipse(0, 0, 15, 60, 0, 0, Math.PI * 2); ctx.fill();
+					// Wings
+					ctx.beginPath(); ctx.moveTo(-60, -10); ctx.lineTo(60, -10); ctx.lineTo(60, 10); ctx.lineTo(-60, 10); ctx.fill();
+					// Tail
+					ctx.beginPath(); ctx.moveTo(-20, -40); ctx.lineTo(20, -40); ctx.lineTo(0, -55); ctx.fill();
+
+					// Cockpit
+					ctx.fillStyle = '#88ccff';
+					ctx.beginPath(); ctx.arc(0, 20, 5, 0, Math.PI * 2); ctx.fill();
+
+					// Propellers (4)
+					ctx.fillStyle = 'rgba(255,255,255,0.4)';
+					const propTime = Date.now() / 50;
+					[-40, -20, 20, 40].forEach(x => {
+						ctx.save(); ctx.translate(x, 10);
+						ctx.rotate(propTime);
+						ctx.fillRect(-12, -2, 24, 4); ctx.fillRect(-2, -12, 4, 24);
+						ctx.restore();
+					});
+
 				} else if (e.type === 'grey') {
-					ctx.fillStyle = '#666';
-					ctx.beginPath(); ctx.moveTo(0, -25); ctx.lineTo(-25, 15); ctx.lineTo(25, 15); ctx.fill();
+					// Heavy Fighter (Me 110 style)
+					ctx.fillStyle = '#777';
+					ctx.beginPath(); ctx.ellipse(0, 0, 10, 25, 0, 0, Math.PI * 2); ctx.fill(); // Body
+					ctx.fillRect(-30, -5, 60, 12); // Wing
+					ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(0, 10, 3, 0, Math.PI * 2); ctx.fill(); // Prop
+
 				} else if (e.type === 'red_formation') {
-					ctx.fillStyle = '#ff3333';
-					ctx.beginPath(); ctx.moveTo(0, 15); ctx.lineTo(-10, -10); ctx.lineTo(10, -10); ctx.fill();
+					// Red Ace (Zero style)
+					ctx.fillStyle = '#cc0000';
+					ctx.beginPath(); ctx.moveTo(0, 15); ctx.lineTo(-5, -20); ctx.lineTo(5, -20); ctx.fill(); // Fuselage
+					ctx.beginPath(); ctx.moveTo(-15, -5); ctx.lineTo(15, -5); ctx.lineTo(0, 5); ctx.fill(); // Wing
+					ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, -5, 3, 0, Math.PI * 2); ctx.fill(); // Hinomaru?
+
 				} else {
-					ctx.fillStyle = '#339933';
-					ctx.beginPath(); ctx.moveTo(0, 15); ctx.lineTo(-12, -12); ctx.lineTo(12, -12); ctx.fill();
-					ctx.fillStyle = '#d00';
-					ctx.beginPath(); ctx.arc(-5, -5, 3, 0, Math.PI * 2); ctx.arc(5, -5, 3, 0, Math.PI * 2); ctx.fill();
+					// Green Fighter (Zero/Hayabusa)
+					ctx.fillStyle = '#336633';
+					ctx.beginPath(); ctx.ellipse(0, 0, 6, 18, 0, 0, Math.PI * 2); ctx.fill(); // Body
+					ctx.beginPath(); ctx.moveTo(-18, -2); ctx.lineTo(18, -2); ctx.lineTo(0, 5); ctx.fill(); // Wing
+					ctx.fillStyle = '#d00'; // Roundels
+					ctx.beginPath(); ctx.arc(-10, -2, 3, 0, Math.PI * 2); ctx.arc(10, -2, 3, 0, Math.PI * 2); ctx.fill();
+					ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(0, 18, 2, 0, Math.PI * 2); ctx.fill(); // Prop
 				}
 				ctx.restore();
 			});
 
-			// Bullets
+			// Bullets - Make Enemy bullets more visible if needed (Red/Yellow used currently)
 			bullets.forEach(b => {
 				ctx.fillStyle = b.color;
 				if (b.type === 'laser') {
