@@ -465,6 +465,7 @@ function App() {
         onAddGame={handleAddGame}
         onUpdateGame={handleUpdateGame}
         onDeleteGame={handleDeleteGame}
+        currentUser={user}
       />
 
       {/* Wallet Top-up Modal (Global) */}

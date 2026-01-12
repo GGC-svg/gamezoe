@@ -209,6 +209,40 @@ function initDb() {
                 });
             }
         });
+
+        // Admin Awards Table (Track admin point grants)
+        db.run(`CREATE TABLE IF NOT EXISTS admin_awards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            currency TEXT DEFAULT 'gold',
+            reason TEXT,
+            admin_id TEXT NOT NULL,
+            admin_name TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )`);
+
+        // User Suspensions Log Table
+        db.run(`CREATE TABLE IF NOT EXISTS user_suspensions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            action TEXT NOT NULL,
+            duration_hours INTEGER,
+            suspended_until DATETIME,
+            admin_id TEXT NOT NULL,
+            admin_name TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )`);
+
+        // Migration: Add suspended_until to users table
+        db.all("PRAGMA table_info(users)", (err, cols) => {
+            if (cols && !cols.find(c => c.name === 'suspended_until')) {
+                console.log("Migrating: Adding suspended_until column to users...");
+                db.run("ALTER TABLE users ADD COLUMN suspended_until DATETIME");
+            }
+        });
     });
 }
 

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Edit, Save, Link as LinkIcon, FileText, CreditCard, Activity, BarChart, GripVertical, Users } from 'lucide-react';
-import { Game, GameCategory } from '../types';
+import { X, Plus, Trash2, Edit, Save, Link as LinkIcon, FileText, CreditCard, Activity, BarChart, GripVertical, Users, ChevronRight } from 'lucide-react';
+import { Game, GameCategory, User } from '../types';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { gameService } from '../services/gameService';
+import UserDetailModal from './UserDetailModal';
 
 interface AdminDashboardProps {
    isOpen: boolean;
@@ -13,6 +14,7 @@ interface AdminDashboardProps {
    onAddGame: (game: Game) => void;
    onUpdateGame: (game: Game) => void;
    onDeleteGame: (id: string) => void;
+   currentUser?: User;
 }
 
 interface PricingTier {
@@ -41,6 +43,18 @@ interface PurchaseRecord {
    price: number;
    type: string;
    description: string;
+}
+
+interface WalletTransaction {
+   id: number;
+   order_id: string;
+   user_id: string;
+   amount: number;
+   currency: string;
+   type: string;
+   description: string;
+   status: string;
+   created_at: string;
 }
 
 interface GameActivity {
@@ -134,11 +148,15 @@ const SortableRow = ({ game, onEdit, onDelete }: SortableRowProps) => {
    );
 };
 
-const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDeleteGame }: AdminDashboardProps) => {
+const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDeleteGame, currentUser }: AdminDashboardProps) => {
    const [activeTab, setActiveTab] = useState<'list' | 'form' | 'logs' | 'purchases' | 'activities' | 'analytics' | 'users'>('list');
    const [editingId, setEditingId] = useState<string | null>(null);
    const [isReorderMode, setIsReorderMode] = useState<boolean>(false);
    const [isSavingOrder, setIsSavingOrder] = useState<boolean>(false);
+
+   // User Detail Modal State
+   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+   const [showUserDetail, setShowUserDetail] = useState(false);
 
    // Prevent body scroll when modal is open
    useEffect(() => {
@@ -668,11 +686,20 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
                   {/* Results */}
                   <div className="space-y-4">
                      {logs.map((user: any) => (
-                        <div key={user.id} className="bg-slate-900/50 p-6 rounded-xl border border-slate-700 flex items-center justify-between">
-                           <div>
+                        <div key={user.id} className="bg-slate-900/50 p-6 rounded-xl border border-slate-700 flex items-center justify-between hover:border-nexus-accent transition-colors group">
+                           <div
+                              className="flex-1 cursor-pointer"
+                              onClick={() => {
+                                 setSelectedUserId(user.id);
+                                 setShowUserDetail(true);
+                              }}
+                           >
                               <div className="flex items-center gap-2 mb-1">
-                                 <span className="text-lg font-bold text-white">{user.name}</span>
+                                 <span className="text-lg font-bold text-white group-hover:text-nexus-accent transition-colors">{user.name}</span>
                                  <span className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-400">{user.id}</span>
+                                 {user.role === 'admin' && (
+                                    <span className="text-xs bg-purple-600 px-2 py-1 rounded text-white">管理員</span>
+                                 )}
                               </div>
                               <div className="text-sm text-slate-400 mb-2">{user.email}</div>
                               <div className="text-2xl font-mono text-nexus-accent">{user.gold_balance} Gold</div>
@@ -683,10 +710,12 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
                                  type="number"
                                  placeholder="金額"
                                  className="w-32 bg-slate-800 border border-slate-600 rounded p-2 text-white text-right"
+                                 onClick={e => e.stopPropagation()}
                               />
                               <button
                                  className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded font-bold"
                                  onClick={async (e) => {
+                                    e.stopPropagation();
                                     const input = e.currentTarget.previousElementSibling as HTMLInputElement;
                                     const amount = parseFloat(input.value);
                                     if (!amount) return alert("請輸入金額");
@@ -708,6 +737,16 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
                                  }}
                               >
                                  補點
+                              </button>
+                              <button
+                                 className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded"
+                                 onClick={() => {
+                                    setSelectedUserId(user.id);
+                                    setShowUserDetail(true);
+                                 }}
+                                 title="查看詳情"
+                              >
+                                 <ChevronRight className="h-5 w-5" />
                               </button>
                            </div>
                         </div>
@@ -1068,6 +1107,20 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
                </div>
             )}
          </div>
+
+         {/* User Detail Modal */}
+         {selectedUserId && currentUser && (
+            <UserDetailModal
+               isOpen={showUserDetail}
+               onClose={() => {
+                  setShowUserDetail(false);
+                  setSelectedUserId(null);
+               }}
+               userId={selectedUserId}
+               adminId={currentUser.id}
+               adminName={currentUser.name}
+            />
+         )}
       </div>
    );
 };

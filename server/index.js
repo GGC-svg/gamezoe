@@ -1763,6 +1763,177 @@ app.post('/api/admin/users/topup', (req, res) => {
     });
 });
 
+// --- USER DETAIL MANAGEMENT API ---
+
+// Get user info
+app.get('/api/admin/users/:userId/info', (req, res) => {
+    const { userId } = req.params;
+    db.get("SELECT id, name, email, avatar, role, gold_balance, silver_balance, created_at, suspended_until FROM users WHERE id = ?", [userId], (err, user) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!user) return res.status(404).json({ error: "User not found" });
+        res.json(user);
+    });
+});
+
+// Get user game records
+app.get('/api/admin/users/:userId/games', (req, res) => {
+    const { userId } = req.params;
+    db.all(`
+        SELECT
+            ga.game_id,
+            COALESCE(g.title, ga.game_id) as game_title,
+            SUM(CAST((julianday(ga.last_heartbeat) - julianday(ga.start_time)) * 86400 AS INTEGER)) as total_playtime,
+            MAX(ga.last_heartbeat) as last_played,
+            COUNT(*) as play_count
+        FROM game_activities ga
+        LEFT JOIN games g ON ga.game_id = g.id
+        WHERE ga.user_id = ?
+        GROUP BY ga.game_id
+        ORDER BY last_played DESC
+    `, [userId], (err, records) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(records || []);
+    });
+});
+
+// Get user transactions
+app.get('/api/admin/users/:userId/transactions', (req, res) => {
+    const { userId } = req.params;
+    db.all("SELECT * FROM wallet_transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 100", [userId], (err, records) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(records || []);
+    });
+});
+
+// Get user login logs
+app.get('/api/admin/users/:userId/logins', (req, res) => {
+    const { userId } = req.params;
+    db.all("SELECT * FROM login_logs WHERE user_id = ? ORDER BY login_time DESC LIMIT 50", [userId], (err, records) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(records || []);
+    });
+});
+
+// Get user award records
+app.get('/api/admin/users/:userId/awards', (req, res) => {
+    const { userId } = req.params;
+    db.all("SELECT * FROM admin_awards WHERE user_id = ? ORDER BY created_at DESC LIMIT 50", [userId], (err, records) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(records || []);
+    });
+});
+
+// Change user role
+app.post('/api/admin/users/:userId/role', (req, res) => {
+    const { userId } = req.params;
+    const { role, adminId } = req.body;
+
+    if (!role || !['admin', 'user'].includes(role)) {
+        return res.status(400).json({ error: "Invalid role" });
+    }
+
+    db.run("UPDATE users SET role = ? WHERE id = ?", [role, userId], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: "User not found" });
+
+        console.log(`[Admin] User ${userId} role changed to ${role} by admin ${adminId}`);
+        res.json({ success: true });
+    });
+});
+
+// Award points to user
+app.post('/api/admin/users/:userId/award', (req, res) => {
+    const { userId } = req.params;
+    const { amount, currency, reason, adminId, adminName } = req.body;
+
+    if (!amount || !currency || !reason) {
+        return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const balanceColumn = currency === 'gold' ? 'gold_balance' : 'silver_balance';
+
+    db.run(`UPDATE users SET ${balanceColumn} = ${balanceColumn} + ? WHERE id = ?`, [amount, userId], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: "User not found" });
+
+        // Log the award
+        db.run(
+            "INSERT INTO admin_awards (user_id, amount, currency, reason, admin_id, admin_name, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now', '+8 hours'))",
+            [userId, amount, currency, reason, adminId, adminName],
+            (err) => {
+                if (err) console.error("Failed to log award:", err);
+            }
+        );
+
+        // Also log to wallet_transactions
+        const orderId = `AWARD-${Date.now()}`;
+        db.run(
+            "INSERT INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at) VALUES (?, ?, ?, ?, 'admin_award', ?, 'COMPLETED', datetime('now', '+8 hours'))",
+            [orderId, userId, amount, currency, `[${adminName}] ${reason}`],
+            (err) => {
+                if (err) console.error("Failed to log wallet tx:", err);
+            }
+        );
+
+        console.log(`[Admin] ${adminName} awarded ${amount} ${currency} to user ${userId}: ${reason}`);
+        res.json({ success: true });
+    });
+});
+
+// Suspend user
+app.post('/api/admin/users/:userId/suspend', (req, res) => {
+    const { userId } = req.params;
+    const { hours, adminId, adminName } = req.body;
+
+    if (!hours) {
+        return res.status(400).json({ error: "Missing hours" });
+    }
+
+    // Calculate suspended_until
+    const suspendedUntil = new Date();
+    suspendedUntil.setHours(suspendedUntil.getHours() + hours);
+
+    db.run("UPDATE users SET suspended_until = ? WHERE id = ?", [suspendedUntil.toISOString(), userId], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: "User not found" });
+
+        // Log the suspension
+        db.run(
+            "INSERT INTO user_suspensions (user_id, action, duration_hours, suspended_until, admin_id, admin_name, created_at) VALUES (?, 'suspend', ?, ?, ?, ?, datetime('now', '+8 hours'))",
+            [userId, hours, suspendedUntil.toISOString(), adminId, adminName],
+            (err) => {
+                if (err) console.error("Failed to log suspension:", err);
+            }
+        );
+
+        console.log(`[Admin] ${adminName} suspended user ${userId} for ${hours} hours`);
+        res.json({ success: true, suspended_until: suspendedUntil.toISOString() });
+    });
+});
+
+// Unsuspend user
+app.post('/api/admin/users/:userId/unsuspend', (req, res) => {
+    const { userId } = req.params;
+    const { adminId, adminName } = req.body;
+
+    db.run("UPDATE users SET suspended_until = NULL WHERE id = ?", [userId], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: "User not found" });
+
+        // Log the unsuspension
+        db.run(
+            "INSERT INTO user_suspensions (user_id, action, duration_hours, suspended_until, admin_id, admin_name, created_at) VALUES (?, 'unsuspend', 0, NULL, ?, ?, datetime('now', '+8 hours'))",
+            [userId, adminId, adminName],
+            (err) => {
+                if (err) console.error("Failed to log unsuspension:", err);
+            }
+        );
+
+        console.log(`[Admin] ${adminName} unsuspended user ${userId}`);
+        res.json({ success: true });
+    });
+});
+
 app.delete('/api/admin/tiers/:id', (req, res) => {
     const { id } = req.params;
     db.run("DELETE FROM game_pricing_tiers WHERE id = ?", [id], function (err) {
