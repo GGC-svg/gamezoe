@@ -113,14 +113,15 @@ function App() {
     setShowAdmin(false);
   };
 
-  // Security: Idle Timeout (30 minutes)
+  // Security: Idle Timeout (30 minutes) - Paused when playing games
   useEffect(() => {
     let idleTimer: NodeJS.Timeout;
     const TIMEOUT_DURATION = 30 * 60 * 1000; // 30 minutes
 
     const resetTimer = () => {
       clearTimeout(idleTimer);
-      if (user) {
+      // Don't start idle timer if user is playing a game (iframe activity not detectable)
+      if (user && !isPlaying) {
         idleTimer = setTimeout(() => {
           handleLogout();
           alert("您已閒置超過 30 分鐘，為保護您的帳號安全，系統已自動登出。");
@@ -128,7 +129,7 @@ function App() {
       }
     };
 
-    if (user) {
+    if (user && !isPlaying) {
       window.addEventListener('mousemove', resetTimer);
       window.addEventListener('keydown', resetTimer);
       window.addEventListener('click', resetTimer);
@@ -141,7 +142,7 @@ function App() {
       window.removeEventListener('keydown', resetTimer);
       window.removeEventListener('click', resetTimer);
     };
-  }, [user]);
+  }, [user, isPlaying]);
 
   // Navigation Handler
   const handleNavigate = (view: string) => {
