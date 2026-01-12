@@ -752,6 +752,41 @@ ports.forEach(port => {
 
             socket.userId = userId;
 
+            // [KICK_OLD_SESSION] Find and disconnect any existing socket for this userId
+            // This prevents "ghost" connections from receiving broadcasts from old rooms
+            ioInstances.forEach(ioInst => {
+                ioInst.sockets.sockets.forEach((existingSocket) => {
+                    if (existingSocket.userId === userId && existingSocket.id !== socket.id) {
+                        console.log(`[KICK] Found existing socket ${existingSocket.id} for user ${userId} in room ${existingSocket.currentRoomId}`);
+
+                        // Leave old room
+                        if (existingSocket.currentRoomId) {
+                            const oldRoomName = 'room_' + existingSocket.currentRoomId;
+                            existingSocket.leave(oldRoomName);
+
+                            // Clean up user from old room
+                            const oldRoom = roomManager.getRoom(existingSocket.currentRoomId);
+                            if (oldRoom && oldRoom.users[userId]) {
+                                // Save score before cleanup
+                                saveUserToDB(userId, oldRoom.users[userId].score, existingSocket.gameId || oldRoom.users[userId].gameId);
+                                delete oldRoom.users[userId];
+                                console.log(`[KICK] Removed user ${userId} from old room ${existingSocket.currentRoomId}`);
+
+                                // Notify others in old room
+                                ioInst.in(oldRoomName).emit('exit_notify_push', userId);
+                            }
+
+                            roomManager.checkAndDeleteEmptyRoom(existingSocket.currentRoomId);
+                        }
+
+                        // Disconnect old socket
+                        existingSocket.emit('kick_notify', { reason: 'Logged in from another location' });
+                        existingSocket.disconnect(true);
+                        console.log(`[KICK] Disconnected old socket ${existingSocket.id}`);
+                    }
+                });
+            });
+
             socket.currentRoomId = validRoomId;
             console.log(`[LOGIN] User ${userId} joining room ${validRoomId}`);
 
