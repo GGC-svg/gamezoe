@@ -207,6 +207,21 @@ const GameBalanceModal: React.FC<GameBalanceModalProps> = ({
                         </div>
                      </div>
 
+                     {/* Hint when game balance is 0 */}
+                     {balance.game === 0 && balance.platform > 0 && (
+                        <div className="bg-nexus-accent/10 border border-nexus-accent/30 rounded-xl p-3 text-sm">
+                           <p className="text-nexus-accent font-medium">💡 開始遊戲前請先轉入點數</p>
+                           <p className="text-slate-400 mt-1">在下方輸入金額，點擊「轉入遊戲」將平台 G 幣轉換為遊戲點數即可開始遊玩！</p>
+                        </div>
+                     )}
+
+                     {balance.game === 0 && balance.platform === 0 && (
+                        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-sm">
+                           <p className="text-yellow-400 font-medium">💰 您的 G 幣餘額不足</p>
+                           <p className="text-slate-400 mt-1">請先至「錢包」儲值 G 幣，再回來轉入遊戲點數。</p>
+                        </div>
+                     )}
+
                      {/* Stats */}
                      <div className="grid grid-cols-3 gap-2 text-center">
                         <div className="bg-slate-900/30 rounded-lg p-2">
