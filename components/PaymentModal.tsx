@@ -22,6 +22,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ game, isOpen, onClose, onSu
       setStep('processing');
       setError(null);
 
+      // Debug log
+      console.log('[PaymentModal] Purchase request:', {
+         gameId: game.id,
+         userId: currentUser.id,
+         tierId: game.selectedTier?.id,
+         selectedTier: game.selectedTier
+      });
+
       try {
          const res = await fetch(`/api/games/${game.id}/purchase`, {
             method: 'POST',
@@ -33,6 +41,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ game, isOpen, onClose, onSu
          });
 
          const data = await res.json();
+         console.log('[PaymentModal] Purchase response:', { status: res.status, data });
 
          if (res.ok && data.success) {
             setStep('success');
@@ -40,6 +49,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ game, isOpen, onClose, onSu
                onSuccess({ balance: data.newBalance, expiresAt: data.expiresAt });
             }, 1500);
          } else {
+            console.error('[PaymentModal] Purchase failed:', data.error);
             setError(data.error || "購買失敗");
             setStep('confirm');
          }
