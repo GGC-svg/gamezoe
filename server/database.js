@@ -183,6 +183,32 @@ function initDb() {
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (game_id) REFERENCES games(id)
         )`);
+
+        // User Library Table (Game ownership & rentals)
+        db.run(`CREATE TABLE IF NOT EXISTS user_library (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            game_id TEXT NOT NULL,
+            purchase_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME,
+            UNIQUE(user_id, game_id),
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (game_id) REFERENCES games(id)
+        )`, (err) => {
+            if (!err) {
+                // Migration: Ensure user_library has purchase_date
+                db.all("PRAGMA table_info(user_library)", (err, cols) => {
+                    if (cols && !cols.find(c => c.name === 'purchase_date')) {
+                        console.log("Migrating: Adding purchase_date column to user_library...");
+                        db.run("ALTER TABLE user_library ADD COLUMN purchase_date DATETIME DEFAULT CURRENT_TIMESTAMP");
+                    }
+                    if (cols && !cols.find(c => c.name === 'expires_at')) {
+                        console.log("Migrating: Adding expires_at column to user_library...");
+                        db.run("ALTER TABLE user_library ADD COLUMN expires_at DATETIME");
+                    }
+                });
+            }
+        });
     });
 }
 
