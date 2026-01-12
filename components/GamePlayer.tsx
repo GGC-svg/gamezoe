@@ -152,12 +152,21 @@ const GamePlayer: React.FC<GamePlayerProps> = ({ game, onClose, currentUser, exp
                     {currentUser && (
                         <button
                             onClick={() => setShowBalanceModal(true)}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-nexus-accent rounded-lg transition-colors"
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
+                                gameBalance === 0
+                                    ? 'bg-nexus-accent/20 border-2 border-nexus-accent animate-pulse hover:animate-none hover:bg-nexus-accent/30'
+                                    : 'bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-nexus-accent'
+                            }`}
                             title="遊戲點數管理"
                         >
-                            <Coins className="h-4 w-4 text-nexus-accent" />
-                            <span className="text-nexus-accent font-bold">{gameBalance.toLocaleString()}</span>
+                            <Coins className={`h-4 w-4 ${gameBalance === 0 ? 'text-yellow-400' : 'text-nexus-accent'}`} />
+                            <span className={`font-bold ${gameBalance === 0 ? 'text-yellow-400' : 'text-nexus-accent'}`}>
+                                {gameBalance.toLocaleString()}
+                            </span>
                             <span className="text-slate-500 text-xs hidden md:inline">點</span>
+                            {gameBalance === 0 && (
+                                <span className="text-yellow-400 text-xs font-medium hidden md:inline ml-1">← 點我轉入</span>
+                            )}
                         </button>
                     )}
                     <button onClick={handleOpenExternal} className="text-slate-400 hover:text-white flex items-center gap-1 text-xs md:text-sm px-2 py-1 rounded hover:bg-slate-800 transition-colors" title="在新視窗開啟">
