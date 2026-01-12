@@ -131,47 +131,54 @@ wss.on('connection', function connection(ws) {
                     return;
                 }
 
-                console.log("[Catch] fishNo:", json.fishNo, "from userId:", userId);
-
-                // [RTP 96%] Calculate catch probability based on fish value
-                // Higher value fish = lower catch rate, maintains 96% RTP
-                const RTP = 0.96;
                 const fishValue = json.fishNo || 1;
-                const catchProbability = Math.min(RTP / fishValue, 0.95); // Cap at 95% to avoid guaranteed catches
+
+                // [RTP 96%] Each catch attempt costs 100 (0.1 in DB)
+                // Reward = fishValue * 100, Probability = 96% / fishValue
+                // Expected return = (0.96/fishValue) * (fishValue*100) = 96
+                // RTP = 96 / 100 = 96%
+                const COST_PER_SHOT = 0.1; // 100 in-game = 0.1 in DB
+                const RTP = 0.96;
+                const catchProbability = Math.min(RTP / fishValue, 0.95);
                 const isCatch = Math.random() < catchProbability;
 
-                if (isCatch) {
-                    const rewardInGame = 100 * (json.fishNo || 1);
-                    const rewardInDB = rewardInGame / 1000;
+                console.log(`[Catch] fishNo: ${fishValue}, prob: ${(catchProbability*100).toFixed(1)}%, userId: ${userId}`);
 
-                    // [GAME_ID_FIX] Update user_game_balances instead of users.fish_balance
-                    db.run(
-                        `INSERT INTO user_game_balances (user_id, game_id, balance, created_at, updated_at)
-                         VALUES (?, ?, ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))
-                         ON CONFLICT(user_id, game_id) DO UPDATE SET
-                         balance = balance + ?,
-                         updated_at = datetime('now', '+8 hours')`,
-                        [userId, GAME_ID, rewardInDB, rewardInDB],
-                        function (err) {
-                            if (err) {
-                                console.error('[Catch] DB Update Error:', err);
-                                return;
-                            }
+                // [CRITICAL] Always deduct cost first, then add reward if caught
+                const rewardInGame = isCatch ? (100 * fishValue) : 0;
+                const rewardInDB = rewardInGame / 1000;
+                const netChange = rewardInDB - COST_PER_SHOT; // Can be negative!
 
-                            // [GAME_ID_FIX] Read updated balance from user_game_balances
-                            db.get(
-                                'SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = ?',
-                                [userId, GAME_ID],
-                                (err, row) => {
-                                    if (err) {
-                                        console.error('[Catch] DB Read Error:', err);
-                                        return;
-                                    }
+                // [RTP FIX] Always update balance: deduct cost, add reward if caught
+                // netChange can be negative (miss) or positive (catch high value fish)
+                db.run(
+                    `INSERT INTO user_game_balances (user_id, game_id, balance, created_at, updated_at)
+                     VALUES (?, ?, ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))
+                     ON CONFLICT(user_id, game_id) DO UPDATE SET
+                     balance = balance + ?,
+                     updated_at = datetime('now', '+8 hours')`,
+                    [userId, GAME_ID, netChange, netChange],
+                    function (err) {
+                        if (err) {
+                            console.error('[Catch] DB Update Error:', err);
+                            return;
+                        }
 
-                                    const newBalance = row ? row.balance : rewardInDB;
-                                    const newBalanceInGame = Math.round(newBalance * 1000);
+                        // Read updated balance
+                        db.get(
+                            'SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = ?',
+                            [userId, GAME_ID],
+                            (err, row) => {
+                                if (err) {
+                                    console.error('[Catch] DB Read Error:', err);
+                                    return;
+                                }
 
-                                    console.log(`[Catch] Success! Reward: ${rewardInDB}, New Balance: ${newBalance} (${newBalanceInGame} in-game)`);
+                                const newBalance = row ? row.balance : 0;
+                                const newBalanceInGame = Math.round(newBalance * 1000);
+
+                                if (isCatch) {
+                                    console.log(`[Catch] HIT! Fish:${fishValue}, Reward:${rewardInDB}, Cost:${COST_PER_SHOT}, Net:${netChange.toFixed(3)}, Balance:${newBalance.toFixed(3)}`);
 
                                     const response = {
                                         Msg: MSG_CATCH_FISH,
@@ -188,13 +195,14 @@ wss.on('connection', function connection(ws) {
                                         y: json.y
                                     };
                                     ws.send(JSON.stringify(response));
+                                } else {
+                                    console.log(`[Catch] MISS! Fish:${fishValue}, Cost:${COST_PER_SHOT}, Balance:${newBalance.toFixed(3)}`);
+                                    // Don't send response for miss - client handles locally
                                 }
-                            );
-                        }
-                    );
-                } else {
-                    console.log("[Catch] Miss!");
-                }
+                            }
+                        );
+                    }
+                );
             }
             // [DEBUG] Log unknown messages to understand client protocol
             else {
