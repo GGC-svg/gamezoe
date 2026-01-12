@@ -859,6 +859,10 @@ ports.forEach(port => {
                     // [ARCH FIX] Read gold_balance separately and NEVER sync it with game score automatically
                     const currentGold = dbUser ? toStorageInt(dbUser.gold_balance || 0) : 0;
 
+                    // [FIX] Calculate VIP first to set correct initial cannonKind
+                    const initialVip = calculateVip(currentBalance || 0);
+                    const initialCannonKind = VIP_TO_CANNON[initialVip] || 1;
+
                     room.users[socket.userId] = {
                         userId: userId, // Ensure userId is set here
                         gameId: gameId, // [GAME_ID_FIX] Store gameId for periodic saves
@@ -867,13 +871,13 @@ ports.forEach(port => {
                         seatIndex: freeIdx,    // [FIXED] Use Calculated Seat Index!
                         name: dbUser ? dbUser.name : ("Hunter_" + socket.userId.substr(0, 5)),
                         online: true,
-                        cannonKind: 1, // Default cannon
-                        vip: 0, // start with 0, will be updated below
-                        recharge_total: 0,
+                        cannonKind: initialCannonKind, // [FIX] Set correct cannon based on VIP
+                        vip: initialVip, // [FIX] Set correct VIP on creation
+                        recharge_total: currentBalance || 0, // [FIX] Sync recharge_total
                         power: 0,
                         bullet: 0
                     };
-                    console.log(`[BALANCE_SYNC] User ${socket.userId} login. GameID: ${gameId}, Seat: ${freeIdx}, VIP: 0`);
+                    console.log(`[BALANCE_SYNC] User ${socket.userId} login. GameID: ${gameId}, Seat: ${freeIdx}, VIP: ${initialVip}, Cannon: ${initialCannonKind}`);
                 }
 
                 // [VIP_FIX] Calculate VIP based on mock recharge (Simple Logic)
@@ -1389,6 +1393,40 @@ ports.forEach(port => {
                 io.in('room_' + socket.currentRoomId).emit('catch_fish_reply', catchReply);
                 console.log(`[LASER HIT] User ${socket.userId} hit ${killedFishes.length} fish. Reward: ${catchFishAddScore}`);
             }
+        });
+
+        // --- CHANGE CANNON ---
+        // [CANONICAL] From Go: request.go:350-369
+        socket.on('user_change_cannon', (data) => {
+            const reqData = parsePayload(data);
+            const room = roomManager.getRoom(socket.currentRoomId);
+            if (!room || !room.users[socket.userId]) return;
+
+            const cannonKind = parseInt(reqData.cannonKind);
+            if (!cannonKind || cannonKind < 1) {
+                console.warn(`[CANNON] Invalid cannonKind: ${cannonKind}`);
+                return;
+            }
+
+            // [CANONICAL] If laser cannon (22), check power requirement
+            if (cannonKind === 22) {
+                if ((room.users[socket.userId].power || 0) < 1) {
+                    console.log(`[CANNON] User ${socket.userId} tried to switch to laser without full power`);
+                    return;
+                }
+            }
+
+            // Update cannon in memory
+            room.users[socket.userId].cannonKind = cannonKind;
+            console.log(`[CANNON] User ${socket.userId} changed cannon to ${cannonKind}`);
+
+            // Broadcast to other players in room
+            const response = {
+                userId: socket.userId,
+                chairId: room.users[socket.userId].seatIndex + 1,
+                cannonKind: cannonKind
+            };
+            socket.broadcast.to('room_' + socket.currentRoomId).emit('user_change_cannon_reply', response);
         });
 
         // --- LOCK FISH (Restored) ---
