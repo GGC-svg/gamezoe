@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dbPath = path.join(__dirname, 'platform.db');
+const dbPath = path.join(__dirname, 'gamezoe.db');
 const db = new sqlite3.Database(dbPath);
 
 const newGames = [
