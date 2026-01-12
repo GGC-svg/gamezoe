@@ -641,15 +641,33 @@ app.get('/api/bridge/balance/:userId', verifyBridgeKey, (req, res) => {
             return;
         }
 
-        // Get game-specific balance from new table
+        // Get game-specific balance from new table (with lazy initialization)
         db.get("SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = ?", [userId, gameId], (err, gameRow) => {
-            const gameBalance = gameRow ? gameRow.balance : 0;
-            res.json({
-                success: true,
-                gold: userRow.gold_balance,
-                silver: userRow.silver_balance,
-                gameScore: gameBalance
-            });
+            if (gameRow) {
+                res.json({
+                    success: true,
+                    gold: userRow.gold_balance,
+                    silver: userRow.silver_balance,
+                    gameScore: gameRow.balance
+                });
+            } else {
+                // Lazy init: Create 500 initial balance for first-time game access
+                const initialBalance = 500;
+                db.run(
+                    `INSERT INTO user_game_balances (user_id, game_id, balance, created_at, updated_at) VALUES (?, ?, ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))`,
+                    [userId, gameId, initialBalance],
+                    (insertErr) => {
+                        if (insertErr) console.error(`[LazyInit] Failed:`, insertErr.message);
+                        else console.log(`[LazyInit] Created ${initialBalance} for ${userId}/${gameId}`);
+                        res.json({
+                            success: true,
+                            gold: userRow.gold_balance,
+                            silver: userRow.silver_balance,
+                            gameScore: initialBalance
+                        });
+                    }
+                );
+            }
         });
     });
 });
