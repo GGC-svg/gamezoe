@@ -132,22 +132,25 @@ wss.on('connection', function connection(ws) {
                 }
 
                 const fishValue = json.fishNo || 1;
+                const bulletNum = json.bulletnum || 5; // Cannon bet: 5, 10, 20, 100, 200
 
-                // [RTP 96%] Each catch attempt costs 100 (0.1 in DB)
-                // Reward = fishValue * 100, Probability = 96% / fishValue
-                // Expected return = (0.96/fishValue) * (fishValue*100) = 96
-                // RTP = 96 / 100 = 96%
-                const COST_PER_SHOT = 0.1; // 100 in-game = 0.1 in DB
+                // [RTP 96%] Cost = bulletNum (in-game), Reward = bulletNum * fishValue
+                // Probability = 96% / fishValue
+                // Expected return = (0.96/fishValue) * (bulletNum * fishValue) = 0.96 * bulletNum
+                // RTP = 0.96 * bulletNum / bulletNum = 96%
+                const costInGame = bulletNum;
+                const costInDB = costInGame / 1000;
                 const RTP = 0.96;
                 const catchProbability = Math.min(RTP / fishValue, 0.95);
                 const isCatch = Math.random() < catchProbability;
 
-                console.log(`[Catch] fishNo: ${fishValue}, prob: ${(catchProbability*100).toFixed(1)}%, userId: ${userId}`);
+                console.log(`[Catch] fish:${fishValue}, cannon:${bulletNum}, prob:${(catchProbability*100).toFixed(1)}%, userId:${userId}`);
 
                 // [CRITICAL] Always deduct cost first, then add reward if caught
-                const rewardInGame = isCatch ? (100 * fishValue) : 0;
+                // Reward scales with both fish value AND cannon bet
+                const rewardInGame = isCatch ? (bulletNum * fishValue) : 0;
                 const rewardInDB = rewardInGame / 1000;
-                const netChange = rewardInDB - COST_PER_SHOT; // Can be negative!
+                const netChange = rewardInDB - costInDB; // Can be negative!
 
                 // [RTP FIX] Always update balance: deduct cost, add reward if caught
                 // netChange can be negative (miss) or positive (catch high value fish)
@@ -178,7 +181,7 @@ wss.on('connection', function connection(ws) {
                                 const newBalanceInGame = Math.round(newBalance * 1000);
 
                                 if (isCatch) {
-                                    console.log(`[Catch] HIT! Fish:${fishValue}, Reward:${rewardInDB}, Cost:${COST_PER_SHOT}, Net:${netChange.toFixed(3)}, Balance:${newBalance.toFixed(3)}`);
+                                    console.log(`[Catch] HIT! Fish:${fishValue}x, Cannon:${bulletNum}, Reward:${rewardInGame}, Cost:${costInGame}, Net:${netChange.toFixed(3)}, Balance:${newBalance.toFixed(3)}`);
 
                                     const response = {
                                         Msg: MSG_CATCH_FISH,
@@ -196,7 +199,7 @@ wss.on('connection', function connection(ws) {
                                     };
                                     ws.send(JSON.stringify(response));
                                 } else {
-                                    console.log(`[Catch] MISS! Fish:${fishValue}, Cost:${COST_PER_SHOT}, Balance:${newBalance.toFixed(3)}`);
+                                    console.log(`[Catch] MISS! Fish:${fishValue}x, Cannon:${bulletNum}, Cost:${costInGame}, Balance:${newBalance.toFixed(3)}`);
                                     // Don't send response for miss - client handles locally
                                 }
                             }
