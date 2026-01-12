@@ -1,10 +1,15 @@
 /**
- * Script to add 8 new games to the platform database
+ * Script to add 7 new games to the platform database
  * Run with: node add_new_games.js
  */
 
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+import sqlite3Pkg from 'sqlite3';
+const sqlite3 = sqlite3Pkg.verbose();
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const dbPath = path.join(__dirname, 'platform.db');
 const db = new sqlite3.Database(dbPath);
