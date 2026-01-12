@@ -206,7 +206,7 @@ app.post('/api/ai/generate', async (req, res) => {
 
         // Create model instance
         const model = genAI.getGenerativeModel({
-            model: "models/gemini-1.5-flash",
+            model: "gemini-2.0-flash",
             systemInstruction: systemInstruction
         });
 
