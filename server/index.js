@@ -1107,6 +1107,95 @@ app.get('/api/game-transactions/:userId/:gameId', (req, res) => {
 });
 
 
+// --- GAME SAVES API (Cross-device progress sync) ---
+
+// Get game save
+app.get('/api/game-saves/:userId/:gameId', (req, res) => {
+    const { userId, gameId } = req.params;
+
+    db.get(
+        "SELECT save_data, updated_at FROM game_saves WHERE user_id = ? AND game_id = ?",
+        [userId, gameId],
+        (err, row) => {
+            if (err) {
+                res.status(500).json({ error: err.message });
+                return;
+            }
+
+            if (!row) {
+                res.json({ success: true, save_data: null });
+                return;
+            }
+
+            try {
+                const saveData = JSON.parse(row.save_data);
+                res.json({
+                    success: true,
+                    save_data: saveData,
+                    updated_at: row.updated_at
+                });
+            } catch (e) {
+                res.json({ success: true, save_data: row.save_data, updated_at: row.updated_at });
+            }
+        }
+    );
+});
+
+// Save game progress (upsert)
+app.post('/api/game-saves', (req, res) => {
+    const { userId, gameId, saveData } = req.body;
+
+    if (!userId || !gameId || saveData === undefined) {
+        res.status(400).json({ error: "Missing required fields: userId, gameId, saveData" });
+        return;
+    }
+
+    const saveDataStr = typeof saveData === 'string' ? saveData : JSON.stringify(saveData);
+
+    db.run(
+        `INSERT INTO game_saves (user_id, game_id, save_data, created_at, updated_at)
+         VALUES (?, ?, ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))
+         ON CONFLICT(user_id, game_id) DO UPDATE SET
+         save_data = excluded.save_data,
+         updated_at = datetime('now', '+8 hours')`,
+        [userId, gameId, saveDataStr],
+        function(err) {
+            if (err) {
+                res.status(500).json({ error: err.message });
+                return;
+            }
+
+            res.json({
+                success: true,
+                message: "Game progress saved",
+                user_id: userId,
+                game_id: gameId
+            });
+        }
+    );
+});
+
+// Delete game save (optional - for reset)
+app.delete('/api/game-saves/:userId/:gameId', (req, res) => {
+    const { userId, gameId } = req.params;
+
+    db.run(
+        "DELETE FROM game_saves WHERE user_id = ? AND game_id = ?",
+        [userId, gameId],
+        function(err) {
+            if (err) {
+                res.status(500).json({ error: err.message });
+                return;
+            }
+
+            res.json({
+                success: true,
+                message: "Game save deleted"
+            });
+        }
+    );
+});
+
 // --- GAME PRICING & ACCESS API ---
 
 // Get Game Pricing Tiers

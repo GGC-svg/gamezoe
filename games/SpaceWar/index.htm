@@ -3,7 +3,10 @@
 <head>
     <meta charset="utf-8">
     <title>Space Attack</title>
-    <script type="text/javascript">document.domain='4399.com'</script>
+    <script type="text/javascript">
+    // document.domain='4399.com' - Disabled for GameZoe platform
+    </script>
+    <script src="/games/gamezoe-save-sdk.js"></script>
     <link rel="icon" type="image/GIF" href="res/game.ico"/>
     <meta name="apple-mobile-web-app-capable" content="yes"/>
     <meta name="full-screen" content="yes"/>
@@ -41,5 +44,37 @@
 
 
 <script cocos src="game.min.js"></script>
+<script>
+// GameZoe 雲端存檔整合
+(function() {
+    const GAME_ID = 'space-war';
+    const LOCAL_KEY = 'FirePlane_data';
+
+    GameZoeSave.init(GAME_ID).then(async () => {
+        if (GameZoeSave.isUserLoggedIn()) {
+            const cloudSave = await GameZoeSave.load();
+            if (cloudSave) {
+                const localSave = localStorage.getItem(LOCAL_KEY);
+                if (!localSave) {
+                    localStorage.setItem(LOCAL_KEY, JSON.stringify(cloudSave));
+                    console.log('[SpaceWar] 已從雲端恢復存檔');
+                }
+            }
+        }
+    });
+
+    const originalSetItem = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function(key, value) {
+        originalSetItem(key, value);
+        if (key === LOCAL_KEY && GameZoeSave.isUserLoggedIn()) {
+            try {
+                GameZoeSave.save(JSON.parse(value));
+            } catch (e) {
+                GameZoeSave.save(value);
+            }
+        }
+    };
+})();
+</script>
 </body>
 </html>

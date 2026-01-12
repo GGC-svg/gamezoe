@@ -14,7 +14,44 @@
     <meta name="viewport" content="initial-scale=1.0001, minimum-scale=1.0001, maximum-scale=1.0001, user-scalable=no, minimal-ui" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <link rel="stylesheet" type="text/css" href="game.css">
+    <script type="text/javascript" src="/games/gamezoe-save-sdk.js"></script>
     <script type="text/javascript" src="game.js"></script>
+    <script type="text/javascript">
+    // GameZoe 雲端存檔整合
+    (function() {
+        const GAME_ID = 'bubble-mush';
+        const LOCAL_KEY = 'levelBubble';
+
+        // 初始化並同步雲端存檔
+        GameZoeSave.init(GAME_ID).then(async () => {
+            if (GameZoeSave.isUserLoggedIn()) {
+                // 從雲端讀取存檔
+                const cloudSave = await GameZoeSave.load();
+                if (cloudSave) {
+                    // 比較雲端和本地存檔，使用較新的
+                    const localSave = localStorage.getItem(LOCAL_KEY);
+                    if (!localSave) {
+                        localStorage.setItem(LOCAL_KEY, JSON.stringify(cloudSave));
+                        console.log('[BubbleMush] 已從雲端恢復存檔');
+                    }
+                }
+            }
+        });
+
+        // 攔截 localStorage.setItem 來同步到雲端
+        const originalSetItem = localStorage.setItem.bind(localStorage);
+        localStorage.setItem = function(key, value) {
+            originalSetItem(key, value);
+            if (key === LOCAL_KEY && GameZoeSave.isUserLoggedIn()) {
+                try {
+                    GameZoeSave.save(JSON.parse(value));
+                } catch (e) {
+                    GameZoeSave.save(value);
+                }
+            }
+        };
+    })();
+    </script>
 </head>
 
 <body onload="setTimeout(function(){window.scrollTo(0,1)},1);">

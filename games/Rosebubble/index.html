@@ -9,6 +9,7 @@
     <title>罗斯魔影消消乐h5游戏源码 www.bootstrapmb.com</title>
 
     <link href="app.css" rel="stylesheet" type="text/css" />
+    <script src="/games/gamezoe-save-sdk.js"></script>
     <script src="lib/easeljs-NEXT.min.js"></script>
     <script src="lib/preloadjs-NEXT.min.js"></script>
     <script src="lib/soundjs-NEXT.min.js"></script>
@@ -30,6 +31,38 @@
     <script>
         h5api.initGame(100040508, "罗斯魔影", 640, 960);
         h5api.progress(100);
+    </script>
+    <script>
+    // GameZoe 雲端存檔整合
+    (function() {
+        const GAME_ID = 'rose-bubble';
+        const LOCAL_KEY = 'save';
+
+        GameZoeSave.init(GAME_ID).then(async () => {
+            if (GameZoeSave.isUserLoggedIn()) {
+                const cloudSave = await GameZoeSave.load();
+                if (cloudSave) {
+                    const localSave = localStorage.getItem(LOCAL_KEY);
+                    if (!localSave) {
+                        localStorage.setItem(LOCAL_KEY, JSON.stringify(cloudSave));
+                        console.log('[Rosebubble] 已從雲端恢復存檔');
+                    }
+                }
+            }
+        });
+
+        const originalSetItem = localStorage.setItem.bind(localStorage);
+        localStorage.setItem = function(key, value) {
+            originalSetItem(key, value);
+            if (key === LOCAL_KEY && GameZoeSave.isUserLoggedIn()) {
+                try {
+                    GameZoeSave.save(JSON.parse(value));
+                } catch (e) {
+                    GameZoeSave.save(value);
+                }
+            }
+        };
+    })();
     </script>
 </body>
 </html>

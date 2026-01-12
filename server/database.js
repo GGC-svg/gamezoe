@@ -243,6 +243,19 @@ function initDb() {
                 db.run("ALTER TABLE users ADD COLUMN suspended_until DATETIME");
             }
         });
+
+        // Game Saves Table (Cross-device game progress sync)
+        db.run(`CREATE TABLE IF NOT EXISTS game_saves (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            game_id TEXT NOT NULL,
+            save_data TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, game_id),
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (game_id) REFERENCES games(id)
+        )`);
     });
 }
 

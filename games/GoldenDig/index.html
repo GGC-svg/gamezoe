@@ -71,6 +71,7 @@
 	
 	<!-- Construct 2 exported games require jQuery. -->
 	<script src="jquery-2.1.1.min.js"></script>
+	<script src="/games/gamezoe-save-sdk.js"></script>
 
 
 	
@@ -124,6 +125,57 @@
 				OnRegisterSWError(e);
 			}
 		};
+
+        // GameZoe 雲端存檔整合 (Construct 2)
+        (function() {
+            const GAME_ID = 'golden-dig';
+            const C2_PREFIX = '__c2save_';
+
+            // 收集所有 C2 存檔
+            function collectC2Saves() {
+                const saves = {};
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith(C2_PREFIX)) {
+                        saves[key] = localStorage.getItem(key);
+                    }
+                }
+                return Object.keys(saves).length > 0 ? saves : null;
+            }
+
+            // 恢復 C2 存檔
+            function restoreC2Saves(saves) {
+                if (!saves) return;
+                for (const key in saves) {
+                    localStorage.setItem(key, saves[key]);
+                }
+            }
+
+            GameZoeSave.init(GAME_ID).then(async () => {
+                if (GameZoeSave.isUserLoggedIn()) {
+                    const cloudSave = await GameZoeSave.load();
+                    if (cloudSave) {
+                        const localSaves = collectC2Saves();
+                        if (!localSaves) {
+                            restoreC2Saves(cloudSave);
+                            console.log('[GoldenDig] 已從雲端恢復存檔');
+                        }
+                    }
+                }
+            });
+
+            // 攔截 localStorage.setItem
+            const originalSetItem = localStorage.setItem.bind(localStorage);
+            localStorage.setItem = function(key, value) {
+                originalSetItem(key, value);
+                if (key.startsWith(C2_PREFIX) && GameZoeSave.isUserLoggedIn()) {
+                    const allSaves = collectC2Saves();
+                    if (allSaves) {
+                        GameZoeSave.save(allSaves);
+                    }
+                }
+            };
+        })();
     </script>
 </body> 
 </html> 
