@@ -699,9 +699,11 @@ ports.forEach(port => {
         const MOCK_ROOM_ID = 1;
 
         // [FIX] VIP to CannonKind Mapping (Source: Go code)
-        // 0->1, 1->4 (VIP1), 2->7 ...
+        // Each VIP level has 3 cannons: base, base+1, base+2
+        // VIP 0: 1,2,3  VIP 1: 4,5,6  VIP 2: 7,8,9  etc.
+        // VIP 7 uses same cannons as VIP 6 (19,20,21) - laser (22) is special weapon
         const VIP_TO_CANNON = {
-            0: 1, 1: 4, 2: 7, 3: 10, 4: 13, 5: 16, 6: 19, 7: 22
+            0: 1, 1: 4, 2: 7, 3: 10, 4: 13, 5: 16, 6: 19, 7: 19
         };
 
         // --- LOGIN ---

@@ -1094,7 +1094,8 @@ require = function t(e, n, i) {
                 this._score = parseFloat(e) - parseFloat(t), this.CoinLabel.string = cc.yqs.utils.transString(parseFloat(this._score).toFixed(3)) + ":"
             },
             getCannonKindByVip: function () {
-                return { 0: 1, 1: 4, 2: 7, 3: 10, 4: 13, 5: 16, 6: 19 }[this.Vip] || 1
+                // VIP 7 uses same cannons as VIP 6 (19,20,21) - laser (22) is special
+                return { 0: 1, 1: 4, 2: 7, 3: 10, 4: 13, 5: 16, 6: 19, 7: 19 }[this.Vip] || 1
             },
             getBulletIdByCannonKind: function () {
                 this.CannonKind
