@@ -1284,13 +1284,19 @@ app.post('/api/games/:gameId/purchase', (req, res) => {
 
         if (tierId) {
             // Tier Purchase
+            console.log(`[Purchase] Looking up tierId: ${tierId} for gameId: ${gameId}`);
             db.get("SELECT * FROM game_pricing_tiers WHERE id = ?", [tierId], (err, tier) => {
                 if (err || !tier) {
+                    console.log(`[Purchase] Tier not found! tierId: ${tierId}, err: ${err?.message}`);
                     res.status(404).json({ error: "Pricing tier not found" });
                     return;
                 }
 
-                if (tier.game_id !== gameId) {
+                console.log(`[Purchase] Found tier: ${JSON.stringify(tier)}`);
+
+                // String comparison to avoid type mismatch
+                if (String(tier.game_id) !== String(gameId)) {
+                    console.log(`[Purchase] Game ID mismatch! tier.game_id: ${tier.game_id}, gameId: ${gameId}`);
                     res.status(400).json({ error: "Tier does not match game" });
                     return;
                 }
