@@ -944,6 +944,26 @@ ports.forEach(port => {
                 setTimeout(() => {
                     socket.emit('new_user_comes_push', mySeatPayload);
 
+                    // [BROADCAST FIX] Notify OTHER players in the room that a new user joined
+                    socket.broadcast.to('room_' + validRoomId).emit('new_user_comes_push', mySeatPayload);
+                    console.log(`[BROADCAST] Notified other players in room_${validRoomId} about new user ${userId}`);
+
+                    // [SYNC FIX] Send existing users' info to the new player
+                    // This ensures new player sees existing players' cannons and state
+                    Object.values(room.users).forEach(existingUser => {
+                        if (existingUser.userId !== userId) {
+                            const existingUserPayload = {
+                                ...existingUser,
+                                userId: existingUser.userId, userid: existingUser.userId,
+                                seatIndex: existingUser.seatIndex, seatindex: existingUser.seatIndex,
+                                score: toDisplayFloat(existingUser.score),
+                                gold: toDisplayFloat(existingUser.gold)
+                            };
+                            socket.emit('new_user_comes_push', existingUserPayload);
+                            console.log(`[SYNC] Sent existing user ${existingUser.userId} info to new user ${userId}`);
+                        }
+                    });
+
                     // [SYNC FIX] Send existing fish to the new user!
                     // Otherwise client generates random fish or sees nothing while server has different fish.
                     const existingFishList = [];
@@ -1206,7 +1226,8 @@ ports.forEach(port => {
                 }
                 reqData.chairId = (room.users[socket.userId]?.seatIndex || 0) + 1;
                 reqData.userId = socket.userId;
-                socket.broadcast.emit('user_fire_Reply', reqData);
+                // [FIX] Use room prefix for laser broadcast
+                socket.broadcast.to('room_' + socket.currentRoomId).emit('user_fire_Reply', reqData);
                 return;  // Don't deduct score, don't add to aliveBullets
             }
 
@@ -1263,7 +1284,8 @@ ports.forEach(port => {
             console.log(`[BULLET_TRACK] Created Bullet: ${bulletId} for User: ${socket.userId}, Kind: ${bulletKind}, Time: ${Date.now()}`);
 
             // Broadcast to other users
-            socket.broadcast.to(socket.currentRoomId).emit('user_fire_Reply', {
+            // [FIX] Use 'room_' prefix to match socket.join('room_' + roomId)
+            socket.broadcast.to('room_' + socket.currentRoomId).emit('user_fire_Reply', {
                 ...reqData,
                 userId: socket.userId // Ensure userId is sent
             });
@@ -1332,7 +1354,8 @@ ports.forEach(port => {
                 fishId: reqData.fishId || -1
             };
 
-            socket.broadcast.to(socket.currentRoomId).emit('lock_fish_reply', response);
+            // [FIX] Use 'room_' prefix to match socket.join('room_' + roomId)
+            socket.broadcast.to('room_' + socket.currentRoomId).emit('lock_fish_reply', response);
             console.log(`[LOCK] User ${socket.userId} locked fish ${response.fishId}`);
         });
 
@@ -1577,7 +1600,8 @@ ports.forEach(port => {
                     power: room.users[socket.userId]?.power || 0
                 };
                 console.log(`[CATCH SUCCESS] Broadcasting catch_fish_reply:`, catchReply);
-                io.emit('catch_fish_reply', catchReply);
+                // [FIX] Broadcast to room only, not all sockets globally
+                io.in('room_' + socket.currentRoomId).emit('catch_fish_reply', catchReply);
             }
 
             // Delete bullet after catch (Canonical behavior from GO implementation)
