@@ -1200,11 +1200,18 @@ ports.forEach(port => {
 
             const reqData = parsePayload(data);
             const room = roomManager.getRoom(socket.currentRoomId);  // [REFACTOR] Use roomManager
+
+            // [FIX] Defensive check - room must exist
+            if (!room) {
+                console.error(`[FIRE ERROR] Room ${socket.currentRoomId} not found for user ${socket.userId}`);
+                return;
+            }
+
             const bulletKind = parseInt(reqData.bulletKind) || 1;
 
             // [LASER_BUG_FIX] 防止客户端在冷却期间发送kind=22的普通子弹
             if (bulletKind === 22) {
-                const user = room.users[socket.userId];
+                const user = room.users?.[socket.userId];
                 const now = Date.now();
                 const lastLaserTime = user?.lastLaserTime || 0;
                 const cooldownRemaining = Math.max(0, 30000 - (now - lastLaserTime));
@@ -1330,7 +1337,14 @@ ports.forEach(port => {
         socket.on('laser_catch_fish', (data) => {
             const reqData = parsePayload(data);
             const room = roomManager.getRoom(socket.currentRoomId);
-            const user = room.users[socket.userId];
+
+            // [FIX] Defensive check - room must exist
+            if (!room) {
+                console.error(`[LASER_CATCH ERROR] Room ${socket.currentRoomId} not found for user ${socket.userId}`);
+                return;
+            }
+
+            const user = room.users?.[socket.userId];
             if (!user) return;
 
             const fishesStr = reqData.fishes || "";
@@ -1455,6 +1469,13 @@ ports.forEach(port => {
         socket.on('catch_fish', (data) => {
             const reqData = parsePayload(data);
             const room = roomManager.getRoom(socket.currentRoomId);  // [REFACTOR] Use roomManager
+
+            // [FIX] Defensive check - room must exist
+            if (!room) {
+                console.error(`[CATCH ERROR] Room ${socket.currentRoomId} not found for user ${socket.userId}`);
+                return;
+            }
+
             const bulletId = reqData.bulletId; // [FIX] Extract variable
             const fishIdParam = reqData.fishId; // Can be comma separated
 
