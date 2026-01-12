@@ -515,6 +515,7 @@ ports.forEach(port => {
             let name = null;
             if (err) {
                 console.error("[HTTP] Login DB Error:", err);
+                res.json(generateUserResponse(account, balance, name));
             } else if (row) {
                 name = row.name;
 
@@ -524,13 +525,30 @@ ports.forEach(port => {
                 if (gameBal > 0) {
                     balance = gameBal * 1000;
                     console.log(`[HTTP] Login: ${account}, GameID: ${gameId}, Balance: ${balance}`);
+                    res.json(generateUserResponse(account, balance, name));
                 } else {
-                    console.log(`[HTTP] Login: ${account}, GameID: ${gameId}, Balance: 0 (no balance found)`);
+                    // [LAZY_INIT] Create initial 500 balance for first-time game access
+                    const initialBalance = 500;
+                    db.run(
+                        `INSERT INTO user_game_balances (user_id, game_id, balance, created_at, updated_at) VALUES (?, ?, ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))`,
+                        [account, gameId, initialBalance],
+                        (insertErr) => {
+                            if (insertErr) {
+                                console.error(`[LazyInit] Failed to create balance:`, insertErr.message);
+                                balance = 0;
+                            } else {
+                                console.log(`[LazyInit] Created ${initialBalance} for ${account}/${gameId}`);
+                                balance = initialBalance * 1000;
+                            }
+                            res.json(generateUserResponse(account, balance, name));
+                        }
+                    );
+                    return; // Important: Don't send response twice
                 }
             } else {
                 console.log(`[HTTP] Login User Not Found in DB: ${account} (Using 0)`);
+                res.json(generateUserResponse(account, balance, name));
             }
-            res.json(generateUserResponse(account, balance, name));
         });
     }
 
