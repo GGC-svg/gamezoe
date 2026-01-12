@@ -200,7 +200,19 @@ wss.on('connection', function connection(ws) {
                                     ws.send(JSON.stringify(response));
                                 } else {
                                     console.log(`[Catch] MISS! Fish:${fishValue}x, Cannon:${bulletNum}, Cost:${costInGame}, Balance:${newBalance.toFixed(3)}`);
-                                    // Don't send response for miss - client handles locally
+
+                                    // [FIX] Send response on miss too, so client updates balance display
+                                    const response = {
+                                        Msg: MSG_CATCH_FISH,
+                                        re: 1, // 1 = miss
+                                        catch_gold: 0,
+                                        userId: userId,
+                                        fishNo: json.fishNo,
+                                        _gold: newBalanceInGame,
+                                        score: newBalanceInGame,
+                                        hashcode: json.hashcode
+                                    };
+                                    ws.send(JSON.stringify(response));
                                 }
                             }
                         );
