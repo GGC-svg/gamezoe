@@ -647,7 +647,11 @@ module gamewidget {
                         }
                     }
                 }else{
-                    gamewidget.Toast.launch(jsonData["warncontent"]);
+                    // [FIX] Update gold display on MISS too
+                    let missGold = jsonData["_gold"];
+                    if (missGold !== undefined) {
+                        this.goldPay.setGold(missGold);
+                    }
                 }
             break;
             case ServerModel.CHANGE_STATE:

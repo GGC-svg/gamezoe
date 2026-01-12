@@ -522,7 +522,11 @@ var gamewidget;
                         }
                     }
                     else {
-                        gamewidget.Toast.launch(jsonData["warncontent"]);
+                        // [FIX] Update gold display on MISS too
+                        var missGold = jsonData["_gold"];
+                        if (missGold !== undefined) {
+                            this.goldPay.setGold(missGold);
+                        }
                     }
                     break;
                 case gamewidget.ServerModel.CHANGE_STATE:
