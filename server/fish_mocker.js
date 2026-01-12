@@ -754,35 +754,40 @@ ports.forEach(port => {
 
             // [KICK_OLD_SESSION] Find and disconnect any existing socket for this userId
             // This prevents "ghost" connections from receiving broadcasts from old rooms
+            // [FIX] Only kick if the old socket is in a DIFFERENT room (same user switching rooms)
+            // Don't kick if joining the same room (reconnect scenario)
             ioInstances.forEach(ioInst => {
                 ioInst.sockets.sockets.forEach((existingSocket) => {
-                    if (existingSocket.userId === userId && existingSocket.id !== socket.id) {
-                        console.log(`[KICK] Found existing socket ${existingSocket.id} for user ${userId} in room ${existingSocket.currentRoomId}`);
+                    // Skip if same socket or different user
+                    if (existingSocket.id === socket.id || existingSocket.userId !== userId) {
+                        return;
+                    }
 
-                        // Leave old room
-                        if (existingSocket.currentRoomId) {
-                            const oldRoomName = 'room_' + existingSocket.currentRoomId;
-                            existingSocket.leave(oldRoomName);
+                    // [FIX] Only kick if old socket is in a DIFFERENT room
+                    // If same room, it's a reconnect - don't kick
+                    if (existingSocket.currentRoomId && existingSocket.currentRoomId !== validRoomId) {
+                        console.log(`[KICK] User ${userId} switching rooms: ${existingSocket.currentRoomId} -> ${validRoomId}`);
 
-                            // Clean up user from old room
-                            const oldRoom = roomManager.getRoom(existingSocket.currentRoomId);
-                            if (oldRoom && oldRoom.users[userId]) {
-                                // Save score before cleanup
-                                saveUserToDB(userId, oldRoom.users[userId].score, existingSocket.gameId || oldRoom.users[userId].gameId);
-                                delete oldRoom.users[userId];
-                                console.log(`[KICK] Removed user ${userId} from old room ${existingSocket.currentRoomId}`);
+                        const oldRoomName = 'room_' + existingSocket.currentRoomId;
+                        existingSocket.leave(oldRoomName);
 
-                                // Notify others in old room
-                                ioInst.in(oldRoomName).emit('exit_notify_push', userId);
-                            }
-
-                            roomManager.checkAndDeleteEmptyRoom(existingSocket.currentRoomId);
+                        // Clean up user from old room
+                        const oldRoom = roomManager.getRoom(existingSocket.currentRoomId);
+                        if (oldRoom && oldRoom.users[userId]) {
+                            saveUserToDB(userId, oldRoom.users[userId].score, existingSocket.gameId || oldRoom.users[userId].gameId);
+                            delete oldRoom.users[userId];
+                            console.log(`[KICK] Removed user ${userId} from old room ${existingSocket.currentRoomId}`);
+                            ioInst.in(oldRoomName).emit('exit_notify_push', userId);
                         }
 
-                        // Disconnect old socket
-                        existingSocket.emit('kick_notify', { reason: 'Logged in from another location' });
+                        roomManager.checkAndDeleteEmptyRoom(existingSocket.currentRoomId);
+
+                        existingSocket.emit('kick_notify', { reason: 'Switched to another room' });
                         existingSocket.disconnect(true);
                         console.log(`[KICK] Disconnected old socket ${existingSocket.id}`);
+                    } else if (existingSocket.currentRoomId === validRoomId) {
+                        // Same room reconnect - just log, don't kick
+                        console.log(`[RECONNECT] User ${userId} reconnecting to same room ${validRoomId}, keeping old socket`);
                     }
                 });
             });
