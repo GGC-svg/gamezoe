@@ -86,8 +86,12 @@ wss.on('connection', function connection(ws) {
 
                 console.log("[Catch] fishNo:", json.fishNo, "from userId:", userId);
 
-                // 50% chance to catch
-                const isCatch = Math.random() > 0.5;
+                // [RTP 96%] Calculate catch probability based on fish value
+                // Higher value fish = lower catch rate, maintains 96% RTP
+                const RTP = 0.96;
+                const fishValue = json.fishNo || 1;
+                const catchProbability = Math.min(RTP / fishValue, 0.95); // Cap at 95% to avoid guaranteed catches
+                const isCatch = Math.random() < catchProbability;
 
                 if (isCatch) {
                     const rewardInGame = 100 * (json.fishNo || 1);
