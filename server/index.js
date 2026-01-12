@@ -204,9 +204,9 @@ app.post('/api/ai/generate', async (req, res) => {
         // Extract systemInstruction if present
         const systemInstruction = config?.systemInstruction;
 
-        // Create model instance (gemini-2.0-flash-exp is the only working model in v1beta)
+        // Create model instance
         const model = genAI.getGenerativeModel({
-            model: "gemini-2.0-flash-exp",
+            model: "gemini-1.5-flash",
             systemInstruction: systemInstruction
         });
 
