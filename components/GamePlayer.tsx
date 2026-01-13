@@ -163,6 +163,9 @@ const GamePlayer: React.FC<GamePlayerProps> = ({ game, onClose, currentUser, exp
                                 <Coins className={`h-4 w-4 ${gameBalance === 0 ? 'text-yellow-400' : 'text-nexus-accent'}`} />
                                 <span className={`font-bold ${gameBalance === 0 ? 'text-yellow-400' : 'text-nexus-accent'}`}>{gameBalance.toLocaleString()}</span>
                                 <span className="text-slate-500 text-xs hidden md:inline">點</span>
+                                {gameBalance === 0 && (
+                                    <span className="text-yellow-400 text-xs font-bold hidden md:inline ml-1">← 點我轉入</span>
+                                )}
                             </button>
                             {gameBalance === 0 && (
                                 <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded shadow-lg">
