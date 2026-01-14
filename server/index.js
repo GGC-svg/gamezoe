@@ -197,6 +197,39 @@ app.post('/api/ai/generate', async (req, res) => {
         return res.status(401).json({ error: "未授權：請先登入使用此功能" });
     }
 
+    // [SECURITY] Verify user has paid for UniversalLoc service
+    // Check: 1) Has fulfilled service_order for universalloc, OR 2) Has game balance for universalloc
+    const checkPayment = () => {
+        return new Promise((resolve) => {
+            db.get(
+                `SELECT
+                    (SELECT COUNT(*) FROM service_orders WHERE user_id = ? AND service_type = 'universalloc' AND status = 'fulfilled') as fulfilled_orders,
+                    (SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = 'universalloc') as game_balance
+                `,
+                [userId, userId],
+                (err, row) => {
+                    if (err) {
+                        console.error('[AI API] Payment check error:', err);
+                        resolve(false);
+                        return;
+                    }
+                    // Allow if has any fulfilled order OR has positive game balance
+                    const hasPaid = (row?.fulfilled_orders > 0) || (row?.game_balance > 0);
+                    resolve(hasPaid);
+                }
+            );
+        });
+    };
+
+    const isPaid = await checkPayment();
+    if (!isPaid) {
+        console.warn(`[AI API] Unpaid user ${userId} attempted to use AI service`);
+        return res.status(403).json({
+            error: "請先完成付款後再使用 AI 翻譯功能",
+            code: "PAYMENT_REQUIRED"
+        });
+    }
+
     // Expecting: { model, contents, config }
     // Frontend sends 'contents' as a single string prompt.
     // 'config' contains: { systemInstruction, responseMimeType, responseSchema, ... }
@@ -207,7 +240,7 @@ app.post('/api/ai/generate', async (req, res) => {
     }
 
     try {
-        console.log(`[AI API] Request from user: ${userId}`);
+        console.log(`[AI API] Authorized request from paid user: ${userId}`);
 
         // Extract systemInstruction if present
         const systemInstruction = config?.systemInstruction;

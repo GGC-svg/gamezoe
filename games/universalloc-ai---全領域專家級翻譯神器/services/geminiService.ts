@@ -248,6 +248,13 @@ export const translateBatch = async (
           }
         })
       });
+      // Handle payment required error
+      if (res.status === 403) {
+        const errData = await res.json();
+        if (errData.code === 'PAYMENT_REQUIRED') {
+          throw new Error("PAYMENT_REQUIRED");
+        }
+      }
       if (!res.ok) throw new Error("Proxy Error: " + res.statusText);
       return res.json();
     });
@@ -354,6 +361,13 @@ export const generateGlossarySuggestions = async (
           }
         })
       });
+      // Handle payment required error
+      if (res.status === 403) {
+        const errData = await res.json();
+        if (errData.code === 'PAYMENT_REQUIRED') {
+          throw new Error("PAYMENT_REQUIRED");
+        }
+      }
       if (!res.ok) throw new Error("Glossary Proxy Error: " + res.statusText);
       return res.json();
     });
