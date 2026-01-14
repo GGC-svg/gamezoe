@@ -470,7 +470,7 @@
 					{ t: 'propeller', x: 80, y: 10, spd: -0.5 },
 					{ t: 'propeller', x: -40, y: 20, spd: 0.5 },
 					{ t: 'propeller', x: 40, y: 20, spd: -0.5 },
-					{ t: 'turret_aa', x: 0, y: 70, cd: 25 }
+					{ t: 'turret_aa', x: 0, y: 70, cd: 45 } // Reduced fire rate for mobile
 				]
 			},
 			// Stage 4: 扶桑 (戰艦) - 防禦較弱
@@ -500,9 +500,9 @@
 					{ t: 'propeller', x: -100, y: 0, spd: 0.6 },
 					{ t: 'propeller', x: 100, y: 0, spd: -0.6 },
 					{ t: 'propeller', x: 0, y: 0, spd: 0.4 },
-					{ t: 'turret_aa', x: -50, y: 60, cd: 18 },
-					{ t: 'turret_aa', x: 50, y: 60, cd: 18 },
-					{ t: 'turret_aa', x: 0, y: 80, cd: 15 }
+					{ t: 'turret_aa', x: -50, y: 60, cd: 35 },
+					{ t: 'turret_aa', x: 50, y: 60, cd: 38 },
+					{ t: 'turret_aa', x: 0, y: 80, cd: 30 }
 				]
 			},
 			// Stage 7: 伊勢 (航空戰艦) - 4門大砲 + 放戰鬥機
@@ -1434,7 +1434,7 @@
 					const isBattleship = e.subType.includes("Battleship") || e.subType.includes("Flagship");
 					// Movement State Machine
 					let targetY = 150;
-					if (e.enter === 'bottom') targetY = height - 250;
+					if (e.enter === 'bottom') targetY = height - 380; // Higher position for mobile players
 
 					// Approach Phase
 					if (e.phase === 0) {
