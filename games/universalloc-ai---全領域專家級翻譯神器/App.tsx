@@ -296,8 +296,8 @@ const App: React.FC = () => {
       }
 
       // Parse Excel file using the existing excelService
-      const { parseExcelFile } = await import('./services/excelService');
-      const parsedData = await parseExcelFile(file);
+      const { parseExcel } = await import('./services/excelService');
+      const parsedData = await parseExcel(file);
 
       if (Array.isArray(parsedData) && parsedData.length > 0 && 'sheetName' in parsedData[0]) {
         setAllSheetsData(parsedData);
