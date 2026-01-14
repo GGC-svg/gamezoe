@@ -92,7 +92,7 @@ export const translateBatch = async (
   }));
 
   let systemInstruction = `
-    Role: Elite Game Localization Expert for ${targetLangName}.
+    Role: Elite Localization Expert for ${targetLangName}.
     Mission: Proofreading & Length Audit.
     Logic:
     - Use "src" for meaning.
@@ -149,7 +149,7 @@ export const translateBatch = async (
     - If the user provides a Naming Template (e.g. "[Job] - [Level]"), follow the separator (space, hyphen, colon) exactly.
     - Do NOT mix formats like "Job: Level" and "Job - Level".
 
-    [GAMING CONTEXT TAXONOMY]
+    [CONTEXT TAXONOMY]
     - "Level/級" distinction:
       1. If context implies PROGRESSION (Lv. 1, 2, 3), use "Level" (e.g. EN: "Level", RU: "Ур.", JP: "Lv.").
       2. If context implies QUALITY/RARITY (S-Rank, Grade A), use "Rank" (e.g. EN: "Rank/Tier", RU: "Ранг", JP: "ランク").
@@ -169,8 +169,8 @@ export const translateBatch = async (
     - Do NOT deviate from this structure.
     ` : ""}
 
-    [GAME CONTEXT]
-    ${config.gameContext || "General Game Localization"}
+    [CONTENT CONTEXT]
+    ${config.gameContext || "General Localization"}
 
     [NAMING TEMPLATE & STYLE RULES]
     ${config.namingTemplate ? `Naming Template: ${config.namingTemplate}` : ""}
@@ -294,19 +294,19 @@ export const generateGlossarySuggestions = async (
   // const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const systemPrompt = `
-    You are a professional Game Localization Expert.
-    
-    TASK: 
+    You are a professional Localization Expert.
+
+    TASK:
     Audit and Extract ONE atomic key term per entry based on the candidates.
-    
+
     STRICT "ATOMIC EXTRACTION" RULES:
     1. NO PHRASES: Do NOT extract "Recovery Effect" -> Extract "Recovery". Do NOT extract "My Attack" -> Extract "Attack".
     2. NO ADJECTIVES: Remove "Strong", "Random", "All", "Self", "Enemy". Keep only the CORE NOUN.
     3. NO GRAMMAR WORDS: Remove "Stackable", "Increases", "Effect".
     4. NO FRAGMENTS: Remove single characters like "攻", "防" unless they are complete terms like "Ki". Min Length: 2 chars (unless English).
-    
+
     CONTEXT ADHERENCE:
-    - You must read [GAME CONTEXT] and [USER STYLE RULES].
+    - You must read [CONTENT CONTEXT] and [USER STYLE RULES].
     - If the user specified a rule (e.g. "Partner" -> "Напарник"), your translation output MUST match it.
     - If the user forbids a word, do not output it.
 
@@ -317,7 +317,7 @@ export const generateGlossarySuggestions = async (
   `;
 
   const prompt = `
-    [GAME CONTEXT]
+    [CONTENT CONTEXT]
     ${context}
     
     [TEXT SAMPLES]

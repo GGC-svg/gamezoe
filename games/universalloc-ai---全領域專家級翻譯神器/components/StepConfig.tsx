@@ -156,10 +156,10 @@ export const StepConfig = forwardRef<StepConfigHandle, StepConfigProps>(({
       desc_len_ref: '【進階】這是 AI 的「尺」。若選「德文」，AI 會強制將譯文縮寫至不超過德文的長度。',
 
       lbl_langs: '目標語系選擇',
-      lbl_game_ctx: '遊戲背景與風格',
-      desc_game_ctx: '描述遊戲類型、世界觀、重要名詞規則 (如: 起承轉合=Stage Stages)。',
+      lbl_game_ctx: '內容背景與風格',
+      desc_game_ctx: '描述檔案的行業領域、內容性質、專有名詞規則等。例如：遊戲UI、法律合約、技術文件、行銷文案...',
       lbl_template: '結構命名範本',
-      desc_template: '例如: [職業] - [等級] - [技能名]',
+      desc_template: '例如: [類別] - [編號] - [名稱]',
 
       btn_start: '啟動引擎',
       tip_lqa: '已啟用「雙重對照」協議：系統將同時分析 [語意參考源] 與 [待校稿目標] 以進行精確修復。',
@@ -186,10 +186,10 @@ export const StepConfig = forwardRef<StepConfigHandle, StepConfigProps>(({
       lbl_len_ref: 'Length Reference',
       desc_len_ref: 'Max length limit column',
       lbl_langs: 'Target Languages',
-      lbl_game_ctx: 'Game Context',
-      desc_game_ctx: 'World view, rules...',
+      lbl_game_ctx: 'Content Context',
+      desc_game_ctx: 'Industry, content type, terminology rules...',
       lbl_template: 'Naming Template',
-      desc_template: 'e.g. [Job] - [Level]',
+      desc_template: 'e.g. [Category] - [ID] - [Name]',
       btn_start: 'Start Engine',
       tip_lqa: 'LQA Protocol Active',
       words: 'Words',
@@ -344,7 +344,7 @@ export const StepConfig = forwardRef<StepConfigHandle, StepConfigProps>(({
                 <p className="text-xs text-gray-500">{t.desc_game_ctx}</p>
                 <textarea
                   className="w-full h-48 bg-black/40 border border-white/10 rounded-xl p-4 text-white font-medium outline-none focus:border-gaming-accent resize-none custom-scrollbar leading-relaxed"
-                  placeholder="請輸入遊戲背景... (例如：這是一款賽博龐克風格的 RPG...)"
+                  placeholder="請描述內容背景... (例如：這是遊戲UI文本、這是法律合約、這是科技產品說明書...)"
                   value={gameContext}
                   onChange={e => setGameContext(e.target.value)}
                 />

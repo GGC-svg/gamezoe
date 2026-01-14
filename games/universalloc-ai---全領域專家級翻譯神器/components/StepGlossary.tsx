@@ -113,7 +113,7 @@ export const StepGlossary: React.FC<StepGlossaryProps> = ({ config, allTexts, on
 
       // [CONTEXT INJECTION]
       const unifiedContext = `
-          [GAME WORLD CONTEXT]: ${config.gameContext || "General Game Localization"}
+          [CONTENT CONTEXT]: ${config.gameContext || "General Localization"}
           [NAMING TEMPLATE]: ${config.namingTemplate || "None"}
           [USER STYLE RULES]: Please check if the user specified any specific term rules in the context above (e.g. "Do not use X", "Always use Y").
         `;
