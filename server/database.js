@@ -317,9 +317,16 @@ function initDb() {
         db.run(`ALTER TABLE games ADD COLUMN game_type TEXT DEFAULT 'game'`, (err) => {
             if (!err) {
                 console.log('[DB] Added column games.game_type');
-                // Set universalloc as service type
-                db.run(`UPDATE games SET game_type = 'service' WHERE gameUrl LIKE '%universalloc%'`);
             }
+            // Always try to update universalloc games to service type (idempotent)
+            db.run(`UPDATE games SET game_type = 'service' WHERE gameUrl LIKE '%universalloc%' AND (game_type IS NULL OR game_type != 'service')`, (updateErr) => {
+                if (!updateErr) console.log('[DB] Updated game_type for universalloc games');
+            });
+        });
+
+        // Migration: Fix existing service_orders with old service_type 'universalloc' -> 'universalloc-ai'
+        db.run(`UPDATE service_orders SET service_type = 'universalloc-ai' WHERE service_type = 'universalloc'`, (err) => {
+            if (!err) console.log('[DB] Fixed service_type for existing universalloc orders');
         });
     });
 }

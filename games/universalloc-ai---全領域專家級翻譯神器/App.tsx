@@ -154,9 +154,9 @@ const App: React.FC = () => {
         body: JSON.stringify({
           userId: userId,
           amountUSD: billingInfo.cost,
-          serviceType: 'universalloc',
+          serviceType: 'universalloc-ai',
           serviceData: {
-            game_id: 'universalloc',
+            game_id: 'universalloc-ai',
             fileName: rawFile.name,
             charCount: billingInfo.totalWords,
             targetLangs: config.targetLangs,
@@ -264,8 +264,8 @@ const App: React.FC = () => {
       const fileName = data.service_data?.fileName || 'resume_file.xlsx';
       const file = new File([blob], fileName, { type: blob.type });
 
-      // Parse saved config
-      const savedConfig = data.config ? JSON.parse(data.config) : {};
+      // Use saved config (already parsed by server)
+      const savedConfig = data.config || {};
 
       // Set file and config
       setRawFile(file);
