@@ -728,7 +728,9 @@ export function startBatchJob() {
 
         db.all(
             `SELECT order_id, amount_usd FROM p99_orders
-             WHERE status = 'pending' AND created_at < datetime('now', '-10 minutes')`,
+             WHERE (status = 'pending' OR pay_status IS NULL OR pay_status = '')
+             AND created_at < datetime('now', '+8 hours', '-10 minutes')
+             AND created_at > datetime('now', '+8 hours', '-24 hours')`,
             async (err, orders) => {
                 if (err || !orders || orders.length === 0) return;
 
@@ -762,6 +764,14 @@ export function startBatchJob() {
                                                 );
                                                 db.run('COMMIT', () => {
                                                     console.log(`[P99Pay Batch] Gold credited: ${fullOrder.gold_amount} to user ${fullOrder.user_id}`);
+
+                                                    // Fulfill service order if applicable
+                                                    fulfillServiceOrder(order.order_id, (err, serviceOrder) => {
+                                                        if (serviceOrder) {
+                                                            console.log(`[P99Pay Batch] Service order fulfilled: ${serviceOrder.order_id}`);
+                                                        }
+                                                    });
+
                                                     settleP99Order(order.order_id);
                                                 });
                                             });
@@ -803,7 +813,7 @@ export function startBatchJob() {
             `SELECT p.* FROM p99_orders p
              LEFT JOIN wallet_transactions w ON p.order_id = w.order_id
              WHERE p.pay_status = 'S' AND w.id IS NULL
-             AND p.created_at > datetime('now', '-24 hours')`,
+             AND p.created_at > datetime('now', '+8 hours', '-24 hours')`,
             (err, undeliveredOrders) => {
                 if (err) {
                     console.error('[P99Pay Reconcile] Query error:', err.message);
@@ -871,7 +881,7 @@ export function startBatchJob() {
              WHERE s.status = 'pending'
              AND p.pay_status = 'S'
              AND p.rcode = '0000'
-             AND s.created_at > datetime('now', '-24 hours')`,
+             AND s.created_at > datetime('now', '+8 hours', '-24 hours')`,
             (err, unfulfilledOrders) => {
                 if (err) {
                     console.error('[P99Pay ServiceJob] Query error:', err.message);
