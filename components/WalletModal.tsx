@@ -32,6 +32,9 @@ const TOPUP_TIERS = [
     { price: 200, gold: 20000, label: '$200.00' },
     { price: 500, gold: 50000, label: '$500.00' },
     { price: 1000, gold: 100000, label: '$1000.00' },
+    { price: 3000, gold: 300000, label: '$3000.00' },
+    { price: 5000, gold: 500000, label: '$5000.00' },
+    { price: 10000, gold: 1000000, label: '$10000.00' },
 ];
 
 const API_BASE = '/api';

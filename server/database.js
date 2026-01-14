@@ -279,6 +279,25 @@ function initDb() {
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )`);
+
+        // Service Orders Table (Arbitrary amount payments for services)
+        db.run(`CREATE TABLE IF NOT EXISTS service_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id TEXT UNIQUE NOT NULL,
+            p99_order_id TEXT,
+            user_id TEXT NOT NULL,
+            service_type TEXT NOT NULL,
+            service_data TEXT,
+            amount_usd REAL NOT NULL,
+            gold_amount INTEGER NOT NULL,
+            status TEXT DEFAULT 'pending',
+            return_url TEXT,
+            fulfilled_at DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (p99_order_id) REFERENCES p99_orders(order_id)
+        )`);
     });
 }
 

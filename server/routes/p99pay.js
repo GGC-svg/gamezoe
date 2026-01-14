@@ -171,13 +171,33 @@ router.post('/return', express.urlencoded({ extended: true }), (req, res) => {
                         db.run('COMMIT', () => {
                             console.log(`[P99Pay Return] Gold credited: ${order.gold_amount} to user ${order.user_id}`);
 
+                            // Check if this is a service order and fulfill it
+                            fulfillServiceOrder(orderId, (err, serviceOrder) => {
+                                if (serviceOrder) {
+                                    console.log(`[P99Pay Return] Service order fulfilled: ${serviceOrder.order_id}`);
+                                }
+                            });
+
                             // Auto-settle the order
                             settleP99Order(orderId);
                         });
                     });
                 }
 
-                res.redirect(`/?success=true&orderId=${orderId}&amount=${order.gold_amount}`);
+                // Check for service order return URL
+                db.get('SELECT return_url, order_id FROM service_orders WHERE p99_order_id = ?', [orderId], (err, svcOrder) => {
+                    if (svcOrder && svcOrder.return_url) {
+                        // Redirect to service-specific return URL with both order IDs
+                        const returnUrl = new URL(svcOrder.return_url, `${req.protocol}://${req.get('host')}`);
+                        returnUrl.searchParams.set('success', 'true');
+                        returnUrl.searchParams.set('serviceOrderId', svcOrder.order_id);
+                        returnUrl.searchParams.set('p99OrderId', orderId);
+                        returnUrl.searchParams.set('amount', order.gold_amount);
+                        res.redirect(returnUrl.toString());
+                    } else {
+                        res.redirect(`/?success=true&orderId=${orderId}&amount=${order.gold_amount}`);
+                    }
+                });
             });
         });
     } else if (payStatus === 'W') {
@@ -260,6 +280,14 @@ router.post('/notify', express.urlencoded({ extended: true }), (req, res) => {
                         );
                         db.run('COMMIT', () => {
                             console.log(`[P99Pay Notify] Gold credited: ${order.gold_amount} to user ${order.user_id}`);
+
+                            // Check if this is a service order and fulfill it
+                            fulfillServiceOrder(orderId, (err, serviceOrder) => {
+                                if (serviceOrder) {
+                                    console.log(`[P99Pay Notify] Service order fulfilled: ${serviceOrder.order_id}`);
+                                }
+                            });
+
                             settleP99Order(orderId);
                         });
                     });
@@ -369,7 +397,131 @@ router.get('/orders/:userId', (req, res) => {
 });
 
 /**
- * 7. Verify order and gold credit status (Admin/Support use)
+ * 7. Create Service Order (Arbitrary amount for services like translation)
+ * POST /api/payment/p99/service-order
+ *
+ * This creates a unified payment flow that:
+ * 1. User pays arbitrary USD amount via P99
+ * 2. System auto-credits equivalent G幣
+ * 3. System auto-deducts G幣 for the service
+ * 4. Service is marked as fulfilled
+ */
+router.post('/service-order', (req, res) => {
+    const { userId, amountUSD, serviceType, serviceData, returnUrl, productName } = req.body;
+
+    if (!userId || !amountUSD || amountUSD <= 0 || !serviceType) {
+        return res.status(400).json({
+            success: false,
+            error: 'Missing required parameters: userId, amountUSD, serviceType'
+        });
+    }
+
+    // Verify user exists
+    db.get('SELECT id, name FROM users WHERE id = ?', [userId], (err, user) => {
+        if (err || !user) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+
+        const serviceOrderId = `SVC${Date.now()}${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+        const p99OrderId = generateOrderId();
+        const goldAmount = Math.floor(amountUSD * USD_TO_GOLD_RATE);
+
+        // Build P99 order request
+        const orderRequest = p99Client.buildOrderRequest({
+            coid: p99OrderId,
+            amount: amountUSD,
+            paid: '', // Let user choose payment method
+            userAcctId: userId,
+            productName: productName || `GameZoe Service: ${serviceType}`,
+            productId: `SVC_${serviceType}`,
+            memo: `Service order ${serviceOrderId} for user ${userId}`
+        });
+
+        // Create both orders in transaction
+        db.serialize(() => {
+            db.run('BEGIN TRANSACTION');
+
+            // Create P99 order
+            db.run(
+                `INSERT INTO p99_orders (order_id, user_id, amount_usd, gold_amount, paid, status, raw_request, created_at)
+                 VALUES (?, ?, ?, ?, '', 'pending', ?, datetime('now', '+8 hours'))`,
+                [p99OrderId, userId, amountUSD, goldAmount, JSON.stringify(orderRequest.jsonData)]
+            );
+
+            // Create service order
+            db.run(
+                `INSERT INTO service_orders (order_id, p99_order_id, user_id, service_type, service_data, amount_usd, gold_amount, status, return_url, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, datetime('now', '+8 hours'))`,
+                [serviceOrderId, p99OrderId, userId, serviceType, JSON.stringify(serviceData || {}), amountUSD, goldAmount, returnUrl || null]
+            );
+
+            db.run('COMMIT', (err) => {
+                if (err) {
+                    console.error('[P99Pay ServiceOrder] Failed to create orders:', err.message);
+                    return res.status(500).json({ success: false, error: 'Failed to create service order' });
+                }
+
+                console.log(`[P99Pay ServiceOrder] Created: ${serviceOrderId} -> P99: ${p99OrderId}, User: ${userId}, ${amountUSD} USD for ${serviceType}`);
+
+                res.json({
+                    success: true,
+                    serviceOrderId: serviceOrderId,
+                    p99OrderId: p99OrderId,
+                    amountUSD: amountUSD,
+                    goldAmount: goldAmount,
+                    serviceType: serviceType,
+                    apiUrl: p99Client.config.apiUrl,
+                    formData: orderRequest.base64Data
+                });
+            });
+        });
+    });
+});
+
+/**
+ * 8. Get service order status
+ * GET /api/payment/p99/service-order/:orderId
+ */
+router.get('/service-order/:orderId', (req, res) => {
+    const { orderId } = req.params;
+
+    db.get(
+        `SELECT s.*, p.pay_status, p.status as p99_status, p.rcode
+         FROM service_orders s
+         LEFT JOIN p99_orders p ON s.p99_order_id = p.order_id
+         WHERE s.order_id = ?`,
+        [orderId],
+        (err, order) => {
+            if (err) {
+                return res.status(500).json({ success: false, error: err.message });
+            }
+            if (!order) {
+                return res.status(404).json({ success: false, error: 'Service order not found' });
+            }
+
+            res.json({
+                success: true,
+                order: {
+                    orderId: order.order_id,
+                    p99OrderId: order.p99_order_id,
+                    userId: order.user_id,
+                    serviceType: order.service_type,
+                    serviceData: JSON.parse(order.service_data || '{}'),
+                    amountUSD: order.amount_usd,
+                    goldAmount: order.gold_amount,
+                    status: order.status,
+                    p99Status: order.p99_status,
+                    payStatus: order.pay_status,
+                    fulfilledAt: order.fulfilled_at,
+                    createdAt: order.created_at
+                }
+            });
+        }
+    );
+});
+
+/**
+ * 9. Verify order and gold credit status (Admin/Support use)
  * GET /api/payment/verify/:orderId
  */
 router.get('/verify/:orderId', (req, res) => {
@@ -429,6 +581,79 @@ router.get('/verify/:orderId', (req, res) => {
         });
     });
 });
+
+/**
+ * Helper function to fulfill a service order after payment
+ * This performs: 儲值 → 轉點 → 扣點 in one atomic operation
+ */
+function fulfillServiceOrder(p99OrderId, callback) {
+    // Find the service order linked to this P99 order
+    db.get(
+        'SELECT * FROM service_orders WHERE p99_order_id = ? AND status = ?',
+        [p99OrderId, 'pending'],
+        (err, serviceOrder) => {
+            if (err || !serviceOrder) {
+                // Not a service order, or already fulfilled
+                if (callback) callback(null);
+                return;
+            }
+
+            console.log(`[P99Pay ServiceFulfill] Processing service order ${serviceOrder.order_id} for ${serviceOrder.service_type}`);
+
+            db.serialize(() => {
+                db.run('BEGIN TRANSACTION');
+
+                // 1. 儲值: Gold has already been credited by the main P99 flow
+                // (No action needed here - handled by existing return/notify logic)
+
+                // 2. 扣點: Deduct gold for the service
+                db.run(
+                    'UPDATE users SET gold_balance = gold_balance - ? WHERE id = ? AND gold_balance >= ?',
+                    [serviceOrder.gold_amount, serviceOrder.user_id, serviceOrder.gold_amount],
+                    function(err) {
+                        if (err || this.changes === 0) {
+                            db.run('ROLLBACK');
+                            console.error(`[P99Pay ServiceFulfill] Failed to deduct gold for service ${serviceOrder.order_id}`);
+                            if (callback) callback(new Error('Failed to deduct gold'));
+                            return;
+                        }
+
+                        // 3. Log the service consumption transaction
+                        db.run(
+                            `INSERT INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at)
+                             VALUES (?, ?, ?, 'gold', 'service', ?, 'completed', datetime('now', '+8 hours'))`,
+                            [
+                                serviceOrder.order_id,
+                                serviceOrder.user_id,
+                                -serviceOrder.gold_amount, // Negative = deduction
+                                `Service: ${serviceOrder.service_type} (${serviceOrder.amount_usd} USD)`
+                            ]
+                        );
+
+                        // 4. Mark service order as fulfilled
+                        db.run(
+                            `UPDATE service_orders SET status = 'fulfilled', fulfilled_at = datetime('now', '+8 hours'), updated_at = datetime('now', '+8 hours')
+                             WHERE order_id = ?`,
+                            [serviceOrder.order_id]
+                        );
+
+                        db.run('COMMIT', (err) => {
+                            if (err) {
+                                console.error(`[P99Pay ServiceFulfill] Commit failed for ${serviceOrder.order_id}:`, err.message);
+                                if (callback) callback(err);
+                                return;
+                            }
+
+                            console.log(`[P99Pay ServiceFulfill] ✅ Service fulfilled: ${serviceOrder.order_id}, ${serviceOrder.gold_amount}G deducted for ${serviceOrder.service_type}`);
+
+                            if (callback) callback(null, serviceOrder);
+                        });
+                    }
+                );
+            });
+        }
+    );
+}
 
 /**
  * Helper function to settle an order
@@ -618,6 +843,47 @@ export function startBatchJob() {
             }
         );
     }, 5 * 60 * 1000); // Every 5 minutes
+
+    // Service Order Fulfillment Job - check for paid but unfulfilled service orders
+    // Runs every 3 minutes
+    setInterval(() => {
+        console.log('[P99Pay ServiceJob] Checking unfulfilled service orders...');
+
+        // Find service orders where P99 payment succeeded but service not yet fulfilled
+        db.all(
+            `SELECT s.*, p.pay_status, p.rcode
+             FROM service_orders s
+             JOIN p99_orders p ON s.p99_order_id = p.order_id
+             WHERE s.status = 'pending'
+             AND p.pay_status = 'S'
+             AND p.rcode = '0000'
+             AND s.created_at > datetime('now', '-24 hours')`,
+            (err, unfulfilledOrders) => {
+                if (err) {
+                    console.error('[P99Pay ServiceJob] Query error:', err.message);
+                    return;
+                }
+
+                if (!unfulfilledOrders || unfulfilledOrders.length === 0) {
+                    console.log('[P99Pay ServiceJob] All service orders verified');
+                    return;
+                }
+
+                console.log(`[P99Pay ServiceJob] ⚠️ Found ${unfulfilledOrders.length} unfulfilled service orders!`);
+
+                for (const order of unfulfilledOrders) {
+                    console.log(`[P99Pay ServiceJob] Processing ${order.order_id}...`);
+                    fulfillServiceOrder(order.p99_order_id, (err, fulfilled) => {
+                        if (err) {
+                            console.error(`[P99Pay ServiceJob] Failed to fulfill ${order.order_id}:`, err.message);
+                        } else if (fulfilled) {
+                            console.log(`[P99Pay ServiceJob] ✅ Fulfilled ${order.order_id}`);
+                        }
+                    });
+                }
+            }
+        );
+    }, 3 * 60 * 1000); // Every 3 minutes
 }
 
 export default router;
