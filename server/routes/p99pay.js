@@ -367,6 +367,68 @@ router.get('/orders/:userId', (req, res) => {
 });
 
 /**
+ * 7. Verify order and gold credit status (Admin/Support use)
+ * GET /api/payment/verify/:orderId
+ */
+router.get('/verify/:orderId', (req, res) => {
+    const { orderId } = req.params;
+
+    // Get order info
+    db.get('SELECT * FROM p99_orders WHERE order_id = ?', [orderId], (err, order) => {
+        if (err) {
+            return res.status(500).json({ success: false, error: err.message });
+        }
+        if (!order) {
+            return res.status(404).json({ success: false, error: 'Order not found' });
+        }
+
+        // Check if gold was credited
+        db.get('SELECT * FROM wallet_transactions WHERE order_id = ?', [orderId], (err, transaction) => {
+            if (err) {
+                return res.status(500).json({ success: false, error: err.message });
+            }
+
+            // Get user's current balance
+            db.get('SELECT id, name, gold_balance FROM users WHERE id = ?', [order.user_id], (err, user) => {
+                const verification = {
+                    success: true,
+                    order: {
+                        order_id: order.order_id,
+                        user_id: order.user_id,
+                        amount_usd: order.amount_usd,
+                        gold_amount: order.gold_amount,
+                        status: order.status,
+                        pay_status: order.pay_status,
+                        settle_status: order.settle_status,
+                        created_at: order.created_at,
+                        updated_at: order.updated_at
+                    },
+                    gold_credited: !!transaction,
+                    transaction: transaction ? {
+                        id: transaction.id,
+                        amount: transaction.amount,
+                        status: transaction.status,
+                        created_at: transaction.created_at
+                    } : null,
+                    user: user ? {
+                        id: user.id,
+                        name: user.name,
+                        current_gold_balance: user.gold_balance
+                    } : null,
+                    verification_result: {
+                        order_success: order.pay_status === 'S' && order.status === 'settled',
+                        gold_delivered: !!transaction,
+                        settlement_complete: order.settle_status === 'settled'
+                    }
+                };
+
+                res.json(verification);
+            });
+        });
+    });
+});
+
+/**
  * Helper function to settle an order
  */
 async function settleP99Order(orderId) {
