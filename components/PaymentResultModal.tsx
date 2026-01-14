@@ -8,6 +8,7 @@ interface PaymentResultModalProps {
     errorCode?: string;
     rcode?: string;
     amount?: number;
+    errorMessage?: string; // P99 RMSG_CHI - Chinese error message from P99
 }
 
 const PaymentResultModal: React.FC<PaymentResultModalProps> = ({
@@ -16,7 +17,8 @@ const PaymentResultModal: React.FC<PaymentResultModalProps> = ({
     result,
     errorCode,
     rcode,
-    amount
+    amount,
+    errorMessage
 }) => {
     if (!isOpen || !result) return null;
 
@@ -38,6 +40,9 @@ const PaymentResultModal: React.FC<PaymentResultModalProps> = ({
         '1601': '商家代碼未啟用',
         // 交易狀態
         '2001': '訂單編號重複，請重新操作',
+        '3001': '交易失敗，請重試或更換支付方式',
+        '3002': '交易已取消',
+        '3003': '餘額不足',
         '3004': '付款待確認中，請稍候',
         '3005': '交易逾時，請重新操作',
         // PIN 卡相關錯誤
@@ -67,7 +72,11 @@ const PaymentResultModal: React.FC<PaymentResultModalProps> = ({
     };
 
     const getErrorMessage = (): string => {
-        // P99 RCODE 優先
+        // P99 直接提供的中文訊息優先
+        if (errorMessage) {
+            return errorMessage;
+        }
+        // P99 RCODE 對照表
         if (rcode && p99ErrorCodes[rcode]) {
             return p99ErrorCodes[rcode];
         }

@@ -47,6 +47,7 @@ function App() {
     errorCode?: string;
     rcode?: string;
     amount?: number;
+    errorMessage?: string;
   }>({ isOpen: false, result: null });
 
   // Initial Data Fetch
@@ -88,6 +89,7 @@ function App() {
     const pending = urlParams.get('pending');
     const rcode = urlParams.get('rcode');
     const amountParam = urlParams.get('amount');
+    const errorMsg = urlParams.get('msg'); // P99 RMSG_CHI
 
     if (success || error || pending) {
       let result: 'success' | 'error' | 'pending' = 'error';
@@ -99,7 +101,8 @@ function App() {
         result,
         errorCode: error || undefined,
         rcode: rcode || undefined,
-        amount: amountParam ? parseInt(amountParam) : undefined
+        amount: amountParam ? parseInt(amountParam) : undefined,
+        errorMessage: errorMsg || undefined
       });
 
       // Clear URL params without reload
@@ -542,6 +545,7 @@ function App() {
         errorCode={paymentResult.errorCode}
         rcode={paymentResult.rcode}
         amount={paymentResult.amount}
+        errorMessage={paymentResult.errorMessage}
       />
 
     </div>

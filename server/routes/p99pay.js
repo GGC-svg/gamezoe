@@ -184,8 +184,10 @@ router.post('/return', express.urlencoded({ extended: true }), (req, res) => {
         // Waiting - need to check order later
         res.redirect(`/?pending=true&orderId=${orderId}`);
     } else {
-        // Failed
-        res.redirect(`/?error=payment_failed&orderId=${orderId}&rcode=${rcode}`);
+        // Failed - use PAY_RCODE (more specific) or RCODE, and include RMSG_CHI if available
+        const payRcode = response.PAY_RCODE || rcode;
+        const errorMsg = response.RMSG_CHI ? encodeURIComponent(response.RMSG_CHI) : '';
+        res.redirect(`/?error=payment_failed&orderId=${orderId}&rcode=${payRcode}&msg=${errorMsg}`);
     }
 });
 
