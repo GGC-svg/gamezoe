@@ -2420,6 +2420,82 @@ app.post('/api/bridge/transaction/check', (req, res) => {
     });
 });
 
+// Admin: Order Verification API - Complete order status check
+app.get('/api/admin/payment/verify/:orderId', (req, res) => {
+    const { orderId } = req.params;
+
+    // Query p99_orders for payment info
+    db.get(
+        `SELECT * FROM p99_orders WHERE order_id = ?`,
+        [orderId],
+        (err, p99Order) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            // Query wallet_transactions for credit info
+            db.get(
+                `SELECT * FROM wallet_transactions WHERE order_id = ?`,
+                [orderId],
+                (err, walletTx) => {
+                    if (err) return res.status(500).json({ error: err.message });
+
+                    // If neither exists
+                    if (!p99Order && !walletTx) {
+                        return res.status(404).json({
+                            success: false,
+                            error: 'ORDER_NOT_FOUND',
+                            message: '訂單不存在'
+                        });
+                    }
+
+                    // Build verification result
+                    const result = {
+                        success: true,
+                        order_id: orderId,
+
+                        // P99 Payment Info
+                        p99: p99Order ? {
+                            rrn: p99Order.rrn,
+                            pay_status: p99Order.pay_status,
+                            pay_status_text: p99Order.pay_status === 'S' ? '成功' :
+                                             p99Order.pay_status === 'F' ? '失敗' :
+                                             p99Order.pay_status === 'W' ? '等待中' : '未知',
+                            amount_usd: p99Order.amount_usd,
+                            gold_amount: p99Order.gold_amount,
+                            paid_method: p99Order.paid,
+                            rcode: p99Order.rcode,
+                            erpc_verified: p99Order.erpc_verified === 1,
+                            settle_status: p99Order.settle_status,
+                            created_at: p99Order.created_at
+                        } : null,
+
+                        // Gold Credit Info
+                        gold_credited: !!walletTx,
+                        wallet: walletTx ? {
+                            tx_id: walletTx.id,
+                            amount: walletTx.amount,
+                            status: walletTx.status,
+                            credited_at: walletTx.created_at
+                        } : null,
+
+                        // Verification Summary
+                        verification: {
+                            p99_payment_ok: p99Order?.pay_status === 'S',
+                            gold_delivered: !!walletTx,
+                            fully_verified: p99Order?.pay_status === 'S' && !!walletTx,
+                            issue: !p99Order ? 'P99訂單不存在' :
+                                   p99Order.pay_status !== 'S' ? 'P99付款未成功' :
+                                   !walletTx ? '⚠️ 付款成功但未發幣（掉單）' :
+                                   null
+                        }
+                    };
+
+                    res.json(result);
+                }
+            );
+        }
+    );
+});
+
 // DEBUG ROUTE
 app.get('/api/debug/local', (req, res) => {
     db.serialize(() => {
