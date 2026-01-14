@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppState, ExcelRow, TranslationConfig, TranslationItem, GlossaryTerm, WorksheetData, UILang } from './types';
 import { StepUpload } from './components/StepUpload';
-import { StepConfig } from './components/StepConfig';
+import { StepConfig, StepConfigHandle } from './components/StepConfig';
 import { StepProcess } from './components/StepProcess';
 import { StepGlossary } from './components/StepGlossary';
 import { StepCleaner } from './components/StepCleaner';
@@ -38,6 +38,10 @@ const App: React.FC = () => {
   const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
   const [translationHistory, setTranslationHistory] = useState<TranslationRecord[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [canStartConfig, setCanStartConfig] = useState(false);
+
+  // Ref for StepConfig to trigger start from bottom bar
+  const stepConfigRef = useRef<StepConfigHandle>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -46,13 +50,31 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Tell parent GamePlayer to hide its billing bar (we have our own)
+  useEffect(() => {
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'HIDE_GAMEPLAYER_BILLING' }, '*');
+    }
+  }, []);
+
   // Update billing info when config changes
   useEffect(() => {
     if (config.sourceColumn && config.targetLangs && config.targetLangs.length > 0 && rawData.length > 0) {
       const billing = calculateEstimatedCost(rawData, config.sourceColumn, config.targetLangs, config.isProofreadMode || false);
+      console.log('[Billing] Updated:', billing);
       setBillingInfo(billing);
     }
-  }, [config.sourceColumn, config.targetLangs, config.isProofreadMode, rawData]);
+  }, [config.sourceColumn, config.targetLangs?.length, config.isProofreadMode, rawData.length, appState]);
+
+  // Also update billing when entering specific states
+  useEffect(() => {
+    if ((appState === AppState.GLOSSARY || appState === AppState.PROCESSING) &&
+        config.sourceColumn && config.targetLangs && rawData.length > 0) {
+      const billing = calculateEstimatedCost(rawData, config.sourceColumn, config.targetLangs, config.isProofreadMode || false);
+      console.log('[Billing] State change update:', billing);
+      setBillingInfo(billing);
+    }
+  }, [appState]);
 
   // Load translation history from localStorage
   useEffect(() => {
@@ -63,6 +85,19 @@ const App: React.FC = () => {
       } catch (e) {}
     }
   }, []);
+
+  // Handle billing updates from StepConfig
+  const handleConfigBillingUpdate = (data: { totalWords: number; cost: number; targetLangs: string[]; sourceColumn: string; canStart: boolean }) => {
+    console.log('[App] Config billing update:', data);
+    setBillingInfo({ totalWords: data.totalWords, cost: data.cost, perLangWords: data.totalWords });
+    setCanStartConfig(data.canStart);
+    // Also update config with latest targetLangs and sourceColumn
+    setConfig(prev => ({
+      ...prev,
+      targetLangs: data.targetLangs,
+      sourceColumn: data.sourceColumn
+    }));
+  };
 
   // Handle payment checkout
   const handleCheckout = async () => {
@@ -358,13 +393,13 @@ const App: React.FC = () => {
         {appState === AppState.UPLOAD && <StepUpload onFileLoaded={handleFileLoaded} uiLang={uiLang} />}
         {appState === AppState.CLEANER && <StepCleaner rawData={rawData} rawFile={rawFile} onBack={handleReset} />}
         {appState === AppState.SHEET_SELECT && <StepSheetSelect sheets={allSheetsData} onSelect={(name) => selectSheet(name)} onBack={handleReset} />}
-        {appState === AppState.CONFIG && <div className="h-full"><StepConfig rawData={rawData} columns={columns} onConfigComplete={handleConfigComplete} onBack={handleReset} sheetName={config.selectedSheetName} isProofreadMode={config.isProofreadMode} uiLang={uiLang} /></div>}
+        {appState === AppState.CONFIG && <div className="h-full"><StepConfig ref={stepConfigRef} rawData={rawData} columns={columns} onConfigComplete={handleConfigComplete} onBack={handleReset} sheetName={config.selectedSheetName} isProofreadMode={config.isProofreadMode} uiLang={uiLang} onBillingUpdate={handleConfigBillingUpdate} /></div>}
         {appState === AppState.GLOSSARY && <StepGlossary config={config} allTexts={rawData.map(row => row[config.sourceColumn!] || "")} onStartTranslation={handleStartProcess} onBack={() => setAppState(AppState.CONFIG)} uiLang={uiLang} isPremiumUnlocked={config.isPremiumUnlocked} />}
         {appState === AppState.PROCESSING && <StepProcess items={translationItems} config={config as TranslationConfig} onReset={handleReset} rawFile={rawFile} onUnlockPremium={() => setConfig(p => ({ ...p, isPremiumUnlocked: true }))} />}
       </main>
 
       {/* Fixed Bottom Billing Bar */}
-      {appState !== AppState.UPLOAD && appState !== AppState.CLEANER && (
+      {appState !== AppState.UPLOAD && appState !== AppState.CLEANER && appState !== AppState.SHEET_SELECT && (
         <div className="fixed bottom-0 left-0 right-0 lg:left-72 bg-gaming-card/95 backdrop-blur-xl border-t border-white/10 z-50 shadow-2xl">
           <div className="flex items-center justify-between px-4 lg:px-8 py-3 lg:py-4 gap-4">
             {/* Left: Stats */}
@@ -409,8 +444,20 @@ const App: React.FC = () => {
                 <span className="hidden lg:inline text-xs font-black uppercase">紀錄</span>
               </button>
 
-              {/* Checkout Button */}
-              {!config.isPremiumUnlocked && billingInfo.cost > 0 && (
+              {/* CONFIG state: Start Engine Button */}
+              {appState === AppState.CONFIG && (
+                <button
+                  onClick={() => stepConfigRef.current?.triggerStart()}
+                  disabled={!canStartConfig}
+                  className="flex items-center gap-2 bg-gradient-to-r from-gaming-accent to-purple-600 hover:from-purple-500 hover:to-gaming-accent text-white px-6 lg:px-8 py-2.5 lg:py-3 rounded-xl font-black text-sm shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span>啟動引擎</span>
+                  <i className="fas fa-rocket ml-1"></i>
+                </button>
+              )}
+
+              {/* GLOSSARY/PROCESSING state: Checkout Button */}
+              {appState !== AppState.CONFIG && !config.isPremiumUnlocked && billingInfo.cost > 0 && (
                 <button
                   onClick={handleCheckout}
                   disabled={isPaymentProcessing}
@@ -434,7 +481,7 @@ const App: React.FC = () => {
           </div>
 
           {/* Mode & File Info Bar */}
-          <div className="flex items-center gap-4 px-4 lg:px-8 py-2 bg-black/40 border-t border-white/5 text-xs">
+          <div className="flex items-center gap-4 px-4 lg:px-8 py-2 bg-black/40 border-t border-white/5 text-xs flex-wrap">
             <span className={`px-2 py-0.5 rounded-md font-black uppercase tracking-wider ${config.isProofreadMode ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gaming-accent/20 text-gaming-accent'}`}>
               {config.isProofreadMode ? 'LQA 校對' : '翻譯模式'}
             </span>
@@ -448,6 +495,12 @@ const App: React.FC = () => {
               <span className="text-gaming-muted">
                 <i className="fas fa-language mr-1"></i>
                 {config.targetLangs.length} 語言
+              </span>
+            )}
+            {config.isProofreadMode && (
+              <span className="hidden lg:inline text-emerald-400/80">
+                <i className="fas fa-check-double mr-1"></i>
+                雙重對照協議：同時分析 [語意參考源] 與 [待校稿目標]
               </span>
             )}
           </div>

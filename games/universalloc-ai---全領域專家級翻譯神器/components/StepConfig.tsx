@@ -1,6 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { TranslationConfig, SUPPORTED_LANGUAGES, PricingConfig } from '../types';
+
+export interface StepConfigHandle {
+  triggerStart: () => void;
+}
 
 interface StepConfigProps {
   rawData: any[];
@@ -10,11 +14,12 @@ interface StepConfigProps {
   sheetName?: string;
   uiLang?: string;
   isProofreadMode?: boolean;
+  onBillingUpdate?: (data: { totalWords: number; cost: number; targetLangs: string[]; sourceColumn: string; canStart: boolean }) => void;
 }
 
-export const StepConfig: React.FC<StepConfigProps> = ({
-  rawData, columns, onConfigComplete, onBack, sheetName, uiLang = 'zh-TW', isProofreadMode = false
-}) => {
+export const StepConfig = forwardRef<StepConfigHandle, StepConfigProps>(({
+  rawData, columns, onConfigComplete, onBack, sheetName, uiLang = 'zh-TW', isProofreadMode = false, onBillingUpdate
+}, ref) => {
   const [targetLangs, setTargetLangs] = useState<string[]>([]);
 
   // Column Mappings
@@ -57,6 +62,20 @@ export const StepConfig: React.FC<StepConfigProps> = ({
     }
   }, [targetLangs, columns, keyColumn, sourceColumn]);
 
+  // Report billing updates to parent
+  useEffect(() => {
+    if (onBillingUpdate) {
+      const costData = calculateCost();
+      onBillingUpdate({
+        totalWords: costData.totalWords,
+        cost: costData.estimatedCost,
+        targetLangs,
+        sourceColumn,
+        canStart: targetLangs.length > 0 && !!sourceColumn && !!keyColumn
+      });
+    }
+  }, [targetLangs, sourceColumn, keyColumn, rawData.length]);
+
   const calculateCost = () => {
     // Simple estimation: $0.8 per 1000 words
     const rowCount = rawData.length;
@@ -83,6 +102,7 @@ export const StepConfig: React.FC<StepConfigProps> = ({
   const costData = calculateCost();
 
   const handleStart = () => {
+    if (targetLangs.length === 0 || !sourceColumn || !keyColumn) return;
     const config: TranslationConfig = {
       sourceLang: 'auto',
       targetLangs,
@@ -101,6 +121,11 @@ export const StepConfig: React.FC<StepConfigProps> = ({
     };
     onConfigComplete(config);
   };
+
+  // Expose triggerStart to parent via ref
+  useImperativeHandle(ref, () => ({
+    triggerStart: handleStart
+  }), [targetLangs, keyColumn, sourceColumn, contextColumn, lengthReferenceColumn, gameContext, namingTemplate, targetCols, isProofreadMode, costData]);
 
   // Dynamic Preview Data
   const previewRow = rawData[0] || {};
@@ -396,37 +421,8 @@ export const StepConfig: React.FC<StepConfigProps> = ({
           </div>
         </div>
 
-        <div className="h-24"></div> {/* Spacer for bottom bar */}
+        <div className="h-32"></div> {/* Spacer for bottom bar */}
       </main>
-
-      {/* 3. Bottom Action Bar - Natural Flow at End */}
-      <footer className="shrink-0 bg-gaming-dark border-t border-white/10 p-6 z-40 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] mt-auto relative">
-        <div className="max-w-[1800px] mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-8">
-            <div>
-              <div className="text-xs font-black text-gray-500 uppercase tracking-widest">{t.words}</div>
-              <div className="text-2xl font-black text-white">{costData.totalWords.toLocaleString()}</div>
-            </div>
-            <div>
-              <div className="text-xs font-black text-gray-500 uppercase tracking-widest">{t.cost}</div>
-              <div className="text-2xl font-black text-amber-500 font-mono">${costData.estimatedCost.toFixed(2)}</div>
-            </div>
-            {isProofreadMode && (
-              <div className="hidden lg:block bg-emerald-900/30 px-4 py-2 rounded-lg border border-emerald-500/20 text-xs text-emerald-400 font-bold">
-                <i className="fas fa-check-circle mr-2"></i> {t.tip_lqa}
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={handleStart}
-            disabled={targetLangs.length === 0 || !sourceColumn || !keyColumn}
-            className="w-full md:w-auto bg-gradient-to-r from-gaming-accent to-purple-600 hover:from-purple-500 hover:to-gaming-accent text-white px-12 py-4 rounded-2xl font-black text-xl shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {t.btn_start} <i className="fas fa-rocket ml-2"></i>
-          </button>
-        </div>
-      </footer>
 
       {/* Global Scrollbar Styles */}
       <style>{`
@@ -439,4 +435,4 @@ export const StepConfig: React.FC<StepConfigProps> = ({
       `}</style>
     </div>
   );
-};
+});
