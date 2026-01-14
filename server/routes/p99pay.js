@@ -584,12 +584,12 @@ router.get('/verify/:orderId', (req, res) => {
 
 /**
  * Helper function to fulfill a service order after payment
- * This performs: 儲值 → 轉點(到遊戲) → 扣點(遊戲點數) in sequence
  *
- * Flow:
+ * Simplified flow for service orders:
  * 1. 儲值: G幣入帳 users.gold_balance (已由 P99 return/notify 完成)
- * 2. 轉點: users.gold_balance → user_game_balances.balance
- * 3. 扣點: user_game_balances.balance 扣除 (服務消費)
+ * 2. 服務消費: 直接從 G幣扣除 (不經過遊戲點數)
+ *
+ * Net result: G幣 +X (deposit) -X (service) = 0
  */
 function fulfillServiceOrder(p99OrderId, callback) {
     // Find the service order linked to this P99 order
@@ -610,14 +610,14 @@ function fulfillServiceOrder(p99OrderId, callback) {
             } catch (e) {}
             const gameId = serviceData.game_id || serviceOrder.service_type;
 
-            console.log(`[P99Pay ServiceFulfill] Processing ${serviceOrder.order_id}: ${serviceOrder.gold_amount}G for game ${gameId}`);
+            console.log(`[P99Pay ServiceFulfill] Processing ${serviceOrder.order_id}: ${serviceOrder.gold_amount}G for service ${gameId}`);
 
             db.serialize(() => {
                 db.run('BEGIN TRANSACTION');
 
                 // Step 1: 儲值 - G幣已由 P99 return/notify 入帳，這裡不需處理
 
-                // Step 2: 轉點 - 從 G幣扣除，轉入遊戲點數
+                // Step 2: 服務消費 - 直接從 G幣扣除
                 db.run(
                     'UPDATE users SET gold_balance = gold_balance - ? WHERE id = ? AND gold_balance >= ?',
                     [serviceOrder.gold_amount, serviceOrder.user_id, serviceOrder.gold_amount],
@@ -629,92 +629,39 @@ function fulfillServiceOrder(p99OrderId, callback) {
                             return;
                         }
 
-                        // Step 2b: 加入遊戲點數 (user_game_balances)
+                        // Log service consumption transaction
                         db.run(
-                            `INSERT INTO user_game_balances (user_id, game_id, balance, total_deposited, created_at, updated_at)
-                             VALUES (?, ?, ?, ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))
-                             ON CONFLICT(user_id, game_id) DO UPDATE SET
-                             balance = balance + ?,
-                             total_deposited = total_deposited + ?,
-                             updated_at = datetime('now', '+8 hours')`,
-                            [serviceOrder.user_id, gameId, serviceOrder.gold_amount, serviceOrder.gold_amount,
-                             serviceOrder.gold_amount, serviceOrder.gold_amount],
-                            function(err) {
-                                if (err) {
-                                    db.run('ROLLBACK');
-                                    console.error(`[P99Pay ServiceFulfill] Failed to credit game balance for ${serviceOrder.order_id}:`, err.message);
-                                    if (callback) callback(err);
-                                    return;
-                                }
-
-                                // Log transfer transaction (G幣 → 遊戲點數)
-                                db.run(
-                                    `INSERT INTO wallet_transactions (order_id, user_id, amount, currency, type, description, game_id, status, created_at)
-                                     VALUES (?, ?, ?, 'gold', 'transfer_out', ?, ?, 'completed', datetime('now', '+8 hours'))`,
-                                    [
-                                        `${serviceOrder.order_id}_transfer`,
-                                        serviceOrder.user_id,
-                                        -serviceOrder.gold_amount,
-                                        `轉點到 ${gameId}: ${serviceOrder.gold_amount}G`,
-                                        gameId
-                                    ]
-                                );
-
-                                // Step 3: 扣點 - 從遊戲點數扣除 (服務消費)
-                                db.run(
-                                    `UPDATE user_game_balances SET
-                                     balance = balance - ?,
-                                     total_consumed = total_consumed + ?,
-                                     updated_at = datetime('now', '+8 hours')
-                                     WHERE user_id = ? AND game_id = ? AND balance >= ?`,
-                                    [serviceOrder.gold_amount, serviceOrder.gold_amount,
-                                     serviceOrder.user_id, gameId, serviceOrder.gold_amount],
-                                    function(err) {
-                                        if (err || this.changes === 0) {
-                                            db.run('ROLLBACK');
-                                            console.error(`[P99Pay ServiceFulfill] Failed to consume game points for ${serviceOrder.order_id}`);
-                                            if (callback) callback(new Error('Failed to consume game points'));
-                                            return;
-                                        }
-
-                                        // Log consumption transaction (uses game_point, not gold)
-                                        db.run(
-                                            `INSERT INTO wallet_transactions (order_id, user_id, amount, currency, type, description, game_id, status, created_at)
-                                             VALUES (?, ?, ?, 'game_point', 'service', ?, ?, 'completed', datetime('now', '+8 hours'))`,
-                                            [
-                                                serviceOrder.order_id,
-                                                serviceOrder.user_id,
-                                                -serviceOrder.gold_amount,
-                                                `服務消費: ${serviceOrder.service_type} ($${serviceOrder.amount_usd} USD)`,
-                                                gameId
-                                            ]
-                                        );
-
-                                        // Step 4: Mark service order as fulfilled
-                                        db.run(
-                                            `UPDATE service_orders SET status = 'fulfilled', fulfilled_at = datetime('now', '+8 hours'), updated_at = datetime('now', '+8 hours')
-                                             WHERE order_id = ?`,
-                                            [serviceOrder.order_id]
-                                        );
-
-                                        db.run('COMMIT', (err) => {
-                                            if (err) {
-                                                console.error(`[P99Pay ServiceFulfill] Commit failed for ${serviceOrder.order_id}:`, err.message);
-                                                if (callback) callback(err);
-                                                return;
-                                            }
-
-                                            console.log(`[P99Pay ServiceFulfill] ✅ Complete: ${serviceOrder.order_id}`);
-                                            console.log(`  - G幣入帳: +${serviceOrder.gold_amount} (by P99 callback)`);
-                                            console.log(`  - 轉點到 ${gameId}: -${serviceOrder.gold_amount}G → +${serviceOrder.gold_amount} 遊戲點`);
-                                            console.log(`  - 服務消費: -${serviceOrder.gold_amount} 遊戲點`);
-
-                                            if (callback) callback(null, serviceOrder);
-                                        });
-                                    }
-                                );
-                            }
+                            `INSERT INTO wallet_transactions (order_id, user_id, amount, currency, type, description, game_id, status, created_at)
+                             VALUES (?, ?, ?, 'gold', 'service', ?, ?, 'completed', datetime('now', '+8 hours'))`,
+                            [
+                                serviceOrder.order_id,
+                                serviceOrder.user_id,
+                                -serviceOrder.gold_amount,
+                                `服務消費: ${serviceOrder.service_type} ($${serviceOrder.amount_usd} USD)`,
+                                gameId
+                            ]
                         );
+
+                        // Mark service order as fulfilled
+                        db.run(
+                            `UPDATE service_orders SET status = 'fulfilled', fulfilled_at = datetime('now', '+8 hours'), updated_at = datetime('now', '+8 hours')
+                             WHERE order_id = ?`,
+                            [serviceOrder.order_id]
+                        );
+
+                        db.run('COMMIT', (err) => {
+                            if (err) {
+                                console.error(`[P99Pay ServiceFulfill] Commit failed for ${serviceOrder.order_id}:`, err.message);
+                                if (callback) callback(err);
+                                return;
+                            }
+
+                            console.log(`[P99Pay ServiceFulfill] ✅ Complete: ${serviceOrder.order_id}`);
+                            console.log(`  - G幣入帳: +${serviceOrder.gold_amount} (by P99 callback)`);
+                            console.log(`  - 服務消費: -${serviceOrder.gold_amount}G`);
+
+                            if (callback) callback(null, serviceOrder);
+                        });
                     }
                 );
             });
