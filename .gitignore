@@ -50,3 +50,4 @@ server/*.db-*
 # Billing - CRITICAL: 金流廠商機密資料，絕對禁止推送！
 Billing/
 **/Billing/
+claude/
