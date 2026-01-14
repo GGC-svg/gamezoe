@@ -139,17 +139,21 @@ const App: React.FC = () => {
       // Step 2: Create service order with file path and config
       // Save ALL user form data for resume functionality
       const configJson = JSON.stringify({
+        // Work Mode (translate/proofread/clean)
+        workMode: config.workMode,                 // 工作模式
+        isProofreadMode: config.isProofreadMode,
+
+        // Sheet Selection
+        availableSheets: config.availableSheets,   // 可用工作表列表
+        selectedSheetName: config.selectedSheetName,
+
         // Data Mapping
         keyColumn: config.keyColumn,
         sourceColumn: config.sourceColumn,
         contextColumn: config.contextColumn,       // 語境備註欄位
         targetLangs: config.targetLangs,
         targetCols: config.targetCols,
-
-        // Mode & Settings
-        isProofreadMode: config.isProofreadMode,
         lengthReferenceColumn: config.lengthReferenceColumn,
-        selectedSheetName: config.selectedSheetName,
 
         // Context & Style
         gameContext: config.gameContext,           // 內容背景與風格
@@ -326,7 +330,11 @@ const App: React.FC = () => {
 
   const handleFileLoaded = (file: File, data: any, mode: 'translate' | 'clean' | 'proofread') => {
     setTranslationItems([]);
-    setConfig({ isProofreadMode: mode === 'proofread', isPremiumUnlocked: false });
+    setConfig({
+      isProofreadMode: mode === 'proofread',
+      isPremiumUnlocked: false,
+      workMode: mode  // 儲存模式: translate/proofread/clean
+    });
     setRawFile(file);
     if (mode === 'clean') {
       const flatRows = Array.isArray(data) ? data : data[0]?.rows || [];
@@ -335,6 +343,11 @@ const App: React.FC = () => {
     } else {
       if (Array.isArray(data) && data.length > 0 && 'sheetName' in data[0]) {
         setAllSheetsData(data);
+        // 儲存可用工作表名稱列表
+        setConfig(prev => ({
+          ...prev,
+          availableSheets: data.map((s: any) => s.sheetName)
+        }));
         if (data.length === 1) selectSheet(data[0].sheetName, data, mode === 'proofread');
         else setAppState(AppState.SHEET_SELECT);
       } else {

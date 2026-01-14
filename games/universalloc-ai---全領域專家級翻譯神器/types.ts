@@ -35,26 +35,37 @@ export interface PricingConfig {
 }
 
 export interface TranslationConfig {
-  sourceLang: string;
-  targetLangs: string[];
-  columnMapping?: Record<string, string>;
-  gameContext: string;
-  styleRules?: string;
-  proofreadContext?: string;
-  keyColumn: string;
-  sourceColumn: string;
-  contextColumn?: string;
-  lengthConstraintColumn?: string;
-  lengthReferenceColumn?: string;
-  batchSize: number;
-  glossary: GlossaryTerm[];
-  selectedSheetName?: string;
+  // Work Mode
+  workMode?: 'translate' | 'proofread' | 'clean';  // 工作模式
   isProofreadMode?: boolean;
   isPremiumUnlocked?: boolean;
-  internalAccessKey?: string;
-  targetCols?: Record<string, string>; // { "en-US": "Description_EN", "ja-JP": "Description_JP" }
-  namingTemplate?: string; // e.g. [Region] [Name] [Level]
+
+  // Sheet Selection
+  availableSheets?: string[];                      // 可用工作表列表
+  selectedSheetName?: string;
+
+  // Data Mapping
+  sourceLang: string;
+  targetLangs: string[];
+  keyColumn: string;
+  sourceColumn: string;
+  contextColumn?: string;                          // 語境備註欄位
+  targetCols?: Record<string, string>;             // { "en-US": "Description_EN", "ja-JP": "Description_JP" }
+  lengthConstraintColumn?: string;
+  lengthReferenceColumn?: string;
+  columnMapping?: Record<string, string>;
+
+  // Context & Style
+  gameContext: string;                             // 內容背景與風格
+  namingTemplate?: string;                         // 結構命名範本 e.g. [Region] [Name] [Level]
+  styleRules?: string;
+  proofreadContext?: string;
+
+  // Processing
+  batchSize: number;
+  glossary: GlossaryTerm[];
   pricing?: PricingConfig;
+  internalAccessKey?: string;
 }
 
 export interface TranslationItem {
