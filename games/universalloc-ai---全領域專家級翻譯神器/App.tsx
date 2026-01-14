@@ -120,7 +120,7 @@ const App: React.FC = () => {
       }
 
       // Call service-order API
-      const response = await fetch('/api/payment/p99/service-order', {
+      const response = await fetch('/api/payment/service-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
