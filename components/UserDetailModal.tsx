@@ -31,11 +31,15 @@ interface GameRecord {
 
 interface TransactionRecord {
     id: number;
+    order_id?: string;
     amount: number;
     currency: string;
     type: string;
     description: string;
     created_at: string;
+    p99_rrn?: string;
+    amount_usd?: number;
+    balance_after?: number;
 }
 
 interface LoginLog {
@@ -462,14 +466,39 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ isOpen, onClose, user
                                     ) : (
                                         <div className="space-y-2">
                                             {transactions.map((tx) => (
-                                                <div key={tx.id} className="bg-slate-800 rounded-lg p-4 border border-slate-700 flex items-center justify-between">
-                                                    <div>
-                                                        <p className="font-bold text-white">{tx.description || tx.type}</p>
-                                                        <p className="text-xs text-slate-500">{formatDate(tx.created_at)}</p>
+                                                <div key={tx.id} className="bg-slate-800 rounded-lg p-4 border border-slate-700">
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="flex-1">
+                                                            <p className="font-bold text-white">{tx.description || tx.type}</p>
+                                                            <p className="text-xs text-slate-500">{formatDate(tx.created_at)}</p>
+                                                            {/* Order IDs */}
+                                                            {tx.order_id && (
+                                                                <div className="mt-2 space-y-1">
+                                                                    <p className="text-xs font-mono text-yellow-400">
+                                                                        單號: {tx.order_id}
+                                                                    </p>
+                                                                    {tx.p99_rrn && (
+                                                                        <p className="text-xs font-mono text-blue-400">
+                                                                            P99: {tx.p99_rrn}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className={`font-mono font-bold ${tx.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                                {tx.amount > 0 ? '+' : ''}{tx.amount} {tx.currency === 'gold' ? 'G' : 'S'}
+                                                            </p>
+                                                            {tx.amount_usd && (
+                                                                <p className="text-xs text-slate-400">${tx.amount_usd} USD</p>
+                                                            )}
+                                                            {tx.balance_after !== undefined && tx.currency === 'gold' && (
+                                                                <p className="text-xs text-slate-500 mt-1">
+                                                                    餘額: {tx.balance_after} G
+                                                                </p>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                    <p className={`font-mono font-bold ${tx.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                        {tx.amount > 0 ? '+' : ''}{tx.amount} {tx.currency === 'gold' ? 'G' : 'S'}
-                                                    </p>
                                                 </div>
                                             ))}
                                         </div>

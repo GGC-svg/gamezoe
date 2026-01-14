@@ -11,6 +11,7 @@ import AdminDashboard from './components/AdminDashboard';
 import ProfileModal from './components/ProfileModal';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
+import PaymentResultModal from './components/PaymentResultModal';
 import { gameService } from './services/gameService';
 import { authService } from './services/authService';
 import { Game, User, GameCategory } from './types';
@@ -38,6 +39,15 @@ function App() {
 
   // View Routing
   const [currentView, setCurrentView] = useState<'home' | 'privacy' | 'terms'>('home');
+
+  // Payment Result Modal State
+  const [paymentResult, setPaymentResult] = useState<{
+    isOpen: boolean;
+    result: 'success' | 'error' | 'pending' | null;
+    errorCode?: string;
+    rcode?: string;
+    amount?: number;
+  }>({ isOpen: false, result: null });
 
   // Initial Data Fetch
   useEffect(() => {
@@ -70,12 +80,30 @@ function App() {
     initData();
   }, []);
 
-  // Auto-open Wallet Modal when redirected from P99 payment
+  // Handle P99 payment callback - Show result modal
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const hasPaymentCallback = urlParams.get('success') || urlParams.get('error') || urlParams.get('pending');
-    if (hasPaymentCallback) {
-      setIsWalletOpen(true);
+    const success = urlParams.get('success');
+    const error = urlParams.get('error');
+    const pending = urlParams.get('pending');
+    const rcode = urlParams.get('rcode');
+    const amountParam = urlParams.get('amount');
+
+    if (success || error || pending) {
+      let result: 'success' | 'error' | 'pending' = 'error';
+      if (success) result = 'success';
+      else if (pending) result = 'pending';
+
+      setPaymentResult({
+        isOpen: true,
+        result,
+        errorCode: error || undefined,
+        rcode: rcode || undefined,
+        amount: amountParam ? parseInt(amountParam) : undefined
+      });
+
+      // Clear URL params without reload
+      window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
 
@@ -499,6 +527,22 @@ function App() {
           user={user}
         />
       )}
+
+      {/* Payment Result Modal (P99 callback) */}
+      <PaymentResultModal
+        isOpen={paymentResult.isOpen}
+        onClose={() => {
+          setPaymentResult({ isOpen: false, result: null });
+          // Optionally open wallet to show updated balance
+          if (paymentResult.result === 'success' && user) {
+            setIsWalletOpen(true);
+          }
+        }}
+        result={paymentResult.result}
+        errorCode={paymentResult.errorCode}
+        rcode={paymentResult.rcode}
+        amount={paymentResult.amount}
+      />
 
     </div>
   );

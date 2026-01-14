@@ -1916,12 +1916,40 @@ app.get('/api/admin/users/:userId/games', (req, res) => {
     });
 });
 
-// Get user transactions
+// Get user transactions (with P99 order details)
 app.get('/api/admin/users/:userId/transactions', (req, res) => {
     const { userId } = req.params;
-    db.all("SELECT * FROM wallet_transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 100", [userId], (err, records) => {
+    db.all(`
+        SELECT
+            wt.*,
+            p99.order_id,
+            p99.rrn as p99_rrn,
+            p99.amount_usd
+        FROM wallet_transactions wt
+        LEFT JOIN p99_orders p99 ON wt.order_id = p99.order_id
+        WHERE wt.user_id = ?
+        ORDER BY wt.created_at DESC
+        LIMIT 100
+    `, [userId], (err, records) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(records || []);
+
+        // Calculate running balance
+        db.get("SELECT gold_balance FROM users WHERE id = ?", [userId], (err2, user) => {
+            if (err2 || !user) {
+                return res.json(records || []);
+            }
+
+            let runningBalance = user.gold_balance;
+            const recordsWithBalance = (records || []).map(record => {
+                const balanceAfter = runningBalance;
+                if (record.currency === 'gold') {
+                    runningBalance -= record.amount;
+                }
+                return { ...record, balance_after: balanceAfter };
+            });
+
+            res.json(recordsWithBalance);
+        });
     });
 });
 

@@ -96,13 +96,13 @@ router.post('/return', express.urlencoded({ extended: true }), (req, res) => {
 
     if (!data) {
         console.error('[P99Pay Return] No data received');
-        return res.redirect('/wallet?error=no_data');
+        return res.redirect('/?error=no_data');
     }
 
     const response = p99Client.parseResponse(data);
     if (!response) {
         console.error('[P99Pay Return] Failed to parse response');
-        return res.redirect('/wallet?error=parse_failed');
+        return res.redirect('/?error=parse_failed');
     }
 
     console.log('[P99Pay Return] Response:', JSON.stringify(response));
@@ -141,14 +141,14 @@ router.post('/return', express.urlencoded({ extended: true }), (req, res) => {
         // Get order details and add gold
         db.get('SELECT * FROM p99_orders WHERE order_id = ?', [orderId], (err, order) => {
             if (err || !order) {
-                return res.redirect(`/wallet?error=order_not_found&orderId=${orderId}`);
+                return res.redirect(`/?error=order_not_found&orderId=${orderId}`);
             }
 
             // Check if gold already credited (prevent duplicate)
             db.get('SELECT id FROM wallet_transactions WHERE order_id = ?', [orderId], (err, existingTx) => {
                 if (existingTx) {
                     console.log(`[P99Pay Return] Order ${orderId} already credited, skipping...`);
-                    res.redirect(`/wallet?success=true&orderId=${orderId}&gold=${order.gold_amount}`);
+                    res.redirect(`/?success=true&orderId=${orderId}&amount=${order.gold_amount}`);
                     return;
                 }
 
@@ -177,15 +177,15 @@ router.post('/return', express.urlencoded({ extended: true }), (req, res) => {
                     });
                 }
 
-                res.redirect(`/wallet?success=true&orderId=${orderId}&gold=${order.gold_amount}`);
+                res.redirect(`/?success=true&orderId=${orderId}&amount=${order.gold_amount}`);
             });
         });
     } else if (payStatus === 'W') {
         // Waiting - need to check order later
-        res.redirect(`/wallet?pending=true&orderId=${orderId}`);
+        res.redirect(`/?pending=true&orderId=${orderId}`);
     } else {
         // Failed
-        res.redirect(`/wallet?error=payment_failed&orderId=${orderId}&rcode=${rcode}`);
+        res.redirect(`/?error=payment_failed&orderId=${orderId}&rcode=${rcode}`);
     }
 });
 
