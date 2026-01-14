@@ -137,14 +137,25 @@ const App: React.FC = () => {
       }
 
       // Step 2: Create service order with file path and config
+      // Save ALL user form data for resume functionality
       const configJson = JSON.stringify({
+        // Data Mapping
         keyColumn: config.keyColumn,
         sourceColumn: config.sourceColumn,
+        contextColumn: config.contextColumn,       // 語境備註欄位
         targetLangs: config.targetLangs,
         targetCols: config.targetCols,
+
+        // Mode & Settings
         isProofreadMode: config.isProofreadMode,
         lengthReferenceColumn: config.lengthReferenceColumn,
         selectedSheetName: config.selectedSheetName,
+
+        // Context & Style
+        gameContext: config.gameContext,           // 內容背景與風格
+        namingTemplate: config.namingTemplate,     // 結構命名範本
+
+        // Glossary
         glossary: glossary
       });
 
