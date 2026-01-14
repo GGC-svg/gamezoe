@@ -12,7 +12,7 @@ interface Transaction {
     id: number;
     order_id?: string;
     amount: number;
-    currency: 'gold' | 'silver' | 'mixed';
+    currency: 'gold' | 'silver' | 'mixed' | 'game_point';
     type: string;
     description: string;
     created_at: string;
@@ -481,9 +481,13 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
                                                 <p className={`font-bold ${tx.amount > 0 ? 'text-green-400' : 'text-white'}`}>
                                                     {tx.amount > 0 ? '+' : ''}{tx.amount}
                                                 </p>
-                                                <p className="text-xs uppercase text-slate-500 font-medium">{tx.currency}</p>
+                                                <p className="text-xs uppercase text-slate-500 font-medium">
+                                                    {tx.currency === 'game_point' ? '遊戲點' : tx.currency}
+                                                </p>
                                                 {tx.balance_after !== undefined && (
-                                                    <p className="text-xs text-yellow-500/70 mt-1">餘額: {tx.balance_after.toLocaleString()} G</p>
+                                                    <p className="text-xs text-yellow-500/70 mt-1">
+                                                        餘額: {tx.balance_after.toLocaleString()} {tx.currency === 'game_point' ? '點' : 'G'}
+                                                    </p>
                                                 )}
                                             </div>
                                         </div>

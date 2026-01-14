@@ -158,6 +158,7 @@ const App: React.FC = () => {
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = data.apiUrl;
+        form.target = '_top'; // Submit in top frame to avoid X-Frame-Options blocking
         const input = document.createElement('input');
         input.type = 'hidden';
         input.name = 'data';

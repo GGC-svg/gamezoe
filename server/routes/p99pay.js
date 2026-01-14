@@ -677,10 +677,10 @@ function fulfillServiceOrder(p99OrderId, callback) {
                                             return;
                                         }
 
-                                        // Log consumption transaction
+                                        // Log consumption transaction (uses game_point, not gold)
                                         db.run(
                                             `INSERT INTO wallet_transactions (order_id, user_id, amount, currency, type, description, game_id, status, created_at)
-                                             VALUES (?, ?, ?, 'gold', 'service', ?, ?, 'completed', datetime('now', '+8 hours'))`,
+                                             VALUES (?, ?, ?, 'game_point', 'service', ?, ?, 'completed', datetime('now', '+8 hours'))`,
                                             [
                                                 serviceOrder.order_id,
                                                 serviceOrder.user_id,
