@@ -106,9 +106,14 @@ const App: React.FC = () => {
     setIsPaymentProcessing(true);
 
     try {
-      // Get user info from parent window (GameZoe platform)
-      const user = (window as any).gameZoeUser;
-      if (!user?.id) {
+      // Get user ID from URL params or window globals (same as geminiService)
+      const urlParams = new URLSearchParams(window.location.search);
+      const userId = urlParams.get('userId') ||
+        (window as any).currentUser?.id ||
+        (window as any).GameZoe?.currentUser?.id ||
+        (window.parent !== window && (window.parent as any).currentUser?.id);
+
+      if (!userId) {
         alert('請先登入 GameZoe 平台');
         setIsPaymentProcessing(false);
         return;
@@ -119,7 +124,7 @@ const App: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: user.id,
+          userId: userId,
           amountUSD: billingInfo.cost,
           serviceType: 'universalloc',
           serviceData: {
