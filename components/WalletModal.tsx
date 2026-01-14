@@ -10,11 +10,14 @@ interface WalletModalProps {
 
 interface Transaction {
     id: number;
+    order_id?: string;
     amount: number;
     currency: 'gold' | 'silver' | 'mixed';
     type: string;
     description: string;
     created_at: string;
+    p99_rrn?: string;
+    balance_after?: number;
 }
 
 const TOPUP_TIERS = [
@@ -415,6 +418,12 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
                                                 <div>
                                                     <p className="font-medium text-white">{tx.description}</p>
                                                     <p className="text-xs text-slate-500">{new Date(tx.created_at).toLocaleString()}</p>
+                                                    {tx.order_id && (
+                                                        <p className="text-xs text-slate-600 font-mono mt-1">
+                                                            單號: {tx.order_id}
+                                                            {tx.p99_rrn && <span className="ml-2 text-blue-400">P99: {tx.p99_rrn}</span>}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
                                             <div className="text-right">
@@ -422,6 +431,9 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
                                                     {tx.amount > 0 ? '+' : ''}{tx.amount}
                                                 </p>
                                                 <p className="text-xs uppercase text-slate-500 font-medium">{tx.currency}</p>
+                                                {tx.balance_after !== undefined && (
+                                                    <p className="text-xs text-yellow-500/70 mt-1">餘額: {tx.balance_after.toLocaleString()} G</p>
+                                                )}
                                             </div>
                                         </div>
                                     ))

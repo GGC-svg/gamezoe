@@ -2084,17 +2084,46 @@ app.get('/api/wallet/transactions/:userId', (req, res) => {
     const { userId } = req.params;
     const limit = 50;
 
-    db.all(
-        "SELECT * FROM wallet_transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
-        [userId, limit],
-        (err, rows) => {
-            if (err) {
-                res.status(500).json({ error: err.message });
-                return;
+    // First get current balance
+    db.get("SELECT gold_balance FROM users WHERE id = ?", [userId], (err, user) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        const currentBalance = user ? user.gold_balance : 0;
+
+        // Query transactions with P99 RRN via LEFT JOIN
+        db.all(
+            `SELECT
+                w.id, w.order_id, w.user_id, w.amount, w.currency, w.type,
+                w.description, w.reference_id, w.status, w.game_id, w.created_at,
+                p.rrn as p99_rrn
+            FROM wallet_transactions w
+            LEFT JOIN p99_orders p ON w.order_id = p.order_id
+            WHERE w.user_id = ?
+            ORDER BY w.created_at DESC
+            LIMIT ?`,
+            [userId, limit],
+            (err, rows) => {
+                if (err) {
+                    res.status(500).json({ error: err.message });
+                    return;
+                }
+
+                // Calculate running balance for each transaction (newest first)
+                let runningBalance = currentBalance;
+                const rowsWithBalance = rows.map((row, index) => {
+                    const balanceAfter = runningBalance;
+                    // For next iteration, subtract this transaction's effect
+                    runningBalance = runningBalance - row.amount;
+                    return {
+                        ...row,
+                        balance_after: balanceAfter
+                    };
+                });
+
+                res.json(rowsWithBalance);
             }
-            res.json(rows);
-        }
-    );
+        );
+    });
 });
 
 // --- LEADERBOARD API ---
@@ -2365,12 +2394,23 @@ app.get('/api/bridge/transaction/:orderId', (req, res) => {
 
 // --- ADMIN API EXTENSIONS ---
 
-// Get All Wallet Transactions (for Admin Dashboard)
+// Get All Wallet Transactions (for Admin Dashboard) - with P99 RRN
 app.get('/api/admin/transactions', (req, res) => {
-    db.all("SELECT * FROM wallet_transactions ORDER BY created_at DESC LIMIT 100", [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+    db.all(
+        `SELECT
+            w.id, w.order_id, w.user_id, w.amount, w.currency, w.type,
+            w.description, w.reference_id, w.status, w.game_id, w.created_at,
+            p.rrn as p99_rrn, p.amount_usd
+        FROM wallet_transactions w
+        LEFT JOIN p99_orders p ON w.order_id = p.order_id
+        ORDER BY w.created_at DESC
+        LIMIT 100`,
+        [],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(rows);
+        }
+    );
 });
 app.post('/api/bridge/transaction/check', (req, res) => {
     const { order_id } = req.body;

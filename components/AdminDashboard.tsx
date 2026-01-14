@@ -55,6 +55,8 @@ interface WalletTransaction {
    description: string;
    status: string;
    created_at: string;
+   p99_rrn?: string;
+   amount_usd?: number;
 }
 
 interface GameActivity {
@@ -540,6 +542,9 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
                               <td className="p-4 text-slate-300">
                                  <div className="text-sm">{new Date(record.created_at).toLocaleString()}</div>
                                  <div className="text-xs text-slate-500 font-mono mt-1">{record.order_id}</div>
+                                 {record.p99_rrn && (
+                                    <div className="text-xs text-blue-400 font-mono">P99: {record.p99_rrn}</div>
+                                 )}
                               </td>
                               <td className="p-4 text-nexus-accent font-mono text-xs">
                                  {record.user_id}
@@ -555,6 +560,9 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
                               </td>
                               <td className={`p-4 font-mono font-bold text-right ${record.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
                                  {record.amount > 0 ? '+' : ''}{record.amount}
+                                 {record.amount_usd && (
+                                    <div className="text-xs text-slate-500">${record.amount_usd} USD</div>
+                                 )}
                               </td>
                            </tr>
                         ))}
