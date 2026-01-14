@@ -73,7 +73,10 @@ app.use(cors({
         if (!origin) return callback(null, true);
 
         // Dynamic check for gamezoe.com and its subdomains
-        if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('gamezoe.com')) {
+        // Allow gamezoe.com and P99PAY payment gateway
+        if (allowedOrigins.indexOf(origin) !== -1 ||
+            origin.endsWith('gamezoe.com') ||
+            origin.endsWith('p99pay.com')) {
             return callback(null, true);
         }
 
