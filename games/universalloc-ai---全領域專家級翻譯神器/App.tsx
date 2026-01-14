@@ -134,7 +134,7 @@ const App: React.FC = () => {
             targetLangs: config.targetLangs,
             isProofread: config.isProofreadMode
           },
-          productName: `UniversalLoc 翻譯: ${rawFile.name}`,
+          productName: '翻譯系統翻譯費',
           returnUrl: window.location.href
         })
       });
