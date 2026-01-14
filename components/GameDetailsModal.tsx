@@ -442,14 +442,14 @@ const GameDetailsModal: React.FC<GameDetailsModalProps> = ({ game, isOpen, onClo
                   </div>
                 ) : loadingStats ? (
                   <div className="text-center py-12 text-slate-500">Loading history...</div>
-                ) : myHistory.length === 0 ? (
+                ) : myHistory.length === 0 || (game.game_type === 'service' && !myHistory.some(o => o.status === 'fulfilled' || o.status === 'completed')) ? (
                   <div className="text-center py-12 text-slate-500 bg-slate-800/20 rounded-xl">
-                    {game.game_type === 'service' ? '尚無訂單紀錄' : 'No games played yet.'}
+                    {game.game_type === 'service' ? '尚無已付款訂單' : 'No games played yet.'}
                   </div>
                 ) : game.game_type === 'service' ? (
-                  /* Service Orders Display */
+                  /* Service Orders Display - Only show paid/completed orders */
                   <div className="space-y-3">
-                    {myHistory.map((order, idx) => {
+                    {myHistory.filter(o => o.status === 'fulfilled' || o.status === 'completed').map((order, idx) => {
                       const serviceData = typeof order.service_data === 'string'
                         ? JSON.parse(order.service_data)
                         : order.service_data;
@@ -468,12 +468,9 @@ const GameDetailsModal: React.FC<GameDetailsModalProps> = ({ game, isOpen, onClo
                               </span>
                             </div>
                             <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
-                              order.status === 'completed' ? 'bg-green-900/50 text-green-400' :
-                              order.status === 'fulfilled' ? 'bg-blue-900/50 text-blue-400' :
-                              'bg-yellow-900/50 text-yellow-400'
+                              order.status === 'completed' ? 'bg-green-900/50 text-green-400' : 'bg-blue-900/50 text-blue-400'
                             }`}>
-                              {order.status === 'completed' ? '已完成' :
-                               order.status === 'fulfilled' ? '已付款' : '待付款'}
+                              {order.status === 'completed' ? '已完成' : '已付款'}
                             </span>
                           </div>
 
@@ -529,9 +526,6 @@ const GameDetailsModal: React.FC<GameDetailsModalProps> = ({ game, isOpen, onClo
                                   <Download className="h-3 w-3" />
                                   下載結果
                                 </button>
-                              )}
-                              {order.status === 'pending' && (
-                                <span className="text-xs text-yellow-400">等待付款完成</span>
                               )}
                             </div>
                           </div>

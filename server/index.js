@@ -721,7 +721,7 @@ app.get('/api/games/:gameId/service-orders/:userId', (req, res) => {
         `SELECT order_id, service_type, service_data, amount_usd, gold_amount, status,
                 file_path, result_path, config_json, expires_at, created_at, fulfilled_at
          FROM service_orders
-         WHERE service_type = ? AND user_id = ?
+         WHERE service_type = ? AND user_id = ? AND status IN ('fulfilled', 'completed')
          ORDER BY created_at DESC LIMIT 50`,
         [gameId, userId],
         (err, rows) => {
