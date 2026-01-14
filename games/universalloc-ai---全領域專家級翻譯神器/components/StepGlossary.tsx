@@ -9,12 +9,64 @@ interface StepGlossaryProps {
   onStartTranslation: (glossary: GlossaryTerm[]) => void;
   onBack: () => void;
   uiLang?: UILang;
+  isPremiumUnlocked?: boolean; // 是否已付費解鎖
 }
 
-export const StepGlossary: React.FC<StepGlossaryProps> = ({ config, allTexts, onStartTranslation, onBack, uiLang = 'zh-TW' }) => {
+export const StepGlossary: React.FC<StepGlossaryProps> = ({ config, allTexts, onStartTranslation, onBack, uiLang = 'zh-TW', isPremiumUnlocked = false }) => {
   const [terms, setTerms] = useState<GlossaryTerm[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStatus, setGenerationStatus] = useState("");
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // 匯出術語庫為 JSON
+  const handleExport = () => {
+    if (terms.length === 0) {
+      alert('術語庫為空，無法匯出');
+      return;
+    }
+    const dataStr = JSON.stringify(terms, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `glossary_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // 匯入術語庫 JSON
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const imported = JSON.parse(event.target?.result as string);
+        if (Array.isArray(imported)) {
+          // 驗證結構
+          const valid = imported.filter((item: any) =>
+            typeof item.term === 'string' &&
+            typeof item.translations === 'object'
+          );
+          if (valid.length > 0) {
+            setTerms(prev => [...prev, ...valid]);
+            setGenerationStatus(`已匯入 ${valid.length} 個術語`);
+            setTimeout(() => setGenerationStatus(''), 3000);
+          } else {
+            alert('檔案格式無效');
+          }
+        } else {
+          alert('檔案格式無效，需為 JSON 陣列');
+        }
+      } catch (err) {
+        alert('無法解析 JSON 檔案');
+      }
+    };
+    reader.readAsText(file);
+    // Reset input
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const performSmartScan = (texts: string[]) => {
     const freqMap: Record<string, number> = {};
@@ -130,12 +182,68 @@ export const StepGlossary: React.FC<StepGlossaryProps> = ({ config, allTexts, on
             <p className="text-[10px] text-gaming-accent font-black uppercase tracking-widest">{generationStatus || "引擎就緒"}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <button onClick={handleDeepScan} disabled={isGenerating} className={`px-4 py-2 rounded-lg font-black text-xs transition-all border ${isGenerating ? 'bg-white/5 border-white/10 text-white/20' : 'bg-gaming-accent/10 border-gaming-accent text-gaming-accent hover:bg-gaming-accent hover:text-white shadow-lg'}`}>
-            {isGenerating ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-wand-magic-sparkles"></i>} AI 智能提取
+        <div className="flex items-center gap-2 lg:gap-3">
+          {/* 匯入術語庫 */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".json"
+            onChange={handleImport}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-9 h-9 lg:w-auto lg:px-3 lg:py-2 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gaming-muted hover:text-white transition-all"
+            title="匯入術語庫"
+          >
+            <i className="fas fa-file-import"></i>
+            <span className="hidden lg:inline text-xs font-black">匯入</span>
           </button>
-          <button onClick={() => onStartTranslation(terms)} className="px-6 py-2 bg-gaming-success text-white rounded-lg font-black text-xs shadow-xl hover:brightness-110 active:scale-95 transition-all">
-            確認下一步 <i className="fas fa-bolt ml-1"></i>
+
+          {/* 匯出術語庫 */}
+          <button
+            onClick={handleExport}
+            disabled={terms.length === 0}
+            className="w-9 h-9 lg:w-auto lg:px-3 lg:py-2 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gaming-muted hover:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            title="匯出術語庫"
+          >
+            <i className="fas fa-file-export"></i>
+            <span className="hidden lg:inline text-xs font-black">匯出</span>
+          </button>
+
+          {/* 分隔線 */}
+          <div className="w-px h-6 bg-white/10 hidden lg:block"></div>
+
+          {/* AI 智能提取 - 需要付費解鎖 */}
+          <div className="relative group">
+            <button
+              onClick={isPremiumUnlocked ? handleDeepScan : undefined}
+              disabled={isGenerating || !isPremiumUnlocked}
+              className={`px-3 lg:px-4 py-2 rounded-lg font-black text-xs transition-all border ${
+                !isPremiumUnlocked
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-500 cursor-not-allowed'
+                  : isGenerating
+                    ? 'bg-white/5 border-white/10 text-white/20'
+                    : 'bg-gaming-accent/10 border-gaming-accent text-gaming-accent hover:bg-gaming-accent hover:text-white shadow-lg'
+              }`}
+            >
+              {isGenerating ? (
+                <><i className="fas fa-circle-notch fa-spin"></i><span className="hidden lg:inline ml-1">提取中...</span></>
+              ) : !isPremiumUnlocked ? (
+                <><i className="fas fa-lock"></i><span className="hidden lg:inline ml-1">AI 智能提取</span></>
+              ) : (
+                <><i className="fas fa-wand-magic-sparkles"></i><span className="hidden lg:inline ml-1">AI 智能提取</span></>
+              )}
+            </button>
+            {/* 未付費提示 */}
+            {!isPremiumUnlocked && (
+              <div className="absolute top-full mt-2 right-0 w-48 bg-black/90 border border-amber-500/30 text-amber-400 text-[10px] p-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                <i className="fas fa-crown mr-1"></i> 付費後解鎖 AI 術語提取功能
+              </div>
+            )}
+          </div>
+          <button onClick={() => onStartTranslation(terms)} className="px-4 lg:px-6 py-2 bg-gaming-success text-white rounded-lg font-black text-xs shadow-xl hover:brightness-110 active:scale-95 transition-all">
+            {isPremiumUnlocked ? '開始翻譯' : '預覽翻譯'} <i className="fas fa-bolt ml-1"></i>
           </button>
         </div>
       </div>
