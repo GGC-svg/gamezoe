@@ -144,32 +144,41 @@ router.post('/return', express.urlencoded({ extended: true }), (req, res) => {
                 return res.redirect(`/wallet?error=order_not_found&orderId=${orderId}`);
             }
 
-            // Add gold to user (only if not already credited)
-            if (order.status !== 'settled') {
-                db.serialize(() => {
-                    db.run('BEGIN TRANSACTION');
+            // Check if gold already credited (prevent duplicate)
+            db.get('SELECT id FROM wallet_transactions WHERE order_id = ?', [orderId], (err, existingTx) => {
+                if (existingTx) {
+                    console.log(`[P99Pay Return] Order ${orderId} already credited, skipping...`);
+                    res.redirect(`/wallet?success=true&orderId=${orderId}&gold=${order.gold_amount}`);
+                    return;
+                }
 
-                    // Add gold
-                    db.run('UPDATE users SET gold_balance = gold_balance + ? WHERE id = ?',
-                        [order.gold_amount, order.user_id]);
+                // Add gold to user (only if not already credited)
+                if (order.status !== 'settled') {
+                    db.serialize(() => {
+                        db.run('BEGIN TRANSACTION');
 
-                    // Log transaction
-                    db.run(
-                        `INSERT INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at)
-                         VALUES (?, ?, ?, 'gold', 'deposit', ?, 'completed', datetime('now', '+8 hours'))`,
-                        [orderId, order.user_id, order.gold_amount, `P99PAY topup ${order.amount_usd} USD`]
-                    );
+                        // Add gold
+                        db.run('UPDATE users SET gold_balance = gold_balance + ? WHERE id = ?',
+                            [order.gold_amount, order.user_id]);
 
-                    db.run('COMMIT', () => {
-                        console.log(`[P99Pay Return] Gold credited: ${order.gold_amount} to user ${order.user_id}`);
+                        // Log transaction
+                        db.run(
+                            `INSERT OR IGNORE INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at)
+                             VALUES (?, ?, ?, 'gold', 'deposit', ?, 'completed', datetime('now', '+8 hours'))`,
+                            [orderId, order.user_id, order.gold_amount, `P99PAY topup ${order.amount_usd} USD`]
+                        );
 
-                        // Auto-settle the order
-                        settleP99Order(orderId);
+                        db.run('COMMIT', () => {
+                            console.log(`[P99Pay Return] Gold credited: ${order.gold_amount} to user ${order.user_id}`);
+
+                            // Auto-settle the order
+                            settleP99Order(orderId);
+                        });
                     });
-                });
-            }
+                }
 
-            res.redirect(`/wallet?success=true&orderId=${orderId}&gold=${order.gold_amount}`);
+                res.redirect(`/wallet?success=true&orderId=${orderId}&gold=${order.gold_amount}`);
+            });
         });
     } else if (payStatus === 'W') {
         // Waiting - need to check order later
@@ -230,18 +239,27 @@ router.post('/notify', express.urlencoded({ extended: true }), (req, res) => {
     if (payStatus === 'S' && rcode === '0000' && erpcValid) {
         db.get('SELECT * FROM p99_orders WHERE order_id = ?', [orderId], (err, order) => {
             if (!err && order && order.status !== 'settled') {
-                db.serialize(() => {
-                    db.run('BEGIN TRANSACTION');
-                    db.run('UPDATE users SET gold_balance = gold_balance + ? WHERE id = ?',
-                        [order.gold_amount, order.user_id]);
-                    db.run(
-                        `INSERT INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at)
-                         VALUES (?, ?, ?, 'gold', 'deposit', ?, 'completed', datetime('now', '+8 hours'))`,
-                        [orderId, order.user_id, order.gold_amount, `P99PAY topup ${order.amount_usd} USD`]
-                    );
-                    db.run('COMMIT', () => {
-                        console.log(`[P99Pay Notify] Gold credited: ${order.gold_amount} to user ${order.user_id}`);
+                // Check if gold already credited (prevent duplicate)
+                db.get('SELECT id FROM wallet_transactions WHERE order_id = ?', [orderId], (err, existingTx) => {
+                    if (existingTx) {
+                        console.log(`[P99Pay Notify] Order ${orderId} already credited, skipping...`);
                         settleP99Order(orderId);
+                        return;
+                    }
+
+                    db.serialize(() => {
+                        db.run('BEGIN TRANSACTION');
+                        db.run('UPDATE users SET gold_balance = gold_balance + ? WHERE id = ?',
+                            [order.gold_amount, order.user_id]);
+                        db.run(
+                            `INSERT OR IGNORE INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at)
+                             VALUES (?, ?, ?, 'gold', 'deposit', ?, 'completed', datetime('now', '+8 hours'))`,
+                            [orderId, order.user_id, order.gold_amount, `P99PAY topup ${order.amount_usd} USD`]
+                        );
+                        db.run('COMMIT', () => {
+                            console.log(`[P99Pay Notify] Gold credited: ${order.gold_amount} to user ${order.user_id}`);
+                            settleP99Order(orderId);
+                        });
                     });
                 });
             }
@@ -423,17 +441,26 @@ export function startBatchJob() {
                                 // Process successful order
                                 db.get('SELECT * FROM p99_orders WHERE order_id = ?', [order.order_id], (err, fullOrder) => {
                                     if (!err && fullOrder && fullOrder.status !== 'settled') {
-                                        db.serialize(() => {
-                                            db.run('BEGIN TRANSACTION');
-                                            db.run('UPDATE users SET gold_balance = gold_balance + ? WHERE id = ?',
-                                                [fullOrder.gold_amount, fullOrder.user_id]);
-                                            db.run(
-                                                `INSERT INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at)
-                                                 VALUES (?, ?, ?, 'gold', 'deposit', ?, 'completed', datetime('now', '+8 hours'))`,
-                                                [order.order_id, fullOrder.user_id, fullOrder.gold_amount, `P99PAY batch topup ${fullOrder.amount_usd} USD`]
-                                            );
-                                            db.run('COMMIT', () => {
+                                        // Check if already credited
+                                        db.get('SELECT id FROM wallet_transactions WHERE order_id = ?', [order.order_id], (err, existingTx) => {
+                                            if (existingTx) {
+                                                console.log(`[P99Pay Batch] Order ${order.order_id} already credited, skipping...`);
                                                 settleP99Order(order.order_id);
+                                                return;
+                                            }
+                                            db.serialize(() => {
+                                                db.run('BEGIN TRANSACTION');
+                                                db.run('UPDATE users SET gold_balance = gold_balance + ? WHERE id = ?',
+                                                    [fullOrder.gold_amount, fullOrder.user_id]);
+                                                db.run(
+                                                    `INSERT OR IGNORE INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at)
+                                                     VALUES (?, ?, ?, 'gold', 'deposit', ?, 'completed', datetime('now', '+8 hours'))`,
+                                                    [order.order_id, fullOrder.user_id, fullOrder.gold_amount, `P99PAY batch topup ${fullOrder.amount_usd} USD`]
+                                                );
+                                                db.run('COMMIT', () => {
+                                                    console.log(`[P99Pay Batch] Gold credited: ${fullOrder.gold_amount} to user ${fullOrder.user_id}`);
+                                                    settleP99Order(order.order_id);
+                                                });
                                             });
                                         });
                                     }
