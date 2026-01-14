@@ -138,7 +138,7 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
 
         try {
             // paymentMethod 為空，讓 P99PAY 顯示支付選項頁面
-            const response = await fetch(`${API_BASE}/payment/p99/order`, {
+            const response = await fetch(`${API_BASE}/payment/order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

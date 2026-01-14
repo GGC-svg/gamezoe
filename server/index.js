@@ -616,9 +616,11 @@ app.post('/api/wallet/topup', (req, res) => {
 // --- P99PAY PAYMENT GATEWAY ---
 // Mount P99PAY routes and inject database
 setP99Database(db);
-app.use('/api/payment/p99', p99payRoutes);
+// Mount at /api/payment to match URL submitted to P99
+// Notify URL registered: https://gamezoe.com/api/payment/notify
+app.use('/api/payment', p99payRoutes);
 startP99BatchJob();
-console.log('[P99Pay] Payment gateway routes mounted at /api/payment/p99');
+console.log('[P99Pay] Payment gateway routes mounted at /api/payment');
 
 
 // --- BRIDGE API (For External Casinos) ---
