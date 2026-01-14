@@ -86,6 +86,22 @@
 			filter: brightness(1.2);
 		}
 
+		/* Difficulty Buttons */
+		.diff-btn {
+			transition: all 0.2s;
+			opacity: 0.6;
+		}
+		.diff-btn:hover {
+			opacity: 1;
+			transform: scale(1.05);
+			background: inherit !important;
+		}
+		.diff-btn.selected {
+			opacity: 1;
+			transform: scale(1.1);
+			box-shadow: 0 0 15px currentColor;
+		}
+
 		/* HUD */
 		#hud-top {
 			position: absolute;
@@ -298,6 +314,27 @@
 				display: block;
 			}
 		}
+
+		#sound-btn {
+			position: fixed;
+			top: 10px;
+			right: 10px;
+			width: 45px;
+			height: 45px;
+			font-size: 22px;
+			background: rgba(0, 0, 0, 0.5);
+			border: 2px solid #fff;
+			border-radius: 8px;
+			color: white;
+			cursor: pointer;
+			z-index: 200;
+			padding: 0;
+			line-height: 45px;
+		}
+
+		#sound-btn:hover {
+			background: rgba(255, 255, 255, 0.2);
+		}
 	</style>
 </head>
 
@@ -313,6 +350,7 @@
 		<div class="hud-col" style="align-items: center;">
 			<div class="hud-label">STAGE</div>
 			<div class="hud-big" id="stage-display">1</div>
+			<div class="hud-label" id="difficulty-display" style="margin-top:5px;">普通</div>
 		</div>
 		<div class="hud-col" style="align-items: flex-end;">
 			<div class="hud-label">FUEL (SPECIAL)</div>
@@ -340,16 +378,42 @@
 		<div class="btn-circle" ontouchstart="triggerSpecial(event)">⚡</div>
 	</div>
 
+	<button id="sound-btn" onclick="toggleSound()">🔊</button>
+
 	<div id="ui">
 		<div id="start-screen" class="screen">
 			<h1>1943: MIDWAY</h1>
 			<p>ULTIMATE EDITION</p>
-			<p>
-				<b>MOUSE / TOUCH</b> to Move<br>
-				<b>SPACE / CLICK</b> for Special Attack<br>
-				<b>STACK UP TO 3 WEAPONS!</b>
+			<p style="font-size:1rem; margin-bottom:10px;">
+				<b>WASD / 方向鍵</b> 移動<br>
+				<b>SPACE / Z</b> 特殊技能<br>
+				<b>ESC / P</b> 暫停
 			</p>
-			<div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 20px;">
+			<div style="margin-bottom:15px;">
+				<label style="color:#ffaa00; display:block; margin-bottom:8px;">難度選擇：</label>
+				<div id="difficulty-buttons" style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+					<button class="diff-btn" data-diff="easy" style="background:#1a3a1a; border:2px solid #00ff00; color:#00ff00; padding:8px 12px; cursor:pointer; border-radius:4px;">
+						<div style="font-weight:bold;">簡單</div>
+						<div style="font-size:0.7rem; opacity:0.8;">HP×0.7 | 5命</div>
+					</button>
+					<button class="diff-btn selected" data-diff="normal" style="background:#3a3a1a; border:2px solid #ffff00; color:#ffff00; padding:8px 12px; cursor:pointer; border-radius:4px;">
+						<div style="font-weight:bold;">普通</div>
+						<div style="font-size:0.7rem; opacity:0.8;">HP×1.0 | 3命</div>
+					</button>
+					<button class="diff-btn" data-diff="hard" style="background:#3a2a1a; border:2px solid #ff8800; color:#ff8800; padding:8px 12px; cursor:pointer; border-radius:4px;">
+						<div style="font-weight:bold;">困難</div>
+						<div style="font-size:0.7rem; opacity:0.8;">HP×1.5 | 3命</div>
+					</button>
+					<button class="diff-btn" data-diff="arcade" style="background:#3a1a1a; border:2px solid #ff0000; color:#ff0000; padding:8px 12px; cursor:pointer; border-radius:4px;">
+						<div style="font-weight:bold;">街機</div>
+						<div style="font-size:0.7rem; opacity:0.8;">HP×2.0 | 1命</div>
+					</button>
+				</div>
+				<div id="difficulty-desc" style="margin-top:10px; font-size:0.85rem; color:#aaa; min-height:40px;">
+					標準難度，適合大多數玩家
+				</div>
+			</div>
+			<div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; font-size:0.9rem;">
 				<span style="color:#0f0">Shotgun</span>
 				<span style="color:#ff0">3-Way</span>
 				<span style="color:#fff">Auto</span>
@@ -360,160 +424,210 @@
 		</div>
 		<div id="end-screen" class="screen hidden">
 			<h1 style="color:#ff0055">MISSION FAILED</h1>
+			<p>難度: <span id="end-difficulty" style="font-weight:bold;">普通</span></p>
 			<p>SCORE: <span id="final-score">0</span></p>
+			<p style="color:#ffaa00">MAX COMBO: <span id="final-combo">0</span></p>
+			<p style="color:#888; font-size:0.9rem;">STAGE: <span id="final-stage">1</span></p>
 			<button onclick="startGame()">RETRY</button>
 		</div>
 		<div id="win-screen" class="screen hidden">
 			<h1 style="color:#00ff00">VICTORY</h1>
 			<p>You have sunk the entire fleet!</p>
+			<p>難度: <span id="win-difficulty" style="font-weight:bold;">普通</span></p>
 			<p>FINAL SCORE: <span id="final-win-score">0</span></p>
+			<p style="color:#ffaa00">MAX COMBO: <span id="final-win-combo">0</span></p>
 			<button onclick="startGame()">PLAY AGAIN</button>
 		</div>
 	</div>
 
 	<script>
-		// --- 1943 Data ---
+		// --- 1943 Data (Based on Original Arcade) ---
 		const BOSS_DATA = [
-			// Stage 1: Heavy Cruiser (Tone) - 2 Main Guns
+			// Stage 1: 利根 (重巡洋艦) - 前2砲 + 側面4高射砲
 			{
 				name: "TONE", type: "Heavy Cruiser", hp: 3000, w: 120, h: 250, enter: 'top', parts: [
-					{ t: 'turret_main', x: 0, y: -40, cd: 50 },
-					{ t: 'turret_main', x: 0, y: 50, cd: 60 }
+					{ t: 'turret_main', x: 0, y: -60, cd: 60 },
+					{ t: 'turret_main', x: 0, y: 40, cd: 70 },
+					{ t: 'turret_aa', x: -40, y: -20, cd: 40 },
+					{ t: 'turret_aa', x: 40, y: -20, cd: 45 },
+					{ t: 'turret_aa', x: -40, y: 60, cd: 50 },
+					{ t: 'turret_aa', x: 40, y: 60, cd: 55 }
 				]
 			},
-			// Stage 2: Carrier (Kaga) - Bridge + AA
+			// Stage 2: 加賀 (航空母艦) - 甲板放飛機 + 高射砲
 			{
-				name: "KAGA", type: "Aircraft Carrier", hp: 4000, w: 160, h: 320, enter: 'top', parts: [
+				name: "KAGA", type: "Aircraft Carrier", hp: 4500, w: 160, h: 320, enter: 'top', parts: [
 					{ t: 'bridge', x: 50, y: -20 },
+					{ t: 'deck', x: 0, y: 50 },
 					{ t: 'turret_aa', x: 60, y: 40, cd: 30 },
-					{ t: 'turret_aa', x: 60, y: -80, cd: 25 }
+					{ t: 'turret_aa', x: 60, y: -80, cd: 35 }
 				]
 			},
-			// Stage 3: Super Bomber (Ayako I) - Engines + Tail Gun
+			// Stage 3: 綾子一型 (大型轟炸機) - 3發柱狀/5發扇形
 			{
-				name: "AYAKO I", type: "Super Bomber", hp: 5000, w: 280, h: 180, enter: 'bottom', parts: [
-					{ t: 'propeller', x: -80, y: 10, spd: 0.5 }, { t: 'propeller', x: 80, y: 10, spd: -0.5 },
-					{ t: 'propeller', x: -40, y: 20, spd: 0.5 }, { t: 'propeller', x: 40, y: 20, spd: -0.5 },
-					{ t: 'turret_aa', x: 0, y: 80, cd: 20 } // Tail gun
+				name: "AYAKO", type: "Super Bomber", hp: 5000, w: 280, h: 180, enter: 'bottom', parts: [
+					{ t: 'propeller', x: -80, y: 10, spd: 0.5 },
+					{ t: 'propeller', x: 80, y: 10, spd: -0.5 },
+					{ t: 'propeller', x: -40, y: 20, spd: 0.5 },
+					{ t: 'propeller', x: 40, y: 20, spd: -0.5 },
+					{ t: 'turret_aa', x: 0, y: 70, cd: 25 }
 				]
 			},
-			// Stage 4: Battleship (Fuso) - 4 Turrets
+			// Stage 4: 扶桑 (戰艦) - 防禦較弱
 			{
-				name: "FUSO", type: "Battleship", hp: 7000, w: 140, h: 350, enter: 'top', parts: [
-					{ t: 'turret_main', x: 0, y: -80, cd: 60 },
-					{ t: 'turret_main', x: 0, y: -40, cd: 70 },
-					{ t: 'bridge', x: 0, y: 0 },
-					{ t: 'turret_main', x: 0, y: 60, cd: 80 },
-					{ t: 'turret_main', x: 0, y: 100, cd: 90 }
+				name: "FUSO", type: "Battleship", hp: 6000, w: 140, h: 320, enter: 'top', parts: [
+					{ t: 'turret_main', x: 0, y: -80, cd: 70 },
+					{ t: 'turret_main', x: 0, y: -30, cd: 80 },
+					{ t: 'bridge', x: 0, y: 20 },
+					{ t: 'turret_main', x: 0, y: 80, cd: 90 }
 				]
 			},
-			// Stage 5: Destroyer Fleet - Represented as one visual unit for now, but high fire rate
-			{
-				name: "DESRON 2", type: "Destroyer Flagship", hp: 6000, w: 100, h: 220, enter: 'top', parts: [
-					{ t: 'turret_aa', x: 0, y: -60, cd: 15 },
-					{ t: 'turret_aa', x: 0, y: 60, cd: 20 }
-				]
-			},
-			// Stage 6: Akagi
+			// Stage 5: 赤城 (航空母艦) - 密集高射砲 + 2放飛機平台
 			{
 				name: "AKAGI", type: "Aircraft Carrier", hp: 8000, w: 180, h: 360, enter: 'top', parts: [
 					{ t: 'bridge', x: -60, y: 0 },
-					{ t: 'turret_aa', x: -60, y: -80, cd: 50 },
-					{ t: 'turret_aa', x: -60, y: 80, cd: 50 },
-					{ t: 'turret_aa', x: 60, y: 0, cd: 40 }
+					{ t: 'deck', x: 0, y: -60 },
+					{ t: 'deck', x: 0, y: 80 },
+					{ t: 'turret_aa', x: -60, y: -80, cd: 25 },
+					{ t: 'turret_aa', x: -60, y: 80, cd: 25 },
+					{ t: 'turret_aa', x: 60, y: -40, cd: 20 },
+					{ t: 'turret_aa', x: 60, y: 40, cd: 20 }
 				]
 			},
-			// 7
+			// Stage 6: 大飛龍一型 (敵機編隊) - 空戰關卡
 			{
-				name: "DAI-HIRYU", type: "Bomber Fleet", hp: 8500, w: 300, h: 220, enter: 'bottom', parts: [
-					{ t: 'turret_main', x: 0, y: 0, cd: 50 },
-					{ t: 'turret_aa', x: -50, y: 50, cd: 15 },
-					{ t: 'turret_aa', x: 50, y: 50, cd: 20 }
+				name: "DAIHIRYU", type: "Air Squadron", hp: 6000, w: 300, h: 200, enter: 'bottom', parts: [
+					{ t: 'propeller', x: -100, y: 0, spd: 0.6 },
+					{ t: 'propeller', x: 100, y: 0, spd: -0.6 },
+					{ t: 'propeller', x: 0, y: 0, spd: 0.4 },
+					{ t: 'turret_aa', x: -50, y: 60, cd: 18 },
+					{ t: 'turret_aa', x: 50, y: 60, cd: 18 },
+					{ t: 'turret_aa', x: 0, y: 80, cd: 15 }
 				]
 			},
-			// 8 Ise
+			// Stage 7: 伊勢 (航空戰艦) - 4門大砲 + 放戰鬥機
 			{
-				name: "ISE", type: "Aviation Battleship", hp: 9000, w: 160, h: 340, enter: 'top', parts: [
-					{ t: 'turret_main', x: 0, y: -80, cd: 120 },
-					{ t: 'bridge', x: 0, y: -20 },
-					{ t: 'deck', x: 0, y: 80 } // Flight deck back
+				name: "ISE", type: "Aviation Battleship", hp: 10000, w: 160, h: 340, enter: 'top', parts: [
+					{ t: 'turret_main', x: 0, y: -100, cd: 50 },
+					{ t: 'turret_main', x: 0, y: -50, cd: 55 },
+					{ t: 'bridge', x: 0, y: 0 },
+					{ t: 'deck', x: 0, y: 80 },
+					{ t: 'turret_main', x: 0, y: 120, cd: 60 }
 				]
 			},
-			// 9 Hiryu
+			// Stage 8: 飛龍 (航空母艦) - 密集高射砲
 			{
-				name: "HIRYU", type: "Aircraft Carrier", hp: 10000, w: 160, h: 340, enter: 'top', parts: [
+				name: "HIRYU", type: "Aircraft Carrier", hp: 11000, w: 160, h: 340, enter: 'top', parts: [
 					{ t: 'bridge', x: 50, y: 0 },
-					{ t: 'turret_aa', x: 60, y: -50, cd: 20 },
-					{ t: 'turret_aa', x: 60, y: 50, cd: 20 }
+					{ t: 'deck', x: -20, y: 0 },
+					{ t: 'turret_aa', x: 60, y: -60, cd: 18 },
+					{ t: 'turret_aa', x: 60, y: 60, cd: 18 },
+					{ t: 'turret_aa', x: -60, y: -40, cd: 22 },
+					{ t: 'turret_aa', x: -60, y: 40, cd: 22 }
 				]
 			},
-			// 10 Ayako II
+			// Stage 9: 綾子二型 (強化轟炸機) - 4條血、更快
 			{
-				name: "AYAKO II", type: "Super Bomber Mk.II", hp: 12000, w: 320, h: 240, enter: 'bottom', parts: [
-					{ t: 'propeller', x: -100, y: 0, spd: 0.8 }, { t: 'propeller', x: 100, y: 0, spd: -0.8 },
-					{ t: 'turret_main', x: 0, y: 0, cd: 40 }, // Center heavy
-					{ t: 'turret_aa', x: -50, y: 80, cd: 15 },
-					{ t: 'turret_aa', x: 50, y: 80, cd: 15 }
+				name: "AYAKO II", type: "Super Bomber Mk.II", hp: 12000, w: 320, h: 220, enter: 'bottom', parts: [
+					{ t: 'propeller', x: -110, y: 0, spd: 0.7 },
+					{ t: 'propeller', x: 110, y: 0, spd: -0.7 },
+					{ t: 'propeller', x: -50, y: 10, spd: 0.6 },
+					{ t: 'propeller', x: 50, y: 10, spd: -0.6 },
+					{ t: 'turret_main', x: 0, y: 0, cd: 45 },
+					{ t: 'turret_aa', x: -60, y: 70, cd: 15 },
+					{ t: 'turret_aa', x: 60, y: 70, cd: 15 }
 				]
 			},
-			// 11 Mutsu
+			// Stage 10: 陸奧 (戰艦) - 大砲 + 密集高射砲
 			{
-				name: "MUTSU", type: "Battleship", hp: 15000, w: 180, h: 360, enter: 'top', parts: [
-					{ t: 'turret_main', x: 0, y: -100, cd: 100 },
-					{ t: 'turret_main', x: 0, y: -50, cd: 100 },
-					{ t: 'turret_main', x: 0, y: 50, cd: 100 },
-					{ t: 'turret_main', x: 0, y: 100, cd: 100 }
-				]
-			},
-			// 12
-			{
-				name: "DAI-HIRYU II", type: "Bomber Fleet II", hp: 14000, w: 320, h: 240, enter: 'top', parts: [
-					{ t: 'turret_aa', x: 0, y: 0, cd: 10 }, // Machine gun
-					{ t: 'turret_aa', x: -80, y: 20, cd: 15 },
-					{ t: 'turret_aa', x: 80, y: 20, cd: 15 }
-				]
-			},
-			// 13 Yamashiro
-			{
-				name: "YAMASHIRO", type: "Battleship", hp: 18000, w: 180, h: 380, enter: 'bottom', parts: [
-					{ t: 'turret_main', x: 0, y: -100, cd: 90 },
-					{ t: 'turret_main', x: 0, y: -50, cd: 90 },
+				name: "MUTSU", type: "Battleship", hp: 14000, w: 180, h: 360, enter: 'top', parts: [
+					{ t: 'turret_main', x: 0, y: -100, cd: 45 },
+					{ t: 'turret_main', x: 0, y: -50, cd: 50 },
 					{ t: 'bridge', x: 0, y: 0 },
-					{ t: 'turret_main', x: 0, y: 80, cd: 90 },
-					{ t: 'turret_main', x: 0, y: 120, cd: 90 }
+					{ t: 'turret_main', x: 0, y: 60, cd: 55 },
+					{ t: 'turret_main', x: 0, y: 110, cd: 60 },
+					{ t: 'turret_aa', x: -50, y: 20, cd: 20 },
+					{ t: 'turret_aa', x: 50, y: 20, cd: 20 }
 				]
 			},
-			// 14 Soryu
+			// Stage 11: 大飛龍二型 (強化編隊) - 會放衝撞戰鬥機
 			{
-				name: "SORYU", type: "Aircraft Carrier", hp: 20000, w: 180, h: 360, enter: 'top', parts: [
-					{ t: 'bridge', x: -60, y: -20 },
-					{ t: 'turret_aa', x: -60, y: -80, cd: 30 },
-					{ t: 'turret_aa', x: -60, y: 80, cd: 30 }
+				name: "DAIHIRYU II", type: "Air Squadron II", hp: 13000, w: 340, h: 240, enter: 'bottom', parts: [
+					{ t: 'propeller', x: -120, y: -20, spd: 0.8 },
+					{ t: 'propeller', x: 120, y: -20, spd: -0.8 },
+					{ t: 'propeller', x: -60, y: 0, spd: 0.7 },
+					{ t: 'propeller', x: 60, y: 0, spd: -0.7 },
+					{ t: 'turret_aa', x: 0, y: 0, cd: 12 },
+					{ t: 'turret_aa', x: -80, y: 60, cd: 14 },
+					{ t: 'turret_aa', x: 80, y: 60, cd: 14 },
+					{ t: 'turret_aa', x: 0, y: 90, cd: 10 }
 				]
 			},
-			// 15 Nagato
+			// Stage 12: 山城 (戰艦)
 			{
-				name: "NAGATO", type: "Battleship", hp: 30000, w: 200, h: 400, enter: 'top', parts: [
-					{ t: 'turret_main', x: 0, y: -120, cd: 40 },
-					{ t: 'turret_main', x: 0, y: -70, cd: 40 },
-					{ t: 'bridge', x: 0, y: -10 },
-					{ t: 'turret_main', x: 0, y: 60, cd: 40 },
-					{ t: 'turret_main', x: 0, y: 110, cd: 40 },
-					{ t: 'turret_aa', x: 50, y: 0, cd: 10 },
-					{ t: 'turret_aa', x: -50, y: 0, cd: 10 }
-				]
-			},
-			// 16 YAMATO
-			{
-				name: "YAMATO", type: "Imperial Flagship", hp: 50000, w: 240, h: 480, enter: 'bottom', parts: [
-					{ t: 'turret_main', x: 0, y: -150, cd: 30 }, // Front 1
-					{ t: 'turret_main', x: 0, y: -90, cd: 30 },  // Front 2
-					{ t: 'turret_aa', x: -60, y: -40, cd: 8 },
-					{ t: 'turret_aa', x: 60, y: -40, cd: 8 },
+				name: "YAMASHIRO", type: "Battleship", hp: 16000, w: 180, h: 380, enter: 'top', parts: [
+					{ t: 'turret_main', x: 0, y: -110, cd: 40 },
+					{ t: 'turret_main', x: 0, y: -60, cd: 45 },
 					{ t: 'bridge', x: 0, y: 0 },
-					{ t: 'turret_aa', x: -60, y: 50, cd: 8 },
-					{ t: 'turret_aa', x: 60, y: 50, cd: 8 },
-					{ t: 'turret_main', x: 0, y: 120, cd: 30 }   // Rear
+					{ t: 'turret_main', x: 0, y: 70, cd: 50 },
+					{ t: 'turret_main', x: 0, y: 120, cd: 55 },
+					{ t: 'turret_aa', x: -50, y: -30, cd: 18 },
+					{ t: 'turret_aa', x: 50, y: -30, cd: 18 }
+				]
+			},
+			// Stage 13: 蒼龍 (航空母艦) - 外觀同飛龍
+			{
+				name: "SORYU", type: "Aircraft Carrier", hp: 18000, w: 170, h: 350, enter: 'top', parts: [
+					{ t: 'bridge', x: -55, y: -10 },
+					{ t: 'deck', x: 20, y: 0 },
+					{ t: 'turret_aa', x: -55, y: -80, cd: 15 },
+					{ t: 'turret_aa', x: -55, y: 70, cd: 15 },
+					{ t: 'turret_aa', x: 55, y: -50, cd: 18 },
+					{ t: 'turret_aa', x: 55, y: 50, cd: 18 }
+				]
+			},
+			// Stage 14: 綾子三型 (最強轟炸機) - 5條血、更快更猛
+			{
+				name: "AYAKO III", type: "Super Bomber Mk.III", hp: 20000, w: 350, h: 250, enter: 'bottom', parts: [
+					{ t: 'propeller', x: -130, y: -10, spd: 0.9 },
+					{ t: 'propeller', x: 130, y: -10, spd: -0.9 },
+					{ t: 'propeller', x: -70, y: 10, spd: 0.8 },
+					{ t: 'propeller', x: 70, y: 10, spd: -0.8 },
+					{ t: 'propeller', x: 0, y: 20, spd: 0.7 },
+					{ t: 'turret_main', x: 0, y: -20, cd: 35 },
+					{ t: 'turret_aa', x: -80, y: 80, cd: 12 },
+					{ t: 'turret_aa', x: 80, y: 80, cd: 12 },
+					{ t: 'turret_aa', x: 0, y: 100, cd: 10 }
+				]
+			},
+			// Stage 15: 長門 (戰艦) - 6艘護衛艦
+			{
+				name: "NAGATO", type: "Battleship", hp: 25000, w: 200, h: 400, enter: 'top', parts: [
+					{ t: 'turret_main', x: 0, y: -130, cd: 35 },
+					{ t: 'turret_main', x: 0, y: -80, cd: 38 },
+					{ t: 'bridge', x: 0, y: -20 },
+					{ t: 'turret_main', x: 0, y: 50, cd: 40 },
+					{ t: 'turret_main', x: 0, y: 100, cd: 42 },
+					{ t: 'turret_aa', x: -60, y: -50, cd: 12 },
+					{ t: 'turret_aa', x: 60, y: -50, cd: 12 },
+					{ t: 'turret_aa', x: -60, y: 30, cd: 14 },
+					{ t: 'turret_aa', x: 60, y: 30, cd: 14 }
+				]
+			},
+			// Stage 16: 大和 (最終Boss) - 高威力主砲 + 大量高射砲
+			{
+				name: "YAMATO", type: "Imperial Flagship", hp: 35000, w: 240, h: 480, enter: 'top', parts: [
+					{ t: 'turret_main', x: 0, y: -160, cd: 30 },
+					{ t: 'turret_main', x: 0, y: -100, cd: 32 },
+					{ t: 'turret_aa', x: -70, y: -130, cd: 10 },
+					{ t: 'turret_aa', x: 70, y: -130, cd: 10 },
+					{ t: 'bridge', x: 0, y: -30 },
+					{ t: 'turret_aa', x: -70, y: -50, cd: 8 },
+					{ t: 'turret_aa', x: 70, y: -50, cd: 8 },
+					{ t: 'turret_aa', x: -70, y: 30, cd: 8 },
+					{ t: 'turret_aa', x: 70, y: 30, cd: 8 },
+					{ t: 'turret_main', x: 0, y: 80, cd: 35 },
+					{ t: 'turret_main', x: 0, y: 140, cd: 38 }
 				]
 			}
 		];
@@ -527,6 +641,111 @@
 			'LASER': { color: '#00ccff', label: 'LASER' }      // L
 		};
 
+		// === 音效系統 (Web Audio API) ===
+		const SFX = {
+			ctx: null,
+			enabled: true,
+			volume: 0.4,
+			lastShoot: 0,
+
+			init() {
+				if (this.ctx) return;
+				try {
+					this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+				} catch (e) {
+					this.enabled = false;
+				}
+			},
+
+			tone(freq, dur, type = 'square', vol = 0.3) {
+				if (!this.enabled || !this.ctx) return;
+				const osc = this.ctx.createOscillator();
+				const gain = this.ctx.createGain();
+				osc.type = type;
+				osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+				gain.gain.setValueAtTime(vol * this.volume, this.ctx.currentTime);
+				gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+				osc.connect(gain);
+				gain.connect(this.ctx.destination);
+				osc.start();
+				osc.stop(this.ctx.currentTime + dur);
+			},
+
+			noise(dur, vol = 0.3) {
+				if (!this.enabled || !this.ctx) return;
+				const bufferSize = this.ctx.sampleRate * dur;
+				const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+				const data = buffer.getChannelData(0);
+				for (let i = 0; i < bufferSize; i++) {
+					data[i] = Math.random() * 2 - 1;
+				}
+				const noise = this.ctx.createBufferSource();
+				noise.buffer = buffer;
+				const gain = this.ctx.createGain();
+				gain.gain.setValueAtTime(vol * this.volume, this.ctx.currentTime);
+				gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+				noise.connect(gain);
+				gain.connect(this.ctx.destination);
+				noise.start();
+			},
+
+			// 射擊音效
+			shoot() {
+				const now = Date.now();
+				if (now - this.lastShoot < 50) return;
+				this.lastShoot = now;
+				this.tone(800, 0.04, 'square', 0.12);
+			},
+			laser() { this.tone(1000, 0.06, 'sawtooth', 0.15); this.tone(1200, 0.08, 'sine', 0.1); },
+			shell() { this.tone(150, 0.15, 'sawtooth', 0.25); this.noise(0.08, 0.2); },
+
+			// 爆炸音效
+			explodeSmall() { this.noise(0.12, 0.2); this.tone(80, 0.08, 'square', 0.15); },
+			explodeLarge() { this.noise(0.25, 0.35); this.tone(60, 0.15, 'square', 0.2); this.tone(40, 0.2, 'sine', 0.15); },
+			explodeBoss() {
+				this.noise(0.5, 0.5);
+				this.tone(50, 0.3, 'square', 0.3);
+				setTimeout(() => { this.noise(0.3, 0.4); this.tone(30, 0.25, 'sine', 0.25); }, 150);
+				setTimeout(() => { this.noise(0.4, 0.35); }, 350);
+			},
+
+			// 道具音效
+			powerup() { this.tone(600, 0.08, 'square', 0.2); this.tone(800, 0.08, 'square', 0.2); setTimeout(() => this.tone(1000, 0.12, 'square', 0.25), 80); },
+			upgrade() { this.tone(500, 0.06, 'square', 0.2); this.tone(700, 0.06, 'square', 0.2); this.tone(900, 0.06, 'square', 0.2); setTimeout(() => this.tone(1200, 0.15, 'sine', 0.3), 150); },
+
+			// Boss 警告
+			warning() {
+				const beep = () => { this.tone(440, 0.15, 'square', 0.35); };
+				beep(); setTimeout(beep, 300); setTimeout(beep, 600);
+			},
+
+			// 特殊技能
+			special() { this.noise(0.3, 0.4); this.tone(200, 0.2, 'sawtooth', 0.3); this.tone(400, 0.3, 'sine', 0.25); setTimeout(() => this.tone(100, 0.4, 'square', 0.2), 200); },
+
+			// 玩家被擊中
+			playerHit() { this.noise(0.2, 0.4); this.tone(200, 0.15, 'sawtooth', 0.35); this.tone(100, 0.2, 'square', 0.3); },
+
+			// 遊戲結束
+			gameOver() {
+				this.tone(400, 0.3, 'square', 0.3);
+				setTimeout(() => this.tone(300, 0.3, 'square', 0.3), 300);
+				setTimeout(() => this.tone(200, 0.5, 'square', 0.35), 600);
+			},
+
+			// 任務開始
+			missionStart() {
+				this.tone(400, 0.1, 'square', 0.25);
+				setTimeout(() => this.tone(500, 0.1, 'square', 0.25), 100);
+				setTimeout(() => this.tone(600, 0.15, 'square', 0.3), 200);
+				setTimeout(() => this.tone(800, 0.2, 'sine', 0.35), 350);
+			},
+
+			toggle() {
+				this.enabled = !this.enabled;
+				return this.enabled;
+			}
+		};
+
 		const canvas = document.getElementById('gameCanvas');
 		const ctx = canvas.getContext('2d');
 		let width, height;
@@ -534,9 +753,23 @@
 		// --- Game Config ---
 		const PLAYER_SPEED = 0.2;
 		const MAX_FUEL = 100;
+		const KEY_SPEED = 6;
+
+		// --- Difficulty Settings ---
+		const DIFFICULTY_PRESETS = {
+			easy:   { name: '簡單', hpMult: 0.7, bulletMult: 0.8, lives: 5, color: '#00ff00' },
+			normal: { name: '普通', hpMult: 1.0, bulletMult: 1.0, lives: 3, color: '#ffff00' },
+			hard:   { name: '困難', hpMult: 1.5, bulletMult: 1.2, lives: 3, color: '#ff8800' },
+			arcade: { name: '街機', hpMult: 2.0, bulletMult: 1.5, lives: 1, color: '#ff0000' },
+		};
+		let currentDifficulty = 'normal';
+		let difficultyMult = 1.0;    // Enemy HP multiplier
+		let bulletSpeedMult = 1.0;   // Enemy bullet speed multiplier
+		let startingLives = 3;
 
 		// --- State ---
 		let gameRunning = false;
+		let paused = false;
 		let frame = 0;
 		let score = 0;
 		let hiscore = localStorage.getItem('endless_hiscore') || 0;
@@ -546,6 +779,46 @@
 		let nextBossTrigger = 0;
 		let bgScrollSpeed = 3;
 		let shake = 0;
+
+		// --- Combo System ---
+		let combo = 0;
+		let comboTimer = 0;
+		let maxCombo = 0;
+		const COMBO_TIMEOUT = 120; // 2 seconds at 60fps
+
+		// --- Boss Warning System ---
+		let bossWarning = false;
+		let bossWarningTimer = 0;
+		let bossWarningData = null;
+		const BOSS_WARNING_DURATION = 180; // 3 seconds at 60fps
+
+		// --- Stage Transition System ---
+		let stageTransition = false;
+		let stageTransitionTimer = 0;
+		const STAGE_TRANSITION_DURATION = 180; // 3 seconds at 60fps
+
+		// Stage names based on 1943 original
+		const STAGE_NAMES = [
+			{ name: "出撃", area: "太平洋上空", mission: "敵艦隊を発見せよ" },
+			{ name: "遭遇", area: "ミッドウェー沖", mission: "敵空母を撃沈せよ" },
+			{ name: "強襲", area: "敵艦隊上空", mission: "敵爆撃機を撃墜せよ" },
+			{ name: "決戦", area: "ミッドウェー近海", mission: "敵戦艦を撃沈せよ" },
+			{ name: "追撃", area: "太平洋中部", mission: "敵空母を撃沈せよ" },
+			{ name: "邀撃", area: "敵編隊空域", mission: "敵航空隊を殲滅せよ" },
+			{ name: "死闘", area: "日本近海", mission: "敵航空戦艦を撃沈せよ" },
+			{ name: "激戦", area: "東シナ海", mission: "敵空母を撃沈せよ" },
+			{ name: "反撃", area: "敵要塞上空", mission: "敵爆撃機を撃墜せよ" },
+			{ name: "突破", area: "瀬戸内海", mission: "敵戦艦を撃沈せよ" },
+			{ name: "殲滅", area: "敵本拠地上空", mission: "敵航空隊を殲滅せよ" },
+			{ name: "猛攻", area: "呉軍港沖", mission: "敵戦艦を撃沈せよ" },
+			{ name: "総攻撃", area: "敵最終防衛線", mission: "敵空母を撃沈せよ" },
+			{ name: "決死", area: "敵旗艦上空", mission: "敵爆撃機を撃墜せよ" },
+			{ name: "最終決戦", area: "敵司令部沖", mission: "敵戦艦を撃沈せよ" },
+			{ name: "終焉", area: "大和沖", mission: "敵旗艦大和を撃沈せよ" },
+		];
+
+		// --- Keyboard Input ---
+		const keys = { up: false, down: false, left: false, right: false };
 
 		// Player State
 		const player = {
@@ -569,7 +842,25 @@
 		window.addEventListener('touchmove', e => { e.preventDefault(); targetX = e.touches[0].clientX; targetY = e.touches[0].clientY; }, { passive: false });
 		window.addEventListener('resize', resize);
 		window.addEventListener('keydown', e => {
-			if (e.code === 'Space' || e.code === 'KeyZ') triggerSpecial();
+			switch (e.code) {
+				case 'KeyW': case 'ArrowUp': keys.up = true; break;
+				case 'KeyS': case 'ArrowDown': keys.down = true; break;
+				case 'KeyA': case 'ArrowLeft': keys.left = true; break;
+				case 'KeyD': case 'ArrowRight': keys.right = true; break;
+				case 'Space': case 'KeyZ': triggerSpecial(); break;
+				case 'Escape': case 'KeyP': togglePause(); break;
+			}
+			if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+				e.preventDefault();
+			}
+		});
+		window.addEventListener('keyup', e => {
+			switch (e.code) {
+				case 'KeyW': case 'ArrowUp': keys.up = false; break;
+				case 'KeyS': case 'ArrowDown': keys.down = false; break;
+				case 'KeyA': case 'ArrowLeft': keys.left = false; break;
+				case 'KeyD': case 'ArrowRight': keys.right = false; break;
+			}
 		});
 
 		function resize() {
@@ -583,6 +874,7 @@
 			if (e) e.stopPropagation();
 			if (!gameRunning || player.fuel < 15) return;
 
+			SFX.special();
 			player.fuel -= 15;
 			shake = 20;
 
@@ -618,18 +910,83 @@
 			}
 		}
 
+		function toggleSound() {
+			const enabled = SFX.toggle();
+			document.getElementById('sound-btn').textContent = enabled ? '🔊' : '🔇';
+		}
+
+		function togglePause() {
+			if (!gameRunning) return;
+			paused = !paused;
+		}
+
+		// Difficulty selection handlers
+		const DIFFICULTY_DESCRIPTIONS = {
+			easy:   '新手友善，敵人較弱，多條命讓你熟悉遊戲',
+			normal: '標準難度，適合大多數玩家',
+			hard:   '敵人更強更快，考驗你的技術',
+			arcade: '街機原始難度，一命通關！真正的挑戰',
+		};
+
+		function selectDifficulty(diff) {
+			currentDifficulty = diff;
+			const preset = DIFFICULTY_PRESETS[diff];
+			difficultyMult = preset.hpMult;
+			bulletSpeedMult = preset.bulletMult;
+			startingLives = preset.lives;
+
+			// Update UI
+			document.querySelectorAll('.diff-btn').forEach(btn => {
+				btn.classList.remove('selected');
+				if (btn.dataset.diff === diff) {
+					btn.classList.add('selected');
+				}
+			});
+			document.getElementById('difficulty-desc').textContent = DIFFICULTY_DESCRIPTIONS[diff];
+		}
+
+		// Initialize difficulty buttons
+		document.addEventListener('DOMContentLoaded', () => {
+			document.querySelectorAll('.diff-btn').forEach(btn => {
+				btn.addEventListener('click', () => selectDifficulty(btn.dataset.diff));
+			});
+		});
+
 		function startGame() {
+			SFX.init();
+			SFX.missionStart();
+
+			// Apply difficulty settings
+			const preset = DIFFICULTY_PRESETS[currentDifficulty];
+			difficultyMult = preset.hpMult;
+			bulletSpeedMult = preset.bulletMult;
+			startingLives = preset.lives;
+			paused = false;
+
 			document.getElementById('start-screen').classList.add('hidden');
 			document.getElementById('end-screen').classList.add('hidden');
 			document.getElementById('win-screen').classList.add('hidden');
 			document.getElementById('boss-ui').style.display = 'none';
 
-			player.lives = 3;
+			// Update difficulty display in HUD
+			const diffDisplay = document.getElementById('difficulty-display');
+			diffDisplay.textContent = preset.name;
+			diffDisplay.style.color = preset.color;
+
+			player.lives = startingLives;
 			player.fuel = MAX_FUEL;
 			player.weapons = [{ type: 'AUTO', lv: 1 }];
 			player.sideFighters = 0;
 			player.invincible = 0;
 			score = 0;
+			combo = 0;
+			comboTimer = 0;
+			maxCombo = 0;
+			bossWarning = false;
+			bossWarningTimer = 0;
+			bossWarningData = null;
+			stageTransition = false;
+			stageTransitionTimer = 0;
 			stage = 1;
 			nextBossTrigger = 4000;
 			frame = 0;
@@ -639,7 +996,11 @@
 
 			enemies = []; bullets = []; particles = []; powerups = []; floatingTexts = [];
 
-			showCenterMsg("MISSION START");
+			// Show stage 1 intro
+			stageTransition = true;
+			stageTransitionTimer = STAGE_TRANSITION_DURATION;
+			SFX.missionStart();
+
 			resize();
 			gameRunning = true;
 			loop();
@@ -652,8 +1013,46 @@
 			if (shake > 0) shake *= 0.9;
 			if (Math.abs(shake) < 0.5) shake = 0;
 
-			// Player logic
-			if (targetX !== null) {
+			// Combo timer decay
+			if (comboTimer > 0) {
+				comboTimer--;
+				if (comboTimer === 0) {
+					combo = 0; // Reset combo when timer expires
+				}
+			}
+
+			// Boss warning timer
+			if (bossWarning && bossWarningTimer > 0) {
+				bossWarningTimer--;
+				// Play warning beep periodically
+				if (bossWarningTimer % 30 === 0 && bossWarningTimer > 0) {
+					SFX.warning();
+				}
+				if (bossWarningTimer === 0) {
+					actuallySpawnBoss();
+				}
+				return; // Skip normal update during warning
+			}
+
+			// Stage transition timer
+			if (stageTransition && stageTransitionTimer > 0) {
+				stageTransitionTimer--;
+				if (stageTransitionTimer === 0) {
+					stageTransition = false;
+					nextBossTrigger = score + 5000 + (stage * 3000);
+					// Play a ready sound
+					SFX.powerup();
+				}
+				return; // Skip normal update during transition
+			}
+
+			// Player logic - Keyboard has priority
+			if (keys.up || keys.down || keys.left || keys.right) {
+				if (keys.up) player.y -= KEY_SPEED;
+				if (keys.down) player.y += KEY_SPEED;
+				if (keys.left) player.x -= KEY_SPEED;
+				if (keys.right) player.x += KEY_SPEED;
+			} else if (targetX !== null) {
 				player.x += (targetX - player.x) * PLAYER_SPEED;
 				player.y += (targetY - player.y) * PLAYER_SPEED;
 			}
@@ -674,10 +1073,18 @@
 				// Mini Boss
 				if (frame % 400 === 0 && Math.random() < 0.3) spawnMiniBoss();
 
+				// Red Formation - fixed every 30 seconds (1800 frames)
+				if (frame % 1800 === 0 && frame > 0) {
+					spawnRedFormation();
+				}
+
 				if (score > nextBossTrigger) {
 					spawnBoss();
 				} else if (enemies.length < 6 + stage) {
-					if (frame % 35 === 0) spawnEnemy();
+					// Dynamic spawn interval: slower in later stages
+					// Stage 1-4: 35 frames, Stage 5-8: 40, Stage 9-12: 45, Stage 13-16: 50
+					const spawnInterval = 35 + Math.floor((stage - 1) / 4) * 5;
+					if (frame % spawnInterval === 0) spawnEnemy();
 				}
 			}
 
@@ -707,9 +1114,12 @@
 		}
 
 		function firePlayer() {
+			let hasLaser = false, hasShell = false;
 			player.weapons.forEach((w, idx) => {
 				const type = w.type;
 				const lv = w.lv;
+				if (type === 'LASER') hasLaser = true;
+				if (type === 'SHELL') hasShell = true;
 
 				if (type === 'SHOTGUN') {
 					const count = 3 + lv * 2;
@@ -756,21 +1166,110 @@
 
 			if (player.sideFighters > 0) bullets.push({ x: player.x - 40, y: player.y, vx: 0, vy: -15, w: 4, h: 10, color: '#fff', owner: 'player' });
 			if (player.sideFighters > 1) bullets.push({ x: player.x + 40, y: player.y, vx: 0, vy: -15, w: 4, h: 10, color: '#fff', owner: 'player' });
+
+			// 音效
+			if (hasShell) SFX.shell();
+			else if (hasLaser) SFX.laser();
+			else SFX.shoot();
+		}
+
+		// Movement pattern types
+		const MOVE_PATTERNS = {
+			STRAIGHT: 0,      // 直線向下
+			SINE_WAVE: 1,     // 正弦波左右搖擺
+			DIVE_ATTACK: 2,   // 俯衝攻擊（衝向玩家）
+			LOOP: 3,          // 迴旋
+			ZIGZAG: 4,        // Z字形移動
+			SWOOP: 5,         // 弧形俯衝後飛離
+		};
+
+		// Spawn a formation of 5 red enemies (fixed every 30 seconds)
+		function spawnRedFormation() {
+			const formationX = Math.random() * (width - 200) + 100;
+			const positions = [
+				{ x: 0, y: 0 },      // Leader
+				{ x: -40, y: 40 },   // Left wing
+				{ x: 40, y: 40 },    // Right wing
+				{ x: -80, y: 80 },   // Far left
+				{ x: 80, y: 80 },    // Far right
+			];
+
+			positions.forEach((pos, i) => {
+				const x = formationX + pos.x;
+				const e = {
+					x, y: -50 - pos.y, hp: Math.ceil(3 * difficultyMult),
+					w: 40, h: 40, type: 'red_formation',
+					spawnFrame: frame,
+					startX: x,
+					baseVy: 4,
+					vy: 4,
+					vx: 0,
+					color: '#ff0000',
+					isRed: true,
+					movePattern: MOVE_PATTERNS.LOOP,
+					loopRadius: 50 + i * 10,
+					loopSpeed: 0.04,
+				};
+				enemies.push(e);
+			});
+
+			showCenterMsg("RED FORMATION!");
 		}
 
 		function spawnEnemy() {
-			const types = ['green', 'grey', 'red_formation'];
 			const r = Math.random();
 			let type = 'green';
 			if (stage > 2 && r < 0.3) type = 'grey';
-			if (r < 0.1) type = 'red_formation';
 
 			const x = Math.random() * (width - 40) + 20;
-			let e = { x, y: -50, hp: 1, w: 40, h: 40, type, phase: 0 };
+			let e = {
+				x, y: -50, hp: 1, w: 40, h: 40, type,
+				spawnFrame: frame,  // 記錄生成時的幀數
+				startX: x,          // 記錄起始 X 位置
+				movePattern: MOVE_PATTERNS.STRAIGHT,
+				patternPhase: 0,
+			};
 
-			if (type === 'green') { e.hp = 2 + stage; e.vy = 4 + (stage * 0.2); e.vx = Math.sin(frame * 0.1) * 2; }
-			if (type === 'grey') { e.hp = 8 + stage * 2; e.vy = 2; e.vx = 0; e.w = 60; e.h = 50; }
-			if (type === 'red_formation') { e.hp = 3; e.vy = 5; e.vx = 0; e.color = '#ff0000'; e.isRed = true; }
+			// 根據類型設定屬性和移動模式
+			if (type === 'green') {
+				e.hp = Math.ceil((2 + stage) * difficultyMult);
+				e.baseVy = 3 + (stage * 0.15);
+				e.vy = e.baseVy;
+				e.vx = 0;
+
+				// 隨機選擇移動模式
+				const patternRoll = Math.random();
+				if (patternRoll < 0.3) {
+					e.movePattern = MOVE_PATTERNS.SINE_WAVE;
+					e.waveAmp = 40 + Math.random() * 40;   // 振幅 40-80
+					e.waveFreq = 0.03 + Math.random() * 0.03; // 頻率
+				} else if (patternRoll < 0.5) {
+					e.movePattern = MOVE_PATTERNS.ZIGZAG;
+					e.zigzagDir = Math.random() < 0.5 ? 1 : -1;
+					e.zigzagTimer = 0;
+				} else if (patternRoll < 0.65 && stage > 3) {
+					e.movePattern = MOVE_PATTERNS.DIVE_ATTACK;
+					e.divePhase = 0;
+					e.diveTarget = { x: 0, y: 0 };
+				} else if (patternRoll < 0.75 && stage > 5) {
+					e.movePattern = MOVE_PATTERNS.SWOOP;
+					e.swoopPhase = 0;
+					e.swoopDir = Math.random() < 0.5 ? 1 : -1;
+				}
+			}
+
+			if (type === 'grey') {
+				e.hp = Math.ceil((8 + stage * 2) * difficultyMult);
+				e.baseVy = 2;
+				e.vy = e.baseVy;
+				e.vx = 0;
+				e.w = 60;
+				e.h = 50;
+				// 灰色大型機使用正弦波
+				e.movePattern = MOVE_PATTERNS.SINE_WAVE;
+				e.waveAmp = 30;
+				e.waveFreq = 0.02;
+			}
 
 			enemies.push(e);
 		}
@@ -778,7 +1277,7 @@
 		function spawnMiniBoss() {
 			const x = Math.random() * (width - 100) + 50;
 			enemies.push({
-				x, y: -80, w: 100, h: 80, hp: 100 + stage * 20, type: 'miniboss', vy: 1, phase: 0
+				x, y: -80, w: 100, h: 80, hp: Math.ceil((100 + stage * 20) * difficultyMult), type: 'miniboss', vy: 1, phase: 0
 			});
 			showCenterMsg("⚠ ALERT ⚠");
 		}
@@ -787,7 +1286,7 @@
 			// Ground unit, moves with BG speed
 			const x = Math.random() * (width - 60) + 30;
 			enemies.push({
-				x, y: -50, w: 50, h: 50, hp: 30 + stage * 5, type: 'turret', vy: bgScrollSpeed, phase: 0,
+				x, y: -50, w: 50, h: 50, hp: Math.ceil((30 + stage * 5) * difficultyMult), type: 'turret', vy: bgScrollSpeed, phase: 0,
 				angle: 0
 			});
 		}
@@ -797,18 +1296,41 @@
 				gameRunning = false;
 				document.getElementById('win-screen').classList.remove('hidden');
 				document.getElementById('final-win-score').innerText = score;
+				document.getElementById('final-win-combo').innerText = maxCombo;
+
+				// Show difficulty on win screen
+				const preset = DIFFICULTY_PRESETS[currentDifficulty];
+				const winDiff = document.getElementById('win-difficulty');
+				winDiff.textContent = preset.name;
+				winDiff.style.color = preset.color;
 				return;
 			}
 
 			const data = BOSS_DATA[stage - 1];
+
+			// Start warning sequence
+			bossWarning = true;
+			bossWarningTimer = BOSS_WARNING_DURATION;
+			bossWarningData = data;
+
+			// Play warning sound
+			SFX.warning();
+			shake = 10;
+
+			// Clear existing enemies during warning
+			enemies = enemies.filter(e => e.type === 'boss');
+			bullets = [];
+		}
+
+		function actuallySpawnBoss() {
+			if (!bossWarningData) return;
+
+			const data = bossWarningData;
 			bossActive = true;
 			document.getElementById('boss-ui').style.display = 'block';
 			document.getElementById('boss-name').innerText = data.name;
 			document.getElementById('boss-sub').innerText = data.type;
 			updateBossBar(100);
-
-			showCenterMsg("WARNING!!");
-			shake = 10;
 
 			// Spawn Position logic
 			let startY = -data.h - 50;
@@ -818,19 +1340,21 @@
 				startVy = -1;
 			}
 
-			setTimeout(() => {
-				if (!gameRunning) return;
-				const boss = {
-					x: width / 2, y: startY, w: data.w, h: data.h,
-					hp: data.hp, maxHp: data.hp,
-					type: 'boss', subType: data.type, enter: data.enter || 'top', phase: 0,
-					vx: 0, vy: startVy,
-					parts: data.parts ? JSON.parse(JSON.stringify(data.parts)) : [] // Deep copy parts
-				};
-				// Initial aim for turrents
-				boss.parts.forEach(p => { p.currCd = Math.random() * p.cd; p.angle = 0; });
-				enemies.push(boss);
-			}, 2000);
+			const bossHp = Math.ceil(data.hp * difficultyMult);
+			const boss = {
+				x: width / 2, y: startY, w: data.w, h: data.h,
+				hp: bossHp, maxHp: bossHp,
+				type: 'boss', subType: data.type, enter: data.enter || 'top', phase: 0,
+				vx: 0, vy: startVy,
+				parts: data.parts ? JSON.parse(JSON.stringify(data.parts)) : [] // Deep copy parts
+			};
+			// Initial aim for turrets
+			boss.parts.forEach(p => { p.currCd = Math.random() * p.cd; p.angle = 0; });
+			enemies.push(boss);
+
+			// Clear warning state
+			bossWarning = false;
+			bossWarningData = null;
 		}
 
 		function updateEntities() {
@@ -849,15 +1373,18 @@
 					if (p.type === 'L') wKey = 'LASER';
 
 					let msg = "";
+					let isUpgrade = false;
 					if (wKey) {
 						const existing = player.weapons.find(w => w.type === wKey);
 						if (existing) {
 							if (existing.lv < 3) {
 								existing.lv++;
 								msg = wKey + " UP L" + existing.lv;
+								isUpgrade = true;
 							} else {
 								msg = "MAX POWER";
 								score += 2000;
+								isUpgrade = true;
 							}
 						} else {
 							if (player.weapons.length < 3) {
@@ -881,7 +1408,12 @@
 						player.lives++;
 						score += 5000;
 						msg = "1UP!";
+						isUpgrade = true;
 					}
+
+					// 音效
+					if (isUpgrade) SFX.upgrade();
+					else if (msg) SFX.powerup();
 
 					if (msg) spawnFloatingText(player.x, player.y - 30, msg, '#fff');
 
@@ -894,6 +1426,12 @@
 				const e = enemies[i];
 
 				if (e.type === 'boss') {
+					// === HP-based Phase System ===
+					const hpPct = e.hp / e.maxHp;
+					const aggroPhase = hpPct < 0.3 ? 3 : (hpPct < 0.7 ? 2 : 1);
+					const moveSpeed = [1, 1, 1.2, 1.5][aggroPhase];
+					const fireRateMult = [1, 1, 0.75, 0.5][aggroPhase];
+					const isBattleship = e.subType.includes("Battleship") || e.subType.includes("Flagship");
 					// Movement State Machine
 					let targetY = 150;
 					if (e.enter === 'bottom') targetY = height - 250;
@@ -901,9 +1439,9 @@
 					// Approach Phase
 					if (e.phase === 0) {
 						if (Math.abs(e.y - targetY) > 5) {
-							e.y += (targetY - e.y) * 0.005; // Very slow approach
+							e.y += (targetY - e.y) * 0.008 * moveSpeed;
 						} else {
-							e.phase = 1;
+							e.phase = 1; e.movePattern = 0;
 							e.tick = 0;
 						}
 					}
@@ -914,17 +1452,40 @@
 						if (e.enter === 'bottom') {
 							// Vertical Sweep: Cycle 1200 frames
 							const cycle = e.tick % 1200;
-							if (cycle < 400) e.y -= 0.3;      // Advance (Up)
+							if (cycle < 300) e.y -= 0.4 * moveSpeed;      // Advance (Up)
 							else if (cycle < 600);            // Wait
-							else if (cycle < 1000) e.y += 0.3;// Retreat (Down)
+							else if (cycle < 700) e.y += 0.35 * moveSpeed;// Retreat (Down)
 							else;                             // Wait
 
-							e.x = (width / 2) + Math.sin(e.tick * 0.01) * 30; // Mild sway
+							e.x += (player.x - e.x) * 0.015 * moveSpeed;
 						} else {
-							// Standard Horizontal Drift for Top Bosses
-							e.x = (width / 2) + Math.sin(e.tick * 0.005) * 50;
-							e.y = targetY + Math.sin(e.tick * 0.01) * 20;
+							// Top bosses: Multiple movement patterns
+							if (e.tick % 600 === 0) e.movePattern = (e.movePattern + 1) % 4;
+							switch (e.movePattern || 0) {
+								case 0:
+									e.x = (width / 2) + Math.sin(e.tick * 0.008) * 70 * moveSpeed;
+									e.y = targetY + Math.sin(e.tick * 0.015) * 25;
+									break;
+								case 1:
+									e.x += (player.x - e.x) * 0.02 * moveSpeed;
+									e.y = targetY + Math.sin(e.tick * 0.02) * 15;
+									break;
+								case 2:
+									e.x = (width / 2) + Math.sin(e.tick * 0.01) * 70;
+									e.y = targetY + Math.sin(e.tick * 0.02) * 35;
+									break;
+								case 3:
+									if (isBattleship && aggroPhase >= 2) {
+										const dp = e.tick % 400;
+										if (dp < 150) e.y += 0.5 * moveSpeed;
+										else if (dp < 250) e.y -= 0.4 * moveSpeed;
+									}
+									e.x = (width / 2) + Math.sin(e.tick * 0.012) * 50;
+									break;
+							}
 						}
+						e.x = Math.max(e.w/2+10, Math.min(width-e.w/2-10, e.x));
+						e.y = Math.max(80, Math.min(e.enter=="top" ? height*0.45 : height-80, e.y));
 					}
 
 					// Boss Attack Logic
@@ -948,22 +1509,21 @@
 
 								if (p.currCd > 0) p.currCd--;
 								else {
-									// FIRE
-									p.currCd = p.cd; // Reset CD
-									const spread = p.t === 'turret_main' ? 0.1 : 0.3;
-									const spd = p.t === 'turret_main' ? 8 : 6;
-									const color = p.t === 'turret_main' ? '#ff0055' : '#ffaa00';
-									const dmg = p.t === 'turret_main' ? 20 : 10;
-
-									// Main Turret: Heavy Shell
+									p.currCd = Math.floor(p.cd * fireRateMult);
 									if (p.t === 'turret_main') {
-										fireBullet(e.x + p.x, e.y + p.y, Math.cos(p.angle) * spd, Math.sin(p.angle) * spd, color);
-									}
-									// AA Turret: 3-way spread
-									else {
-										fireBullet(e.x + p.x, e.y + p.y, Math.cos(p.angle) * spd, Math.sin(p.angle) * spd, color);
-										fireBullet(e.x + p.x, e.y + p.y, Math.cos(p.angle - 0.2) * spd, Math.sin(p.angle - 0.2) * spd, color);
-										fireBullet(e.x + p.x, e.y + p.y, Math.cos(p.angle + 0.2) * spd, Math.sin(p.angle + 0.2) * spd, color);
+										const spd = 6;
+										fireBullet(e.x + p.x, e.y + p.y, Math.cos(p.angle) * spd, Math.sin(p.angle) * spd, '#ff0055');
+										if (aggroPhase >= 2) {
+											fireBullet(e.x + p.x, e.y + p.y, Math.cos(p.angle + 0.1) * spd, Math.sin(p.angle + 0.1) * spd, '#ff0055');
+											fireBullet(e.x + p.x, e.y + p.y, Math.cos(p.angle - 0.1) * spd, Math.sin(p.angle - 0.1) * spd, '#ff0055');
+										}
+									} else {
+										const spd = 5;
+										const bulletCount = aggroPhase === 3 ? 5 : 3;
+										for (let bi = 0; bi < bulletCount; bi++) {
+											const angle = p.angle + (bi - (bulletCount-1)/2) * 0.25;
+											fireBullet(e.x + p.x, e.y + p.y, Math.cos(angle) * spd, Math.sin(angle) * spd, '#ffaa00');
+										}
 									}
 								}
 							} else if (p.t === 'propeller') {
@@ -972,18 +1532,35 @@
 						});
 					}
 
-					// Carrier logic spawn drones
-					if (frame % 100 === 0 && isCarrier) {
-						// Launch Green Plane
-						const launchX = e.x + (Math.random() - 0.5) * 40;
-						const launchY = e.y;
-						enemies.push({
-							x: launchX, y: launchY, hp: 5, w: 20, h: 20, type: 'green',
-							vx: (Math.random() - 0.5) * 4, vy: (Math.random() > 0.5 ? -4 : 4), phase: 0
-						});
+					// Carrier: Launch plane formations
+					if (isCarrier && e.phase > 0) {
+						const launchInterval = aggroPhase === 3 ? 90 : (aggroPhase === 2 ? 150 : 240);
+						if (frame % launchInterval === 0) {
+							const planeCount = aggroPhase >= 2 ? 5 : 3;
+							const offsets = [{dx:0,dy:0},{dx:-35,dy:35},{dx:35,dy:35},{dx:-70,dy:70},{dx:70,dy:70}];
+							for (let pi = 0; pi < planeCount; pi++) {
+								const off = offsets[pi];
+								enemies.push({
+									x: e.x + off.dx, y: e.y + off.dy + 50,
+									hp: Math.ceil(3 * difficultyMult), w: 25, h: 25,
+									type: 'green', spawnFrame: frame, startX: e.x + off.dx,
+									movePattern: 1, waveAmp: 25, waveFreq: 0.04, vy: 3, vx: 0
+								});
+							}
+						}
 					}
 
-					updateBossBar(Math.max(0, e.hp / e.maxHp * 100));
+					// Special attack at critical HP (circular burst)
+					if (aggroPhase === 3 && e.tick % 360 === 0) {
+						const burstCount = 12 + Math.floor(stage / 2);
+						for (let bi = 0; bi < burstCount; bi++) {
+							const angle = (Math.PI * 2 / burstCount) * bi;
+							fireBullet(e.x, e.y, Math.cos(angle) * 3.5, Math.sin(angle) * 3.5, '#ff00ff');
+						}
+						shake = 5;
+					}
+
+					updateBossBar(Math.max(0, hpPct * 100));
 
 				} else if (e.type === 'turret') {
 					e.y += e.vy;
@@ -1021,9 +1598,92 @@
 						}
 					}
 				} else {
-					e.x += e.vx; e.y += e.vy;
-					if (e.type === 'grey' && frame % 80 === 0) {
+					// 根據移動模式更新位置
+					const age = frame - (e.spawnFrame || 0);
+
+					switch (e.movePattern) {
+						case MOVE_PATTERNS.SINE_WAVE:
+							// 正弦波：基於起始位置左右擺動
+							e.x = e.startX + Math.sin(age * e.waveFreq) * e.waveAmp;
+							e.y += e.vy;
+							break;
+
+						case MOVE_PATTERNS.ZIGZAG:
+							// Z字形：定時改變方向
+							e.zigzagTimer = (e.zigzagTimer || 0) + 1;
+							if (e.zigzagTimer > 40) {
+								e.zigzagDir *= -1;
+								e.zigzagTimer = 0;
+							}
+							e.x += e.zigzagDir * 3;
+							e.y += e.vy;
+							// 邊界反彈
+							if (e.x < 30 || e.x > width - 30) e.zigzagDir *= -1;
+							break;
+
+						case MOVE_PATTERNS.DIVE_ATTACK:
+							// 俯衝攻擊：先下降，到一定高度後衝向玩家
+							if (e.divePhase === 0) {
+								// 階段0：緩慢下降
+								e.y += e.vy * 0.5;
+								if (e.y > height * 0.2) {
+									e.divePhase = 1;
+									e.diveTarget.x = player.x;
+									e.diveTarget.y = player.y;
+								}
+							} else if (e.divePhase === 1) {
+								// 階段1：衝向玩家位置
+								const dx = e.diveTarget.x - e.x;
+								const dy = e.diveTarget.y - e.y;
+								const dist = Math.hypot(dx, dy);
+								if (dist > 10) {
+									e.x += (dx / dist) * 8;
+									e.y += (dy / dist) * 8;
+								} else {
+									e.divePhase = 2;
+								}
+							} else {
+								// 階段2：繼續向下飛離
+								e.y += e.vy * 1.5;
+							}
+							break;
+
+						case MOVE_PATTERNS.LOOP:
+							// 迴旋：螺旋形下降
+							const loopAngle = age * e.loopSpeed;
+							e.x = e.startX + Math.cos(loopAngle) * e.loopRadius;
+							e.y += e.vy + Math.sin(loopAngle) * 1.5;
+							break;
+
+						case MOVE_PATTERNS.SWOOP:
+							// 弧形俯衝：先向一側弧形俯衝，然後飛離
+							if (e.swoopPhase === 0) {
+								// 弧形俯衝
+								e.x += e.swoopDir * 4;
+								e.y += e.vy + Math.abs(Math.sin(age * 0.05)) * 3;
+								if (e.y > height * 0.6) e.swoopPhase = 1;
+							} else {
+								// 反向飛離
+								e.x -= e.swoopDir * 3;
+								e.y += e.vy * 0.5;
+							}
+							break;
+
+						default:
+							// 直線：普通移動
+							e.x += e.vx;
+							e.y += e.vy;
+					}
+
+					// 灰色敵機射擊
+					if (e.type === 'grey' && frame % 80 === 0 && e.y > 0 && e.y < height) {
 						fireBullet(e.x, e.y + 20, 0, 4, '#ffaa00');
+					}
+
+					// 俯衝攻擊時發射子彈
+					if (e.movePattern === MOVE_PATTERNS.DIVE_ATTACK && e.divePhase === 1 && frame % 20 === 0) {
+						const angle = Math.atan2(player.y - e.y, player.x - e.x);
+						fireBullet(e.x, e.y, Math.cos(angle) * 5, Math.sin(angle) * 5, '#ff6600');
 					}
 				}
 
@@ -1111,35 +1771,63 @@
 		}
 
 		function fireBullet(x, y, vx, vy, color) {
-			bullets.push({ x, y, vx, vy, w: 10, h: 10, color, owner: 'enemy' });
+			// Apply bullet speed multiplier based on difficulty
+			bullets.push({
+				x, y,
+				vx: vx * bulletSpeedMult,
+				vy: vy * bulletSpeedMult,
+				w: 10, h: 10, color, owner: 'enemy'
+			});
 		}
 
 		function killEnemy(idx) {
 			const e = enemies[idx];
 			spawnParticles(e.x, e.y, '#ffa500', 15);
+
+			// Combo System
+			combo++;
+			comboTimer = COMBO_TIMEOUT;
+			if (combo > maxCombo) maxCombo = combo;
+
+			// Score multiplier based on combo
+			let comboMult = 1.0;
+			if (combo >= 50) comboMult = 3.0;
+			else if (combo >= 25) comboMult = 2.0;
+			else if (combo >= 10) comboMult = 1.5;
+
+			// Show combo text at milestones
+			if (combo === 10 || combo === 25 || combo === 50 || combo === 100) {
+				spawnFloatingText(e.x, e.y - 30, `${combo} COMBO! x${comboMult}`, '#ffff00');
+				SFX.upgrade();
+			}
+
 			if (e.type === 'boss') {
-				score += 5000 * stage;
+				SFX.explodeBoss();
+				score += Math.floor(5000 * stage * comboMult);
 				bossActive = false;
 				spawnParticles(e.x, e.y, '#ff00ff', 100);
 				shake = 50;
 				document.getElementById('boss-ui').style.display = 'none';
-				showCenterMsg("TARGET DESTROYED!");
-				stage++;
-				nextBossTrigger = score + 5000 + (stage * 3000);
 				enemies = []; bullets = [];
 				player.fuel = MAX_FUEL;
+
+				// Start stage transition
+				stage++;
+				stageTransition = true;
+				stageTransitionTimer = STAGE_TRANSITION_DURATION;
 			} else if (e.type === 'miniboss') {
-				score += 2000;
+				SFX.explodeLarge();
+				score += Math.floor(2000 * comboMult);
 				spawnParticles(e.x, e.y, '#ff5500', 50);
 				shake = 10;
 				spawnPowerup(e.x, e.y, 'L');
 			} else if (e.type === 'turret') {
-				score += 300;
-				// Debris stay logic?
-				// For now just die.
+				SFX.explodeLarge();
+				score += Math.floor(300 * comboMult);
 			} else {
-				score += 100;
-				if (e.isRed || Math.random() < 0.08) {
+				SFX.explodeSmall();
+				score += Math.floor(100 * comboMult);
+				if (e.isRed || Math.random() < 0.12) {
 					const r = Math.random();
 					let t = 'S';
 					if (r < 0.2) t = 'S';
@@ -1155,6 +1843,7 @@
 		}
 
 		function playerHit() {
+			SFX.playerHit();
 			player.lives--;
 			spawnParticles(player.x, player.y, '#ff0000', 60);
 			flashScreen();
@@ -1208,12 +1897,21 @@
 
 		function gameOver() {
 			gameRunning = false;
+			SFX.gameOver();
 			if (score > hiscore) {
 				hiscore = score;
 				localStorage.setItem('endless_hiscore', hiscore);
 			}
 			document.getElementById('end-screen').classList.remove('hidden');
 			document.getElementById('final-score').innerText = score;
+			document.getElementById('final-combo').innerText = maxCombo;
+			document.getElementById('final-stage').innerText = stage;
+
+			// Show difficulty on end screen
+			const preset = DIFFICULTY_PRESETS[currentDifficulty];
+			const endDiff = document.getElementById('end-difficulty');
+			endDiff.textContent = preset.name;
+			endDiff.style.color = preset.color;
 		}
 
 		function draw() {
@@ -1231,6 +1929,9 @@
 				let y = (bgOffset * 0.5 + i * 150) % (height + 200) - 200;
 				ctx.fillRect(0, y, width, 40);
 			}
+
+			// Draw clouds (background layer)
+			drawClouds(0.3);
 
 			// DRAW GROUND UNITS UNDER PLAYER/AIR
 			enemies.forEach(e => {
@@ -1442,6 +2143,9 @@
 			});
 			ctx.globalAlpha = 1;
 
+			// Draw foreground clouds (enemies appear from behind)
+			drawClouds(0.15);
+
 			// Floating Texts
 			floatingTexts.forEach(ft => {
 				ctx.globalAlpha = Math.max(0, ft.life / 60);
@@ -1455,14 +2159,315 @@
 			});
 			ctx.globalAlpha = 1;
 
+			// Draw Combo Display
+			if (combo > 0) {
+				const comboX = width - 20;
+				const comboY = 120;
+
+				// Calculate current multiplier for display
+				let displayMult = 1.0;
+				if (combo >= 50) displayMult = 3.0;
+				else if (combo >= 25) displayMult = 2.0;
+				else if (combo >= 10) displayMult = 1.5;
+
+				// Combo number with pulsing effect
+				const pulse = 1 + Math.sin(frame * 0.2) * 0.1;
+				ctx.save();
+				ctx.translate(comboX, comboY);
+				ctx.scale(pulse, pulse);
+
+				// Combo count
+				ctx.font = 'bold 36px Impact';
+				ctx.textAlign = 'right';
+				ctx.strokeStyle = '#000';
+				ctx.lineWidth = 4;
+				ctx.fillStyle = combo >= 50 ? '#ff00ff' : combo >= 25 ? '#ffaa00' : combo >= 10 ? '#ffff00' : '#ffffff';
+				ctx.strokeText(`${combo}`, 0, 0);
+				ctx.fillText(`${combo}`, 0, 0);
+
+				// "COMBO" text
+				ctx.font = 'bold 20px Impact';
+				ctx.strokeText('COMBO', 0, 25);
+				ctx.fillText('COMBO', 0, 25);
+
+				// Multiplier
+				if (displayMult > 1.0) {
+					ctx.font = 'bold 18px Impact';
+					ctx.fillStyle = '#00ffff';
+					ctx.strokeText(`x${displayMult}`, 0, 48);
+					ctx.fillText(`x${displayMult}`, 0, 48);
+				}
+
+				// Timer bar
+				ctx.restore();
+				const barWidth = 80;
+				const barHeight = 6;
+				const timerRatio = comboTimer / COMBO_TIMEOUT;
+				ctx.fillStyle = 'rgba(0,0,0,0.5)';
+				ctx.fillRect(comboX - barWidth, comboY + 35, barWidth, barHeight);
+				ctx.fillStyle = timerRatio > 0.3 ? '#00ff00' : '#ff0000';
+				ctx.fillRect(comboX - barWidth, comboY + 35, barWidth * timerRatio, barHeight);
+			}
+
 			ctx.restore();
+		}
+
+		// Cloud layer for depth effect
+		function drawClouds(alpha) {
+			ctx.globalAlpha = alpha;
+			ctx.fillStyle = '#ffffff';
+			const cloudSpeed = bgOffset * 0.8;
+			for (let i = 0; i < 5; i++) {
+				const x = ((i * 300 + cloudSpeed * 0.3) % (width + 200)) - 100;
+				const y = ((cloudSpeed + i * 250) % (height + 300)) - 150;
+				// Draw fluffy cloud shape
+				ctx.beginPath();
+				ctx.arc(x, y, 40, 0, Math.PI * 2);
+				ctx.arc(x + 35, y - 10, 35, 0, Math.PI * 2);
+				ctx.arc(x + 70, y, 40, 0, Math.PI * 2);
+				ctx.arc(x + 35, y + 15, 30, 0, Math.PI * 2);
+				ctx.fill();
+			}
+			ctx.globalAlpha = 1;
 		}
 
 		function loop() {
 			if (!gameRunning) return;
-			update();
+			if (!paused) {
+				update();
+			}
 			draw();
+			if (stageTransition) {
+				drawStageTransition();
+			}
+			if (bossWarning) {
+				drawBossWarning();
+			}
+			if (paused) {
+				drawPauseOverlay();
+			}
 			requestAnimationFrame(loop);
+		}
+
+		function drawPauseOverlay() {
+			ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+			ctx.fillRect(0, 0, width, height);
+
+			ctx.font = 'bold 64px Impact';
+			ctx.fillStyle = '#FFFFFF';
+			ctx.textAlign = 'center';
+			ctx.fillText('PAUSED', width / 2, height / 2 - 50);
+
+			ctx.font = '24px Arial';
+			ctx.fillStyle = '#AAAAAA';
+			ctx.fillText('按 ESC 或 P 繼續', width / 2, height / 2 + 20);
+			ctx.fillText('WASD / 方向鍵 - 移動', width / 2, height / 2 + 55);
+			ctx.fillText('SPACE / Z - 特殊技能', width / 2, height / 2 + 85);
+		}
+
+		function drawBossWarning() {
+			if (!bossWarning || !bossWarningData) return;
+
+			const progress = 1 - (bossWarningTimer / BOSS_WARNING_DURATION);
+			const flash = Math.sin(bossWarningTimer * 0.3) > 0;
+
+			// Flashing red overlay
+			if (flash) {
+				ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+				ctx.fillRect(0, 0, width, height);
+			}
+
+			// Dark overlay
+			ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+			ctx.fillRect(0, 0, width, height);
+
+			// Red scan lines effect
+			ctx.fillStyle = flash ? 'rgba(255, 0, 0, 0.1)' : 'rgba(255, 0, 0, 0.05)';
+			for (let y = 0; y < height; y += 4) {
+				ctx.fillRect(0, y, width, 2);
+			}
+
+			ctx.textAlign = 'center';
+
+			// ⚠ WARNING ⚠ - Flashing
+			const warningY = height / 2 - 100;
+			ctx.font = 'bold 72px Impact';
+			ctx.strokeStyle = '#000';
+			ctx.lineWidth = 6;
+
+			if (flash) {
+				ctx.fillStyle = '#FF0000';
+				ctx.shadowColor = '#FF0000';
+				ctx.shadowBlur = 30;
+			} else {
+				ctx.fillStyle = '#AA0000';
+				ctx.shadowBlur = 0;
+			}
+
+			ctx.strokeText('⚠ WARNING ⚠', width / 2, warningY);
+			ctx.fillText('⚠ WARNING ⚠', width / 2, warningY);
+			ctx.shadowBlur = 0;
+
+			// Stage number
+			ctx.font = 'bold 28px Impact';
+			ctx.fillStyle = '#FFAA00';
+			ctx.strokeText(`STAGE ${stage}`, width / 2, warningY + 50);
+			ctx.fillText(`STAGE ${stage}`, width / 2, warningY + 50);
+
+			// Boss name - Large with slide-in effect
+			const slideIn = Math.min(1, progress * 3);
+			const nameX = width / 2 + (1 - slideIn) * 300;
+
+			ctx.font = 'bold 56px Impact';
+			ctx.fillStyle = '#FFFFFF';
+			ctx.strokeStyle = '#000';
+			ctx.lineWidth = 4;
+			ctx.strokeText(`「${bossWarningData.name}」`, nameX, height / 2 + 20);
+			ctx.fillText(`「${bossWarningData.name}」`, nameX, height / 2 + 20);
+
+			// Boss type - subtitle
+			ctx.font = 'bold 24px Arial';
+			ctx.fillStyle = '#AAAAAA';
+			ctx.strokeText(bossWarningData.type, nameX, height / 2 + 60);
+			ctx.fillText(bossWarningData.type, nameX, height / 2 + 60);
+
+			// Mission text
+			if (progress > 0.3) {
+				ctx.font = '20px Arial';
+				ctx.fillStyle = '#FFFF00';
+				const missionText = bossWarningData.type.includes('Carrier') ? '任務：擊沉敵方航母' :
+					bossWarningData.type.includes('Battleship') ? '任務：擊沉敵方戰艦' :
+					bossWarningData.type.includes('Bomber') ? '任務：擊落敵方轟炸機' :
+					'任務：消滅敵方目標';
+				ctx.fillText(missionText, width / 2, height / 2 + 110);
+			}
+
+			// Progress bar at bottom
+			const barWidth = width * 0.6;
+			const barX = (width - barWidth) / 2;
+			const barY = height - 60;
+			ctx.fillStyle = 'rgba(255,255,255,0.2)';
+			ctx.fillRect(barX, barY, barWidth, 8);
+			ctx.fillStyle = '#FF0000';
+			ctx.fillRect(barX, barY, barWidth * progress, 8);
+		}
+
+		function drawStageTransition() {
+			if (!stageTransition) return;
+
+			const progress = 1 - (stageTransitionTimer / STAGE_TRANSITION_DURATION);
+			const stageData = STAGE_NAMES[Math.min(stage - 1, STAGE_NAMES.length - 1)];
+
+			// Dark blue gradient background
+			const gradient = ctx.createLinearGradient(0, 0, 0, height);
+			gradient.addColorStop(0, '#000033');
+			gradient.addColorStop(0.5, '#000066');
+			gradient.addColorStop(1, '#000033');
+			ctx.fillStyle = gradient;
+			ctx.fillRect(0, 0, width, height);
+
+			// Stars background
+			ctx.fillStyle = '#ffffff';
+			for (let i = 0; i < 50; i++) {
+				const starX = (i * 137 + frame * 0.5) % width;
+				const starY = (i * 89) % height;
+				const size = (i % 3) + 1;
+				ctx.globalAlpha = 0.3 + (Math.sin(frame * 0.1 + i) + 1) * 0.35;
+				ctx.fillRect(starX, starY, size, size);
+			}
+			ctx.globalAlpha = 1;
+
+			ctx.textAlign = 'center';
+
+			// "STAGE CLEAR" or "MISSION START" text
+			const titleY = height / 2 - 80;
+			const isFirstStage = (stage === 1);
+
+			if (progress < 0.3) {
+				// First show "STAGE CLEAR" or "MISSION START"
+				ctx.font = 'bold 48px Impact';
+				ctx.strokeStyle = '#000';
+				ctx.lineWidth = 4;
+
+				if (isFirstStage) {
+					ctx.fillStyle = '#00AAFF';
+					ctx.shadowColor = '#00AAFF';
+					ctx.shadowBlur = 20;
+					ctx.strokeText('MISSION START', width / 2, titleY);
+					ctx.fillText('MISSION START', width / 2, titleY);
+				} else {
+					ctx.fillStyle = '#00FF00';
+					ctx.shadowColor = '#00FF00';
+					ctx.shadowBlur = 20;
+					ctx.strokeText('STAGE CLEAR!', width / 2, titleY);
+					ctx.fillText('STAGE CLEAR!', width / 2, titleY);
+				}
+				ctx.shadowBlur = 0;
+			} else {
+				// Then show next stage info
+				const fadeIn = Math.min(1, (progress - 0.3) * 2);
+				ctx.globalAlpha = fadeIn;
+
+				// Stage number
+				ctx.font = 'bold 36px Impact';
+				ctx.strokeStyle = '#000';
+				ctx.lineWidth = 4;
+				ctx.fillStyle = '#FFAA00';
+				ctx.strokeText(`STAGE ${stage}`, width / 2, titleY - 20);
+				ctx.fillText(`STAGE ${stage}`, width / 2, titleY - 20);
+
+				// Stage name (Japanese)
+				ctx.font = 'bold 64px Impact';
+				ctx.fillStyle = '#FFFFFF';
+				ctx.shadowColor = '#0088FF';
+				ctx.shadowBlur = 15;
+				ctx.strokeText(`「${stageData.name}」`, width / 2, titleY + 50);
+				ctx.fillText(`「${stageData.name}」`, width / 2, titleY + 50);
+				ctx.shadowBlur = 0;
+
+				// Area name
+				ctx.font = '24px Arial';
+				ctx.fillStyle = '#AAAAAA';
+				ctx.fillText(stageData.area, width / 2, titleY + 90);
+
+				// Mission objective
+				ctx.font = 'bold 28px Arial';
+				ctx.fillStyle = '#FFFF00';
+				ctx.strokeStyle = '#000';
+				ctx.lineWidth = 3;
+				ctx.strokeText(`任務：${stageData.mission}`, width / 2, height / 2 + 60);
+				ctx.fillText(`任務：${stageData.mission}`, width / 2, height / 2 + 60);
+
+				// Next boss preview
+				if (stage <= BOSS_DATA.length) {
+					const nextBoss = BOSS_DATA[stage - 1];
+					ctx.font = '20px Arial';
+					ctx.fillStyle = '#FF6666';
+					ctx.fillText(`目標：${nextBoss.name} (${nextBoss.type})`, width / 2, height / 2 + 100);
+				}
+
+				ctx.globalAlpha = 1;
+			}
+
+			// Countdown
+			const secondsLeft = Math.ceil(stageTransitionTimer / 60);
+			ctx.font = 'bold 24px Arial';
+			ctx.fillStyle = '#FFFFFF';
+			ctx.fillText(`${secondsLeft}`, width / 2, height - 80);
+
+			// Progress bar
+			const barWidth = width * 0.5;
+			const barX = (width - barWidth) / 2;
+			const barY = height - 50;
+			ctx.fillStyle = 'rgba(255,255,255,0.2)';
+			ctx.fillRect(barX, barY, barWidth, 6);
+			ctx.fillStyle = '#00AAFF';
+			ctx.fillRect(barX, barY, barWidth * progress, 6);
+
+			// Instruction
+			ctx.font = '16px Arial';
+			ctx.fillStyle = '#888888';
+			ctx.fillText('準備下一關...', width / 2, height - 25);
 		}
 	</script>
 </body>

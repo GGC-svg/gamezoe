@@ -7,6 +7,7 @@ import { OAuth2Client } from 'google-auth-library';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import p99payRoutes, { setDatabase as setP99Database, startBatchJob as startP99BatchJob } from './routes/p99pay.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -611,6 +612,13 @@ app.post('/api/wallet/topup', (req, res) => {
         });
     });
 });
+
+// --- P99PAY PAYMENT GATEWAY ---
+// Mount P99PAY routes and inject database
+setP99Database(db);
+app.use('/api/payment/p99', p99payRoutes);
+startP99BatchJob();
+console.log('[P99Pay] Payment gateway routes mounted at /api/payment/p99');
 
 
 // --- BRIDGE API (For External Casinos) ---

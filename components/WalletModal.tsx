@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, CheckCircle, AlertCircle, Coins, History, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, CheckCircle, AlertCircle, Coins, History, ArrowUpRight, ArrowDownLeft, CreditCard, Loader2 } from 'lucide-react';
 
 interface WalletModalProps {
     isOpen: boolean;
@@ -18,28 +18,20 @@ interface Transaction {
 }
 
 const TOPUP_TIERS = [
-    { price: 0.99, gold: 99, label: '$0.99' },
+    { price: 1, gold: 100, label: '$1.00' },
     { price: 3, gold: 300, label: '$3.00' },
     { price: 5, gold: 500, label: '$5.00' },
     { price: 10, gold: 1000, label: '$10.00' },
     { price: 20, gold: 2000, label: '$20.00' },
     { price: 30, gold: 3000, label: '$30.00' },
-    { price: 40, gold: 4000, label: '$40.00' },
     { price: 50, gold: 5000, label: '$50.00' },
-    { price: 60, gold: 6000, label: '$60.00' },
-    { price: 70, gold: 7000, label: '$70.00' },
     { price: 100, gold: 10000, label: '$100.00' },
-    { price: 150, gold: 15000, label: '$150.00' },
     { price: 200, gold: 20000, label: '$200.00' },
-    { price: 300, gold: 30000, label: '$300.00' },
     { price: 500, gold: 50000, label: '$500.00' },
     { price: 1000, gold: 100000, label: '$1000.00' },
-    { price: 2000, gold: 200000, label: '$2000.00' },
-    { price: 3000, gold: 300000, label: '$3000.00' },
-    { price: 5000, gold: 500000, label: '$5000.00' },
 ];
 
-const API_BASE = '/api'; // Use relative path for proxy
+const API_BASE = '/api';
 
 const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTopUpSuccess }) => {
     const [activeTab, setActiveTab] = useState<'topup' | 'history'>('topup');
@@ -50,11 +42,73 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
     const [addedGold, setAddedGold] = useState(0);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
 
+    // P99PAY payment state
+    const [selectedTier, setSelectedTier] = useState<typeof TOPUP_TIERS[0] | null>(null);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+    // Hidden form for P99PAY redirect
+    const p99FormRef = useRef<HTMLFormElement>(null);
+    const [p99FormData, setP99FormData] = useState<{ apiUrl: string; data: string } | null>(null);
+
+    // Check URL params for payment callback
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const success = urlParams.get('success');
+        const gold = urlParams.get('gold');
+        const orderId = urlParams.get('orderId');
+        const pending = urlParams.get('pending');
+        const errorParam = urlParams.get('error');
+
+        if (success === 'true' && gold) {
+            setAddedGold(parseInt(gold));
+            setShowSuccessPopup(true);
+            // Clean URL
+            window.history.replaceState({}, '', window.location.pathname);
+            // Refresh balance
+            refreshBalance();
+        } else if (pending === 'true' && orderId) {
+            setSuccessMsg(`訂單 ${orderId} 處理中，請稍後查看交易紀錄`);
+            window.history.replaceState({}, '', window.location.pathname);
+        } else if (errorParam) {
+            setError(getErrorMessage(errorParam));
+            window.history.replaceState({}, '', window.location.pathname);
+        }
+    }, []);
+
+    // Auto-submit P99 form when data is ready
+    useEffect(() => {
+        if (p99FormData && p99FormRef.current) {
+            p99FormRef.current.submit();
+        }
+    }, [p99FormData]);
+
     useEffect(() => {
         if (isOpen && activeTab === 'history') {
             fetchHistory();
         }
     }, [isOpen, activeTab]);
+
+    const getErrorMessage = (errorCode: string): string => {
+        const errorMessages: Record<string, string> = {
+            'no_data': '支付回傳資料異常',
+            'parse_failed': '支付資料解析失敗',
+            'payment_failed': '支付失敗，請重試',
+            'order_not_found': '訂單不存在',
+        };
+        return errorMessages[errorCode] || `支付錯誤 (${errorCode})`;
+    };
+
+    const refreshBalance = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/wallet/balance/${userId}`);
+            if (res.ok) {
+                const balance = await res.json();
+                onTopUpSuccess(balance);
+            }
+        } catch (e) {
+            console.error("Failed to refresh balance");
+        }
+    };
 
     const fetchHistory = async () => {
         try {
@@ -70,39 +124,72 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
 
     if (!isOpen) return null;
 
-    const handleTopUp = async (tier: typeof TOPUP_TIERS[0]) => {
+    const handleTierSelect = (tier: typeof TOPUP_TIERS[0]) => {
+        setSelectedTier(tier);
+        setShowConfirmModal(true);
+        setError(null);
+    };
+
+    const handleP99Payment = async () => {
+        if (!selectedTier) return;
+
         setLoading(true);
         setError(null);
-        setSuccessMsg(null);
 
         try {
-            const response = await fetch(`${API_BASE}/wallet/topup`, {
+            // paymentMethod 為空，讓 P99PAY 顯示支付選項頁面
+            const response = await fetch(`${API_BASE}/payment/p99/order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId, amountUSD: tier.price }),
+                body: JSON.stringify({
+                    userId,
+                    amountUSD: selectedTier.price,
+                    paymentMethod: '', // 空值讓 P99 顯示選擇頁
+                    productName: `GameZoe Gold x${selectedTier.gold}`
+                }),
             });
 
             if (!response.ok) {
-                throw new Error('Top-up failed');
+                const errData = await response.json();
+                throw new Error(errData.error || 'Failed to create order');
             }
 
             const data = await response.json();
             if (data.success) {
-                setAddedGold(data.addedGold);
-                setShowSuccessPopup(true);
-                onTopUpSuccess(data.newBalance);
+                // Set form data and trigger redirect
+                setP99FormData({
+                    apiUrl: data.apiUrl,
+                    data: data.formData
+                });
             } else {
-                throw new Error(data.error || 'Unknown error');
+                throw new Error(data.error || 'Order creation failed');
             }
         } catch (err: any) {
-            setError(err.message || 'Payment failed');
-        } finally {
+            setError(err.message || '建立訂單失敗');
             setLoading(false);
         }
     };
 
+    const handleCancelPayment = () => {
+        setSelectedTier(null);
+        setShowConfirmModal(false);
+        setError(null);
+    };
+
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+            {/* Hidden P99PAY Form for redirect */}
+            {p99FormData && (
+                <form
+                    ref={p99FormRef}
+                    action={p99FormData.apiUrl}
+                    method="POST"
+                    style={{ display: 'none' }}
+                >
+                    <input type="hidden" name="data" value={p99FormData.data} />
+                </form>
+            )}
+
             {/* Success Popup */}
             {showSuccessPopup && (
                 <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-fade-in">
@@ -118,11 +205,88 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
                             <span className="text-yellow-400 text-2xl">G</span>
                         </div>
                         <button
-                            onClick={() => setShowSuccessPopup(false)}
+                            onClick={() => {
+                                setShowSuccessPopup(false);
+                                refreshBalance();
+                            }}
                             className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-6 rounded-xl transition-colors"
                         >
                             確認
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Confirm Payment Modal */}
+            {showConfirmModal && selectedTier && (
+                <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-slate-800 border border-slate-600 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl animate-slide-up">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-xl font-bold text-white">確認儲值</h3>
+                            <button
+                                onClick={handleCancelPayment}
+                                className="text-slate-400 hover:text-white transition-colors"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {/* Order Summary */}
+                        <div className="bg-slate-900/50 rounded-xl p-4 mb-6 border border-slate-700">
+                            <div className="flex items-center justify-between">
+                                <span className="text-slate-400">儲值金額</span>
+                                <span className="text-white font-bold">{selectedTier.label} USD</span>
+                            </div>
+                            <div className="flex items-center justify-between mt-2">
+                                <span className="text-slate-400">獲得金幣</span>
+                                <span className="text-yellow-500 font-bold flex items-center gap-1">
+                                    <Coins className="h-4 w-4" />
+                                    {selectedTier.gold.toLocaleString()} G
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Payment Info */}
+                        <div className="mb-6 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                            <p className="text-sm text-blue-300">
+                                點擊「前往付款」後將跳轉至 P99PAY 安全支付頁面，您可在該頁面選擇付款方式（KIWI 點數卡或 KIWI 錢包）。
+                            </p>
+                        </div>
+
+                        {/* Error Message */}
+                        {error && (
+                            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-400">
+                                <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                                <span className="text-sm">{error}</span>
+                            </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-3">
+                            <button
+                                onClick={handleCancelPayment}
+                                className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-xl transition-colors"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={handleP99Payment}
+                                disabled={loading}
+                                className="flex-1 py-3 bg-nexus-accent hover:bg-nexus-accent/80 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {loading ? (
+                                    <>
+                                        <Loader2 className="h-5 w-5 animate-spin" />
+                                        處理中...
+                                    </>
+                                ) : (
+                                    <>
+                                        <CreditCard className="h-5 w-5" />
+                                        前往付款
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -181,12 +345,12 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
                                 </div>
                                 <div>
                                     <h3 className="text-lg font-semibold text-white">選擇儲值金額</h3>
-                                    <p className="text-sm text-slate-400">匯率: 1 USD = 100 Gold</p>
+                                    <p className="text-sm text-slate-400">匯率: 1 USD = 100 Gold | 支援 KIWI 點數卡 / 錢包</p>
                                 </div>
                             </div>
 
                             {/* Messages Toast Overlay */}
-                            {(error || successMsg) && (
+                            {(error || successMsg) && !showConfirmModal && (
                                 <div className="absolute top-4 left-0 right-0 z-50 flex justify-center px-4 animate-fade-in pointer-events-none">
                                     <div className={`p-3 rounded-xl shadow-xl flex items-center gap-3 border backdrop-blur-md pointer-events-auto ${error
                                         ? 'bg-red-500/10 border-red-500/20 text-red-400'
@@ -198,12 +362,12 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                                 {TOPUP_TIERS.map((tier) => (
                                     <button
                                         key={tier.price}
                                         disabled={loading}
-                                        onClick={() => handleTopUp(tier)}
+                                        onClick={() => handleTierSelect(tier)}
                                         className="group relative flex flex-col items-center justify-between p-4 bg-slate-800/50 hover:bg-slate-800 border-2 border-slate-700 hover:border-nexus-accent rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         <div className="text-center mb-3">
@@ -222,6 +386,14 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
                                         )}
                                     </button>
                                 ))}
+                            </div>
+
+                            {/* Payment Provider Info */}
+                            <div className="mt-6 p-4 bg-slate-800/30 rounded-xl border border-slate-700">
+                                <div className="flex items-center gap-3 text-slate-400">
+                                    <CreditCard className="h-5 w-5" />
+                                    <span className="text-sm">支付服務由 <span className="text-white font-medium">P99PAY</span> 提供 | 支援 KIWI 點數卡 & KIWI 錢包</span>
+                                </div>
                             </div>
                         </>
                     ) : (
@@ -261,7 +433,7 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
 
                 {/* Footer */}
                 <div className="p-4 border-t border-slate-800 bg-slate-800/30 text-center text-xs text-slate-500">
-                    安全支付保護。所有交易皆無法退款。
+                    安全支付保護 | 交易由 P99PAY 處理 | 所有交易皆無法退款
                 </div>
             </div>
         </div>

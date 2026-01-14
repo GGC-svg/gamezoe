@@ -256,6 +256,29 @@ function initDb() {
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (game_id) REFERENCES games(id)
         )`);
+
+        // P99PAY Orders Table (Payment gateway transactions)
+        db.run(`CREATE TABLE IF NOT EXISTS p99_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id TEXT UNIQUE NOT NULL,
+            rrn TEXT,
+            user_id TEXT NOT NULL,
+            amount_usd REAL NOT NULL,
+            gold_amount INTEGER NOT NULL,
+            paid TEXT,
+            status TEXT DEFAULT 'pending',
+            pay_status TEXT,
+            rcode TEXT,
+            erpc_verified INTEGER DEFAULT 0,
+            settle_status TEXT,
+            settle_rcode TEXT,
+            notify_count INTEGER DEFAULT 0,
+            raw_request TEXT,
+            raw_response TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )`);
     });
 }
 

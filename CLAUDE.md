@@ -54,3 +54,20 @@ npm run build && git add -f dist/ && git commit -m "Build: update" && git push o
 ```bash
 cd ~/gamezoe && git fetch origin && git reset --hard origin/master && pm2 restart all
 ```
+
+---
+
+## 安全性注意事項
+
+### 禁止推送的資料夾
+
+**⚠️ 絕對禁止推送到正式伺服器：**
+
+| 資料夾 | 說明 |
+|--------|------|
+| `Billing/Billing/` | 金流廠商 P99PAY 對接資料，包含 API 金鑰、測試帳號等機密資訊 |
+
+這些資料夾已加入 `.gitignore`，但仍需特別注意：
+- 不要使用 `git add -f` 強制加入這些資料夾
+- 不要將金流 API 金鑰寫入程式碼中
+- 金流相關設定應使用環境變數或獨立的設定檔（不納入版控）

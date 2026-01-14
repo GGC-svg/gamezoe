@@ -46,3 +46,7 @@ server/gamezoe.db-shm
 server/*.db
 server/*.db-*
 *.log
+
+# Billing - CRITICAL: 金流廠商機密資料，絕對禁止推送！
+Billing/
+**/Billing/
