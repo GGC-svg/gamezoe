@@ -70,6 +70,15 @@ function App() {
     initData();
   }, []);
 
+  // Auto-open Wallet Modal when redirected from P99 payment
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasPaymentCallback = urlParams.get('success') || urlParams.get('error') || urlParams.get('pending');
+    if (hasPaymentCallback) {
+      setIsWalletOpen(true);
+    }
+  }, []);
+
   // [FIX] Expose user to window for iframe games (MyFish, etc.)
   useEffect(() => {
     if (window && user) {

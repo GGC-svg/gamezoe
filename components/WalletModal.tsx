@@ -129,13 +129,16 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
             '9999': '系統異常，請聯繫客服',
         };
 
+        // 我方內部錯誤訊息
         const errorMessages: Record<string, string> = {
-            'no_data': '支付回傳資料異常',
-            'parse_failed': '支付資料解析失敗',
+            'no_data': '支付回傳資料異常，請聯繫客服',
+            'parse_failed': '支付資料解析失敗，請聯繫客服',
             'payment_failed': rcode && p99ErrorCodes[rcode]
                 ? p99ErrorCodes[rcode]
                 : '支付失敗，請重試',
-            'order_not_found': '訂單不存在',
+            'order_not_found': '訂單不存在，請聯繫客服並提供訂單編號',
+            'credit_failed': 'G幣入帳失敗，請聯繫客服',
+            'db_error': '系統資料庫錯誤，請聯繫客服',
         };
 
         // If rcode exists and we have a mapping, show it
