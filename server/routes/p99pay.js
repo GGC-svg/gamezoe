@@ -551,6 +551,71 @@ export function startBatchJob() {
             }
         );
     }, 10 * 60 * 1000); // Every 10 minutes
+
+    // Internal Reconciliation Job - verify and auto-fix undelivered gold
+    // Runs every 5 minutes, checks orders paid but gold not credited
+    setInterval(() => {
+        console.log('[P99Pay Reconcile] Running internal reconciliation...');
+
+        // Find orders where P99 says paid (pay_status=S) but no wallet_transaction exists
+        db.all(
+            `SELECT p.* FROM p99_orders p
+             LEFT JOIN wallet_transactions w ON p.order_id = w.order_id
+             WHERE p.pay_status = 'S' AND w.id IS NULL
+             AND p.created_at > datetime('now', '-24 hours')`,
+            (err, undeliveredOrders) => {
+                if (err) {
+                    console.error('[P99Pay Reconcile] Query error:', err.message);
+                    return;
+                }
+
+                if (!undeliveredOrders || undeliveredOrders.length === 0) {
+                    console.log('[P99Pay Reconcile] All orders verified - no undelivered gold found');
+                    return;
+                }
+
+                console.log(`[P99Pay Reconcile] ⚠️ Found ${undeliveredOrders.length} orders with undelivered gold!`);
+
+                for (const order of undeliveredOrders) {
+                    console.log(`[P99Pay Reconcile] Processing order ${order.order_id}: ${order.gold_amount}G for user ${order.user_id}`);
+
+                    db.serialize(() => {
+                        db.run('BEGIN TRANSACTION');
+
+                        // Credit gold
+                        db.run('UPDATE users SET gold_balance = gold_balance + ? WHERE id = ?',
+                            [order.gold_amount, order.user_id]);
+
+                        // Log transaction with reconciliation note
+                        db.run(
+                            `INSERT OR IGNORE INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at)
+                             VALUES (?, ?, ?, 'gold', 'deposit', ?, 'completed', datetime('now', '+8 hours'))`,
+                            [order.order_id, order.user_id, order.gold_amount, `P99PAY reconcile topup ${order.amount_usd} USD`]
+                        );
+
+                        // Update order status
+                        db.run(
+                            `UPDATE p99_orders SET status = 'settled', updated_at = datetime('now', '+8 hours') WHERE order_id = ?`,
+                            [order.order_id]
+                        );
+
+                        db.run('COMMIT', (err) => {
+                            if (err) {
+                                console.error(`[P99Pay Reconcile] Failed to credit order ${order.order_id}:`, err.message);
+                            } else {
+                                console.log(`[P99Pay Reconcile] ✅ Gold credited: ${order.gold_amount}G to user ${order.user_id} (Order: ${order.order_id})`);
+
+                                // Settle with P99 if not already settled
+                                if (order.settle_status !== 'settled') {
+                                    settleP99Order(order.order_id);
+                                }
+                            }
+                        });
+                    });
+                }
+            }
+        );
+    }, 5 * 60 * 1000); // Every 5 minutes
 }
 
 export default router;
