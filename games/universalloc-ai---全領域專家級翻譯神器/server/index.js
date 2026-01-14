@@ -40,7 +40,7 @@ app.post('/api/ai/generate', async (req, res) => {
         const ai = new GoogleGenAI({ apiKey });
         // Force specific model if needed, or trust client request (validated)
         // We enforce gemini-1.5-flash for cost/speed balance
-        const targetModel = "gemini-1.5-flash";
+        const targetModel = "gemini-2.0-flash";
 
         const result = await ai.models.generateContent({
             model: targetModel,

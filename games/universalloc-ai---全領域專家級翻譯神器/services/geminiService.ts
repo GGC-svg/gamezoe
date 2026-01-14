@@ -213,7 +213,7 @@ export const translateBatch = async (
         },
         body: JSON.stringify({
           userId,
-          model: "gemini-1.5-flash",
+          model: "gemini-2.0-flash",
           contents: `LOCALIZATION TASK: ${JSON.stringify(inputList)}\n\nGLOSSARY:\n${glossaryLines}`,
           config: {
             systemInstruction: systemInstruction,
@@ -337,7 +337,7 @@ export const generateGlossarySuggestions = async (
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
-          model: "gemini-1.5-flash",
+          model: "gemini-2.0-flash",
           contents: prompt,
           config: {
             systemInstruction: systemPrompt,
