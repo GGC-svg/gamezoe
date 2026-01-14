@@ -16,6 +16,10 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000; // Default to 3000 for Nginx
 
+// [FIX] Trust proxy to get real client IP behind nginx
+// This makes req.ip return X-Forwarded-For instead of 127.0.0.1
+app.set('trust proxy', true);
+
 // [PROXY] Proxy requests to Fish Master Socket Server (127.0.0.1:9000)
 // Moved to TOP to avoid body-parser issues
 // [FIX] Use V3 pathFilter to preserve path when forwarding
