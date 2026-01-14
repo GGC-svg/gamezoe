@@ -73,7 +73,8 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
             setSuccessMsg(`訂單 ${orderId} 處理中，請稍後查看交易紀錄`);
             window.history.replaceState({}, '', window.location.pathname);
         } else if (errorParam) {
-            setError(getErrorMessage(errorParam));
+            const rcode = urlParams.get('rcode');
+            setError(getErrorMessage(errorParam, rcode || undefined));
             window.history.replaceState({}, '', window.location.pathname);
         }
     }, []);
@@ -91,14 +92,58 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
         }
     }, [isOpen, activeTab]);
 
-    const getErrorMessage = (errorCode: string): string => {
+    const getErrorMessage = (errorCode: string, rcode?: string): string => {
+        // P99 official RCODE error codes (from P99 API doc v1.2.3)
+        const p99ErrorCodes: Record<string, string> = {
+            // 系統錯誤
+            '1001': '驗證碼錯誤，請重試',
+            '1101': '訊息格式錯誤',
+            '1102': '幣別代碼錯誤',
+            '1103': '金額格式錯誤',
+            '1109': '不支援的幣別',
+            '1110': '不支援小數金額',
+            '1205': '不合法的網路位址',
+            '1301': '不支援的付款方式',
+            '1401': '找不到訂單編號',
+            '1402': '交易內容與原始交易不一致',
+            '1501': '超過交易限額',
+            '1505': '不允許使用此幣別',
+            '1601': '商家代碼未啟用',
+            // 交易狀態
+            '2001': '訂單編號重複，請重新操作',
+            '3004': '付款待確認中，請稍候',
+            '3005': '交易逾時，請重新操作',
+            // PIN 卡相關錯誤
+            '3901': 'PIN 面額與交易金額不符',
+            '3902': 'PIN 碼已被鎖定，請聯繫 KIWI 客服',
+            '3903': 'PIN 碼已被使用',
+            '3904': 'PIN 碼錯誤',
+            '3905': 'PIN 碼尚未啟用，請聯繫 KIWI 客服',
+            '3906': 'PIN 碼為專用卡，無法使用',
+            '3907': '不允許使用此通路的 PIN 卡',
+            '3908': '不允許使用此地區的 PIN 卡',
+            '3909': 'PIN 卡幣別與交易幣別不一致',
+            '3910': 'PIN 卡剩餘點數不足',
+            // 系統異常
+            '9998': '系統繁忙，請稍後再試',
+            '9999': '系統異常，請聯繫客服',
+        };
+
         const errorMessages: Record<string, string> = {
             'no_data': '支付回傳資料異常',
             'parse_failed': '支付資料解析失敗',
-            'payment_failed': '支付失敗，請重試',
+            'payment_failed': rcode && p99ErrorCodes[rcode]
+                ? p99ErrorCodes[rcode]
+                : '支付失敗，請重試',
             'order_not_found': '訂單不存在',
         };
-        return errorMessages[errorCode] || `支付錯誤 (${errorCode})`;
+
+        // If rcode exists and we have a mapping, show it
+        if (rcode && p99ErrorCodes[rcode]) {
+            return p99ErrorCodes[rcode];
+        }
+
+        return errorMessages[errorCode] || `支付錯誤 (${errorCode}${rcode ? `, 代碼: ${rcode}` : ''})`;
     };
 
     const refreshBalance = async () => {
