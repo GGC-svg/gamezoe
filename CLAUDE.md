@@ -220,3 +220,68 @@ WT45CYT8NJ7V8NVH, UF3JT8TFNNRC4KRF, NYGJPNVBLCS9SCFD, 1CWA4TR2YE9YX0T2
 1. **IP 白名單**: 正式環境需向 P99 提供伺服器 IP
 2. **CORS**: 已允許 `stage-api.p99pay.com` 和 `api.p99pay.com`
 3. **Trust Proxy**: 已啟用 `app.set('trust proxy', true)` 取得真實用戶 IP
+
+---
+
+## 遊戲縮圖更新流程
+
+### 步驟
+
+1. **本機：複製圖片到遊戲資料夾**
+   ```bash
+   cp "來源圖片路徑" "E:/Steam/gamezoe/games/遊戲資料夾/thumbnail.jpg"
+   ```
+
+2. **本機：推送到 Git**
+   ```bash
+   cd /e/Steam/gamezoe
+   git add games/遊戲資料夾/thumbnail.jpg
+   git commit -m "Update: 遊戲名稱 thumbnail"
+   git push origin master
+   ```
+
+3. **Server：拉取並更新資料庫**
+   ```bash
+   cd ~/gamezoe && git fetch origin && git reset --hard origin/master
+   ```
+
+4. **Server：查詢遊戲 ID**
+   ```bash
+   sqlite3 ~/gamezoe/server/gamezoe.db "SELECT id, title, thumbnailUrl FROM games WHERE title LIKE '%關鍵字%';"
+   ```
+
+5. **Server：更新縮圖路徑**
+   ```bash
+   sqlite3 ~/gamezoe/server/gamezoe.db "UPDATE games SET thumbnailUrl = '/games/遊戲資料夾/thumbnail.jpg' WHERE id = '遊戲ID';"
+   ```
+
+6. **Server：重啟服務**
+   ```bash
+   pm2 restart all
+   ```
+
+### 資料庫欄位參考
+
+**games 表結構：**
+```sql
+id TEXT PRIMARY KEY,
+title TEXT,
+description TEXT,
+fullDescription TEXT,
+thumbnailUrl TEXT,      -- 縮圖路徑
+coverUrl TEXT,          -- 封面圖路徑
+gameUrl TEXT,           -- 遊戲入口 URL
+developer TEXT,
+price REAL,
+isFree INTEGER,
+category TEXT,
+...
+```
+
+### 範例：更新羅斯魔影消消樂縮圖
+
+```bash
+# Server 端執行
+sqlite3 ~/gamezoe/server/gamezoe.db "UPDATE games SET thumbnailUrl = '/games/Rosebubble/thumbnail.jpg' WHERE id = 'rose-bubble';"
+pm2 restart all
+```
