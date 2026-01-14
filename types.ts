@@ -35,6 +35,7 @@ export interface Game {
   releaseDate: string;
   pricingTiers?: { id: number; label: string; price_gold: number; duration_minutes: number }[];
   selectedTier?: { id: number; label: string; price_gold: number; duration_minutes: number };
+  game_type?: 'game' | 'service'; // 'game' for traditional games, 'service' for tools like translation
 }
 
 export interface PaymentMethod {

@@ -298,6 +298,29 @@ function initDb() {
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (p99_order_id) REFERENCES p99_orders(order_id)
         )`);
+
+        // Migration: Add new columns to service_orders (if not exist)
+        const serviceOrderColumns = [
+            'file_path TEXT',      // 上傳檔案路徑
+            'result_path TEXT',    // 結果檔案路徑
+            'config_json TEXT',    // 翻譯設定 JSON
+            'expires_at DATETIME'  // 下載過期時間 (7天)
+        ];
+        serviceOrderColumns.forEach(col => {
+            const colName = col.split(' ')[0];
+            db.run(`ALTER TABLE service_orders ADD COLUMN ${col}`, (err) => {
+                if (!err) console.log(`[DB] Added column service_orders.${colName}`);
+            });
+        });
+
+        // Migration: Add game_type column to games
+        db.run(`ALTER TABLE games ADD COLUMN game_type TEXT DEFAULT 'game'`, (err) => {
+            if (!err) {
+                console.log('[DB] Added column games.game_type');
+                // Set universalloc as service type
+                db.run(`UPDATE games SET game_type = 'service' WHERE gameUrl LIKE '%universalloc%'`);
+            }
+        });
     });
 }
 

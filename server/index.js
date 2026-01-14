@@ -5,9 +5,11 @@ import helmet from 'helmet';
 import db from './database.js';
 import { OAuth2Client } from 'google-auth-library';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import p99payRoutes, { setDatabase as setP99Database, startBatchJob as startP99BatchJob } from './routes/p99pay.js';
+import multer from 'multer';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -677,6 +679,226 @@ setP99Database(db);
 app.use('/api/payment', p99payRoutes);
 startP99BatchJob();
 console.log('[P99Pay] Payment gateway routes mounted at /api/payment');
+
+
+// --- SERVICE FILE UPLOAD & ORDERS API ---
+
+// Configure multer for file uploads (50MB limit)
+const uploadStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const uploadDir = path.join(__dirname, 'uploads/temp');
+        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        const userId = req.body.userId || 'unknown';
+        const timestamp = Date.now();
+        const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+        cb(null, `${userId}_${timestamp}_${safeName}`);
+    }
+});
+const uploadMiddleware = multer({
+    storage: uploadStorage,
+    limits: { fileSize: 50 * 1024 * 1024 } // 50MB
+});
+
+// POST /api/service/upload - Upload file before payment
+app.post('/api/service/upload', uploadMiddleware.single('file'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+    const filePath = req.file.path;
+    const fileId = path.basename(filePath);
+    console.log(`[Service] File uploaded: ${fileId}`);
+    res.json({ success: true, fileId, filePath });
+});
+
+// GET /api/games/:gameId/service-orders/:userId - Get service orders for a game
+app.get('/api/games/:gameId/service-orders/:userId', (req, res) => {
+    const { gameId, userId } = req.params;
+
+    db.all(
+        `SELECT order_id, service_type, service_data, amount_usd, gold_amount, status,
+                file_path, result_path, config_json, expires_at, created_at, fulfilled_at
+         FROM service_orders
+         WHERE service_type = ? AND user_id = ?
+         ORDER BY created_at DESC LIMIT 50`,
+        [gameId, userId],
+        (err, rows) => {
+            if (err) {
+                return res.status(500).json({ success: false, error: err.message });
+            }
+
+            const now = new Date();
+            const formatted = (rows || []).map(row => {
+                let daysLeft = null;
+                if (row.expires_at) {
+                    const expiresAt = new Date(row.expires_at);
+                    daysLeft = Math.max(0, Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24)));
+                }
+                return {
+                    ...row,
+                    service_data: JSON.parse(row.service_data || '{}'),
+                    config: row.config_json ? JSON.parse(row.config_json) : null,
+                    daysLeft,
+                    isExpired: daysLeft !== null && daysLeft <= 0
+                };
+            });
+            res.json(formatted);
+        }
+    );
+});
+
+// GET /api/service/:orderId/download - Download result file
+app.get('/api/service/:orderId/download', (req, res) => {
+    const { orderId } = req.params;
+
+    db.get('SELECT result_path, expires_at, user_id FROM service_orders WHERE order_id = ?', [orderId], (err, row) => {
+        if (err || !row) {
+            return res.status(404).json({ success: false, error: 'Order not found' });
+        }
+
+        if (!row.result_path || !fs.existsSync(row.result_path)) {
+            return res.status(404).json({ success: false, error: 'Result file not found' });
+        }
+
+        // Check expiry
+        if (row.expires_at) {
+            const expiresAt = new Date(row.expires_at);
+            if (new Date() > expiresAt) {
+                return res.status(403).json({ success: false, error: 'Download link expired' });
+            }
+        }
+
+        res.download(row.result_path);
+    });
+});
+
+// GET /api/service/:orderId/resume - Get file and config to resume work
+app.get('/api/service/:orderId/resume', (req, res) => {
+    const { orderId } = req.params;
+
+    db.get('SELECT * FROM service_orders WHERE order_id = ?', [orderId], (err, row) => {
+        if (err || !row) {
+            return res.status(404).json({ success: false, error: 'Order not found' });
+        }
+
+        // Check if file still exists
+        if (!row.file_path || !fs.existsSync(row.file_path)) {
+            return res.status(404).json({ success: false, error: 'Source file no longer available' });
+        }
+
+        res.json({
+            success: true,
+            orderId: row.order_id,
+            status: row.status,
+            fileUrl: `/api/service/${orderId}/source-file`,
+            fileName: path.basename(row.file_path),
+            config: row.config_json ? JSON.parse(row.config_json) : null,
+            service_data: JSON.parse(row.service_data || '{}')
+        });
+    });
+});
+
+// GET /api/service/:orderId/source-file - Download source file for resume
+app.get('/api/service/:orderId/source-file', (req, res) => {
+    const { orderId } = req.params;
+
+    db.get('SELECT file_path FROM service_orders WHERE order_id = ?', [orderId], (err, row) => {
+        if (err || !row || !row.file_path) {
+            return res.status(404).json({ success: false, error: 'File not found' });
+        }
+
+        if (!fs.existsSync(row.file_path)) {
+            return res.status(404).json({ success: false, error: 'File no longer exists' });
+        }
+
+        res.download(row.file_path);
+    });
+});
+
+// POST /api/service/:orderId/upload-result - Upload completed translation result
+const resultStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const uploadDir = path.join(__dirname, 'uploads/results');
+        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        const orderId = req.params.orderId;
+        const timestamp = Date.now();
+        cb(null, `result_${orderId}_${timestamp}.xlsx`);
+    }
+});
+const resultUpload = multer({ storage: resultStorage, limits: { fileSize: 50 * 1024 * 1024 } });
+
+app.post('/api/service/:orderId/upload-result', resultUpload.single('file'), (req, res) => {
+    const { orderId } = req.params;
+
+    if (!req.file) {
+        return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+
+    const resultPath = req.file.path;
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+
+    db.run(
+        `UPDATE service_orders SET
+            result_path = ?,
+            expires_at = ?,
+            status = 'completed',
+            updated_at = datetime('now', '+8 hours')
+         WHERE order_id = ?`,
+        [resultPath, expiresAt.toISOString(), orderId],
+        function(err) {
+            if (err) {
+                return res.status(500).json({ success: false, error: err.message });
+            }
+            console.log(`[Service] Result uploaded for order ${orderId}, expires: ${expiresAt.toISOString()}`);
+            res.json({ success: true, resultPath, expiresAt: expiresAt.toISOString() });
+        }
+    );
+});
+
+// Cleanup job for expired files (runs every hour)
+setInterval(() => {
+    const now = new Date();
+    if (now.getMinutes() === 0) { // Run at the start of each hour
+        console.log('[Service Cleanup] Checking for expired files...');
+
+        db.all(
+            `SELECT order_id, file_path, result_path FROM service_orders
+             WHERE expires_at < datetime('now')
+             AND (file_path IS NOT NULL OR result_path IS NOT NULL)`,
+            (err, rows) => {
+                if (err || !rows || rows.length === 0) return;
+
+                console.log(`[Service Cleanup] Found ${rows.length} expired orders to clean`);
+
+                rows.forEach(row => {
+                    // Delete files
+                    if (row.file_path && fs.existsSync(row.file_path)) {
+                        fs.unlinkSync(row.file_path);
+                        console.log(`[Service Cleanup] Deleted: ${row.file_path}`);
+                    }
+                    if (row.result_path && fs.existsSync(row.result_path)) {
+                        fs.unlinkSync(row.result_path);
+                        console.log(`[Service Cleanup] Deleted: ${row.result_path}`);
+                    }
+
+                    // Clear paths in database
+                    db.run(
+                        `UPDATE service_orders SET file_path = NULL, result_path = NULL WHERE order_id = ?`,
+                        [row.order_id]
+                    );
+                });
+            }
+        );
+    }
+}, 60000); // Check every minute
+
+console.log('[Service] File upload and orders API ready');
 
 
 // --- BRIDGE API (For External Casinos) ---

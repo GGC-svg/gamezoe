@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Play, ShoppingCart, Star, Calendar, User as UserIcon } from 'lucide-react';
+import { X, Play, ShoppingCart, Star, Calendar, User as UserIcon, Download, RefreshCw, FileText, Clock } from 'lucide-react';
 import { Game } from '../types';
 
 interface GameDetailsModalProps {
@@ -66,7 +66,11 @@ const GameDetailsModal: React.FC<GameDetailsModalProps> = ({ game, isOpen, onClo
         const res = await fetch(`/api/games/${game.id}/leaderboard`);
         if (res.ok) setLeaderboard(await res.json());
       } else if (activeTab === 'history' && userId) {
-        const res = await fetch(`/api/games/${game.id}/scores/${userId}`);
+        // Use different endpoint for service-type games
+        const endpoint = game.game_type === 'service'
+          ? `/api/games/${game.id}/service-orders/${userId}`
+          : `/api/games/${game.id}/scores/${userId}`;
+        const res = await fetch(endpoint);
         if (res.ok) setMyHistory(await res.json());
       }
     } catch (e) {
@@ -430,7 +434,7 @@ const GameDetailsModal: React.FC<GameDetailsModalProps> = ({ game, isOpen, onClo
             {activeTab === 'history' && (
               <div className="h-full flex flex-col animate-fade-in">
                 <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                  📜 Your Performance
+                  📜 {game.game_type === 'service' ? '訂單紀錄' : 'Your Performance'}
                 </h3>
                 {!isLoggedIn || !userId ? (
                   <div className="flex-1 flex items-center justify-center flex-col text-slate-500">
@@ -439,8 +443,104 @@ const GameDetailsModal: React.FC<GameDetailsModalProps> = ({ game, isOpen, onClo
                 ) : loadingStats ? (
                   <div className="text-center py-12 text-slate-500">Loading history...</div>
                 ) : myHistory.length === 0 ? (
-                  <div className="text-center py-12 text-slate-500 bg-slate-800/20 rounded-xl">No games played yet.</div>
+                  <div className="text-center py-12 text-slate-500 bg-slate-800/20 rounded-xl">
+                    {game.game_type === 'service' ? '尚無訂單紀錄' : 'No games played yet.'}
+                  </div>
+                ) : game.game_type === 'service' ? (
+                  /* Service Orders Display */
+                  <div className="space-y-3">
+                    {myHistory.map((order, idx) => {
+                      const serviceData = typeof order.service_data === 'string'
+                        ? JSON.parse(order.service_data)
+                        : order.service_data;
+                      const isExpired = order.daysLeft !== undefined && order.daysLeft <= 0;
+                      const canDownload = order.status === 'completed' && !isExpired;
+                      const canResume = order.status === 'fulfilled' && order.file_path;
+
+                      return (
+                        <div key={order.order_id || idx} className="p-4 rounded-xl bg-slate-800 border border-slate-700">
+                          {/* Header: Order ID & Status */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-slate-400" />
+                              <span className="text-xs text-slate-500 font-mono">
+                                {order.order_id?.slice(0, 16) || 'N/A'}
+                              </span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
+                              order.status === 'completed' ? 'bg-green-900/50 text-green-400' :
+                              order.status === 'fulfilled' ? 'bg-blue-900/50 text-blue-400' :
+                              'bg-yellow-900/50 text-yellow-400'
+                            }`}>
+                              {order.status === 'completed' ? '已完成' :
+                               order.status === 'fulfilled' ? '已付款' : '待付款'}
+                            </span>
+                          </div>
+
+                          {/* File Info */}
+                          <div className="mb-3">
+                            <p className="text-white font-medium truncate" title={serviceData?.fileName}>
+                              {serviceData?.fileName || '未知檔案'}
+                            </p>
+                            <div className="flex flex-wrap gap-3 mt-1 text-xs text-slate-400">
+                              <span>{serviceData?.charCount?.toLocaleString() || 0} 字</span>
+                              <span>${order.amount_usd?.toFixed(2) || '0.00'} USD</span>
+                              <span>{new Date(order.created_at).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+
+                          {/* Expiry & Actions */}
+                          <div className="flex items-center justify-between pt-3 border-t border-slate-700">
+                            {/* Days Left */}
+                            {order.status === 'completed' && (
+                              <div className="flex items-center gap-1 text-xs">
+                                <Clock className="h-3 w-3" />
+                                {isExpired ? (
+                                  <span className="text-red-400">已過期</span>
+                                ) : (
+                                  <span className="text-green-400">剩餘 {order.daysLeft} 天可下載</span>
+                                )}
+                              </div>
+                            )}
+                            {order.status !== 'completed' && <div />}
+
+                            {/* Action Buttons */}
+                            <div className="flex gap-2">
+                              {canResume && (
+                                <button
+                                  onClick={() => {
+                                    // Open game with resume params
+                                    const resumeUrl = `${game.gameUrl}?resume=${order.order_id}`;
+                                    window.open(resumeUrl, '_blank');
+                                  }}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors"
+                                >
+                                  <RefreshCw className="h-3 w-3" />
+                                  繼續翻譯
+                                </button>
+                              )}
+                              {canDownload && (
+                                <button
+                                  onClick={() => {
+                                    window.open(`/api/service/${order.order_id}/download`, '_blank');
+                                  }}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs font-medium rounded-lg transition-colors"
+                                >
+                                  <Download className="h-3 w-3" />
+                                  下載結果
+                                </button>
+                              )}
+                              {order.status === 'pending' && (
+                                <span className="text-xs text-yellow-400">等待付款完成</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 ) : (
+                  /* Game Scores Display */
                   <div className="space-y-2">
                     {myHistory.map((entry, idx) => (
                       <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-slate-800 border border-slate-700">

@@ -119,7 +119,35 @@ const App: React.FC = () => {
         return;
       }
 
-      // Call service-order API
+      // Step 1: Upload the file first
+      const formData = new FormData();
+      formData.append('file', rawFile);
+      formData.append('userId', userId);
+
+      const uploadRes = await fetch('/api/service/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      const uploadData = await uploadRes.json();
+      if (!uploadData.success) {
+        alert('檔案上傳失敗: ' + (uploadData.error || '未知錯誤'));
+        setIsPaymentProcessing(false);
+        return;
+      }
+
+      // Step 2: Create service order with file path and config
+      const configJson = JSON.stringify({
+        keyColumn: config.keyColumn,
+        sourceColumn: config.sourceColumn,
+        targetLangs: config.targetLangs,
+        targetCols: config.targetCols,
+        isProofreadMode: config.isProofreadMode,
+        lengthReferenceColumn: config.lengthReferenceColumn,
+        selectedSheetName: config.selectedSheetName,
+        glossary: glossary
+      });
+
       const response = await fetch('/api/payment/service-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -134,6 +162,8 @@ const App: React.FC = () => {
             targetLangs: config.targetLangs,
             isProofread: config.isProofreadMode
           },
+          filePath: uploadData.filePath,
+          configJson: configJson,
           productName: '翻譯系統翻譯費',
           returnUrl: window.location.href
         })
@@ -197,6 +227,91 @@ const App: React.FC = () => {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
+
+  // Handle resume from URL parameter
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const resumeOrderId = urlParams.get('resume');
+
+    if (resumeOrderId) {
+      handleResumeOrder(resumeOrderId);
+    }
+  }, []);
+
+  const handleResumeOrder = async (orderId: string) => {
+    try {
+      // Fetch order data with file and config
+      const res = await fetch(`/api/service/${orderId}/resume`);
+      if (!res.ok) {
+        alert('無法載入訂單資料');
+        return;
+      }
+
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || '訂單資料載入失敗');
+        return;
+      }
+
+      // Download the source file
+      const fileRes = await fetch(`/api/service/${orderId}/source-file`);
+      if (!fileRes.ok) {
+        alert('無法下載原始檔案');
+        return;
+      }
+
+      const blob = await fileRes.blob();
+      const fileName = data.service_data?.fileName || 'resume_file.xlsx';
+      const file = new File([blob], fileName, { type: blob.type });
+
+      // Parse saved config
+      const savedConfig = data.config ? JSON.parse(data.config) : {};
+
+      // Set file and config
+      setRawFile(file);
+      setConfig(prev => ({
+        ...prev,
+        ...savedConfig,
+        isPremiumUnlocked: true // Already paid
+      }));
+
+      // Load glossary if saved
+      if (savedConfig.glossary) {
+        setGlossary(savedConfig.glossary);
+      }
+
+      // Parse Excel file using the existing excelService
+      const { parseExcelFile } = await import('./services/excelService');
+      const parsedData = await parseExcelFile(file);
+
+      if (Array.isArray(parsedData) && parsedData.length > 0 && 'sheetName' in parsedData[0]) {
+        setAllSheetsData(parsedData);
+        // Find the selected sheet
+        const selectedSheet = savedConfig.selectedSheetName
+          ? parsedData.find(s => s.sheetName === savedConfig.selectedSheetName)
+          : parsedData[0];
+
+        if (selectedSheet) {
+          setRawData(selectedSheet.rows);
+          setColumns(getColumnNames(selectedSheet.rows));
+        }
+      } else {
+        setRawData(parsedData as ExcelRow[]);
+        setColumns(getColumnNames(parsedData as ExcelRow[]));
+      }
+
+      // Go to GLOSSARY state (ready to start processing)
+      setAppState(AppState.GLOSSARY);
+
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname);
+
+      alert('訂單已載入！您可以繼續翻譯作業。');
+    } catch (err) {
+      console.error('Resume error:', err);
+      alert('載入訂單時發生錯誤');
+    }
+  };
 
   const handleFileLoaded = (file: File, data: any, mode: 'translate' | 'clean' | 'proofread') => {
     setTranslationItems([]);

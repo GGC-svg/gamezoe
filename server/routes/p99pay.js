@@ -407,7 +407,7 @@ router.get('/orders/:userId', (req, res) => {
  * 4. Service is marked as fulfilled
  */
 router.post('/service-order', (req, res) => {
-    const { userId, amountUSD, serviceType, serviceData, returnUrl, productName } = req.body;
+    const { userId, amountUSD, serviceType, serviceData, returnUrl, productName, filePath, configJson } = req.body;
 
     if (!userId || !amountUSD || amountUSD <= 0 || !serviceType) {
         return res.status(400).json({
@@ -448,11 +448,11 @@ router.post('/service-order', (req, res) => {
                 [p99OrderId, userId, amountUSD, goldAmount, JSON.stringify(orderRequest.jsonData)]
             );
 
-            // Create service order
+            // Create service order (with optional file_path and config_json)
             db.run(
-                `INSERT INTO service_orders (order_id, p99_order_id, user_id, service_type, service_data, amount_usd, gold_amount, status, return_url, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, datetime('now', '+8 hours'))`,
-                [serviceOrderId, p99OrderId, userId, serviceType, JSON.stringify(serviceData || {}), amountUSD, goldAmount, returnUrl || null]
+                `INSERT INTO service_orders (order_id, p99_order_id, user_id, service_type, service_data, amount_usd, gold_amount, status, return_url, file_path, config_json, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, datetime('now', '+8 hours'))`,
+                [serviceOrderId, p99OrderId, userId, serviceType, JSON.stringify(serviceData || {}), amountUSD, goldAmount, returnUrl || null, filePath || null, configJson || null]
             );
 
             db.run('COMMIT', (err) => {
