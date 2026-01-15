@@ -204,6 +204,32 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
       setVisibleItems(internalItemsRef.current.slice(0, 100)); // Show beginning on finish
       setCurrentAction("Mission Accomplished");
       setProgress(100);
+
+      // Auto-save result to server when translation completes
+      if (orderId) {
+        try {
+          const blob = await generateExcelBlob(internalItemsRef.current, "LocProject");
+          const formData = new FormData();
+          formData.append('file', blob, 'result_' + orderId + '.xlsx');
+          if (glossary && glossary.length > 0) {
+            formData.append('glossary', JSON.stringify(glossary));
+          }
+
+          const res = await fetch('/api/service/' + orderId + '/upload-result', {
+            method: 'POST',
+            body: formData
+          });
+
+          if (res.ok) {
+            console.log('[StepProcess] Result auto-saved successfully');
+            setCurrentAction("Mission Accomplished - Saved!");
+          } else {
+            console.warn('[StepProcess] Failed to auto-save result:', await res.text());
+          }
+        } catch (err) {
+          console.error('[StepProcess] Error auto-saving result:', err);
+        }
+      }
     };
 
     process();
