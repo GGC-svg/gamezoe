@@ -222,6 +222,9 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
 
           if (res.ok) {
             console.log('[StepProcess] Result auto-saved successfully');
+            if (glossary && glossary.length > 0) {
+              console.log('[StepProcess] Glossary saved:', glossary.length, 'terms');
+            }
             setCurrentAction("Mission Accomplished - Saved!");
           } else {
             console.warn('[StepProcess] Failed to auto-save result:', await res.text());
