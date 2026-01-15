@@ -505,10 +505,14 @@ const GameDetailsModal: React.FC<GameDetailsModalProps> = ({ game, isOpen, onClo
                             <div className="flex gap-2">
                               {canResume && (
                                 <button
-                                  onClick={() => {
-                                    // Open game with resume params (include userId for AI API)
-                                    const resumeUrl = `${game.gameUrl}?resume=${order.order_id}&userId=${userId}`;
-                                    window.open(resumeUrl, '_blank');
+onClick={() => {
+                                    // Play game with resume params in iframe (keeps login context)
+                                    const resumeGame = {
+                                      ...game,
+                                      gameUrl: `${game.gameUrl}?resume=${order.order_id}&userId=${userId}`
+                                    };
+                                    onClose(); // Close modal first
+                                    onPlay(resumeGame);
                                   }}
                                   className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors"
                                 >
