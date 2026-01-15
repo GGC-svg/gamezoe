@@ -31,7 +31,7 @@ const App: React.FC = () => {
   const [translationItems, setTranslationItems] = useState<TranslationItem[]>([]);
   const [config, setConfig] = useState<Partial<TranslationConfig>>({ isPremiumUnlocked: false });
   const [glossary, setGlossary] = useState<GlossaryTerm[]>([]);
-  const [sessionUsage, setSessionUsage] = useState(0);
+  const [sessionUsage, setSessionUsage] = useState(() => getSessionUsage());
 
   // Billing state
   const [billingInfo, setBillingInfo] = useState<{ totalWords: number; cost: number; perLangWords: number }>({ totalWords: 0, cost: 0, perLangWords: 0 });
