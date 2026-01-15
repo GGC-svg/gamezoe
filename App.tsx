@@ -263,12 +263,14 @@ function App() {
     // Actually free games never need purchase, so ignore forcePurchase for pure free games logic if we want,
     // but assuming this is only called for paid games.
     if (game.isFree && !forcePurchase) {
+      setSelectedGame(game); // Update game (may have modified URL for resume)
       setIsPlaying(true);
       return;
     }
 
     // 2. If Game is Owned (Permanent or Active Rental) -> Play (Unless Forced)
     if (!forcePurchase && checkOwnership(game.id)) {
+      setSelectedGame(game); // Update game (may have modified URL for resume)
       setIsPlaying(true);
       return;
     }
