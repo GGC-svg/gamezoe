@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import { TranslationConfig, GlossaryTerm, SUPPORTED_LANGUAGES, UILang } from '../types';
 import { generateGlossarySuggestions } from '../services/geminiService';
 
@@ -18,52 +19,103 @@ export const StepGlossary: React.FC<StepGlossaryProps> = ({ config, allTexts, on
   const [generationStatus, setGenerationStatus] = useState("");
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // 匯出術語庫為 JSON
+  // 匯出術語庫為 Excel
   const handleExport = () => {
     if (terms.length === 0) {
       alert('術語庫為空，無法匯出');
       return;
     }
-    const dataStr = JSON.stringify(terms, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `glossary_${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    // 轉換為 Excel 格式：Term, Description, Trans_xx, Trans_yy...
+    const exportData = terms.map(item => {
+      const row: Record<string, string> = {
+        Term: item.term,
+        Description: item.description || ''
+      };
+      Object.entries(item.translations).forEach(([lang, val]) => {
+        row[`Trans_${lang}`] = val;
+      });
+      return row;
+    });
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Glossary');
+    XLSX.writeFile(workbook, `glossary_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
-  // 匯入術語庫 JSON
+  // 匯入術語庫 (支援 JSON 或 Excel)
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const imported = JSON.parse(event.target?.result as string);
-        if (Array.isArray(imported)) {
-          // 驗證結構
-          const valid = imported.filter((item: any) =>
-            typeof item.term === 'string' &&
-            typeof item.translations === 'object'
-          );
-          if (valid.length > 0) {
-            setTerms(prev => [...prev, ...valid]);
-            setGenerationStatus(`已匯入 ${valid.length} 個術語`);
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+
+    if (isExcel) {
+      // Excel 格式匯入
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const data = event.target?.result;
+          const workbook = XLSX.read(data, { type: 'binary' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json<Record<string, string>>(worksheet);
+
+          const imported: GlossaryTerm[] = rows.map(row => {
+            const term = row['Term'] || row['term'] || '';
+            const description = row['Description'] || row['description'] || '';
+            const translations: Record<string, string> = {};
+
+            // 尋找 Trans_xx 欄位
+            Object.entries(row).forEach(([key, val]) => {
+              if (key.startsWith('Trans_') && val) {
+                const langCode = key.replace('Trans_', '');
+                translations[langCode] = val;
+              }
+            });
+
+            return { term, description, translations };
+          }).filter(item => item.term);
+
+          if (imported.length > 0) {
+            setTerms(prev => [...prev, ...imported]);
+            setGenerationStatus(`已匯入 ${imported.length} 個術語`);
             setTimeout(() => setGenerationStatus(''), 3000);
           } else {
-            alert('檔案格式無效');
+            alert('Excel 檔案中無有效術語 (需有 Term 欄位)');
           }
-        } else {
-          alert('檔案格式無效，需為 JSON 陣列');
+        } catch (err) {
+          console.error(err);
+          alert('無法解析 Excel 檔案');
         }
-      } catch (err) {
-        alert('無法解析 JSON 檔案');
-      }
-    };
-    reader.readAsText(file);
+      };
+      reader.readAsBinaryString(file);
+    } else {
+      // JSON 格式匯入
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const imported = JSON.parse(event.target?.result as string);
+          if (Array.isArray(imported)) {
+            const valid = imported.filter((item: any) =>
+              typeof item.term === 'string' &&
+              typeof item.translations === 'object'
+            );
+            if (valid.length > 0) {
+              setTerms(prev => [...prev, ...valid]);
+              setGenerationStatus(`已匯入 ${valid.length} 個術語`);
+              setTimeout(() => setGenerationStatus(''), 3000);
+            } else {
+              alert('檔案格式無效');
+            }
+          } else {
+            alert('檔案格式無效，需為 JSON 陣列');
+          }
+        } catch (err) {
+          alert('無法解析 JSON 檔案');
+        }
+      };
+      reader.readAsText(file);
+    }
     // Reset input
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -187,7 +239,7 @@ export const StepGlossary: React.FC<StepGlossaryProps> = ({ config, allTexts, on
           <input
             type="file"
             ref={fileInputRef}
-            accept=".json"
+            accept=".json,.xlsx,.xls"
             onChange={handleImport}
             className="hidden"
           />
