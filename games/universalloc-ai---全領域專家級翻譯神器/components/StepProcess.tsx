@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { TranslationItem, TranslationConfig, SUPPORTED_LANGUAGES } from '../types';
+import { TranslationItem, TranslationConfig, SUPPORTED_LANGUAGES, GlossaryTerm } from '../types';
 import { chunkArray, translateBatch } from '../services/geminiService';
-import { exportToExcel } from '../services/excelService';
+import { exportToExcel, generateExcelBlob } from '../services/excelService';
 import { getSessionUsage, addSessionUsage, FREE_SESSION_QUOTA, countWords } from '../services/billingService';
 
 interface StepProcessProps {
@@ -11,6 +11,8 @@ interface StepProcessProps {
   onReset: () => void;
   rawFile: File | null;
   onUnlockPremium: () => void;
+  orderId?: string | null;
+  glossary?: GlossaryTerm[];
 }
 
 const FREE_TRIAL_ROWS = 10;
@@ -18,7 +20,7 @@ const BATCH_SIZE = 20; // Optimized for Speed and Stability (reduced from 50 to 
 const CONCURRENT_REQUESTS = 3; // Parallelism
 const INTERNAL_SECRET = "GAMELOC_INTERNAL_2025";
 
-export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, config, onReset, rawFile, onUnlockPremium }) => {
+export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, config, onReset, rawFile, onUnlockPremium, orderId, glossary }) => {
   const [isProcessing, setIsProcessing] = useState(true);
   const [currentAction, setCurrentAction] = useState("Initializing Engine...");
   const [progress, setProgress] = useState(0);
@@ -173,7 +175,38 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
     };
 
     process();
-    return () => { isCancelled = true; };
+  // Handle download and upload result to server
+  const handleDownloadAndSave = async () => {
+    // First, trigger the normal Excel download
+    exportToExcel(internalItemsRef.current, "LocProject");
+
+    // If we have an orderId, upload the result to the server
+    if (orderId) {
+      try {
+        const blob = await generateExcelBlob(internalItemsRef.current, "LocProject");
+        const formData = new FormData();
+        formData.append('file', blob, 'result_' + orderId + '.xlsx');
+        if (glossary && glossary.length > 0) {
+          formData.append('glossary', JSON.stringify(glossary));
+        }
+
+        const res = await fetch('/api/service/' + orderId + '/upload-result', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (res.ok) {
+          console.log('[StepProcess] Result uploaded successfully');
+        } else {
+          console.warn('[StepProcess] Failed to upload result:', await res.text());
+        }
+      } catch (err) {
+        console.error('[StepProcess] Error uploading result:', err);
+      }
+    }
+  };
+
+  return () => { isCancelled = true; };
   }, [isUnlocked]);
 
   return (
@@ -244,7 +277,7 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
             </button>
           )}
           {!isProcessing && isUnlocked && (
-            <button onClick={() => exportToExcel(internalItemsRef.current, "LocProject")} className="bg-gaming-success text-white px-6 py-2 rounded-xl font-black text-xs shadow-xl hover:scale-105 transition-all">
+            <button onClick={handleDownloadAndSave} className="bg-gaming-success text-white px-6 py-2 rounded-xl font-black text-xs shadow-xl hover:scale-105 transition-all">
               <i className="fas fa-file-export mr-2"></i> DOWNLOAD XSLX
             </button>
           )}

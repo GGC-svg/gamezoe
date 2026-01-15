@@ -89,6 +89,33 @@ export const exportToExcel = (items: TranslationItem[], baseFileName: string) =>
   XLSX.writeFile(workbook, `${baseFileName}_localized_audit.xlsx`);
 };
 
+
+
+// 生成 Excel Blob（用於上傳到伺服器）
+export const generateExcelBlob = async (items: TranslationItem[], baseFileName: string): Promise<Blob> => {
+  const exportData = items.map((item) => {
+    const row: any = {
+      ID: item.id,
+      Original: item.original,
+    };
+    Object.keys(item.translations).forEach((langCode) => {
+      const translatedValue = cleanTextForExport(item.translations[langCode]);
+      row[`Trans_${langCode}`] = translatedValue;
+      if (item.isOverLimit && item.isOverLimit[langCode]) {
+        row[`Audit_${langCode}`] = "[LENGTH_OVER]";
+      } else if (item.maxLen !== undefined) {
+        row[`Audit_${langCode}`] = "OK";
+      }
+    });
+    return row;
+  });
+  const worksheet = XLSX.utils.json_to_sheet(exportData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Translations");
+  const xlsxData = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  return new Blob([xlsxData], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+};
+
 // 匯出為 CSV 檔案，增加 BOM 以確保 Excel 正確顯示 UTF-8 俄文等字符
 export const exportToCSV = (data: ExcelRow[], baseFileName: string) => {
   const worksheet = XLSX.utils.json_to_sheet(data);

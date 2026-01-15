@@ -39,6 +39,7 @@ const App: React.FC = () => {
   const [translationHistory, setTranslationHistory] = useState<TranslationRecord[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [canStartConfig, setCanStartConfig] = useState(false);
+  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
 
   // Ref for StepConfig to trigger start from bottom bar
   const stepConfigRef = useRef<StepConfigHandle>(null);
@@ -229,6 +230,7 @@ const App: React.FC = () => {
     const serviceOrderId = urlParams.get('serviceOrderId');
 
     if (success === 'true' && serviceOrderId) {
+      setCurrentOrderId(serviceOrderId);
       // Mark order as paid and unlock premium
       setTranslationHistory(prev => {
         const updated = prev.map(r =>
@@ -254,6 +256,7 @@ const App: React.FC = () => {
   }, []);
 
   const handleResumeOrder = async (orderId: string) => {
+    setCurrentOrderId(orderId);
     try {
       // Fetch order data with file and config
       const res = await fetch(`/api/service/${orderId}/resume`);
@@ -540,7 +543,7 @@ const App: React.FC = () => {
         {appState === AppState.SHEET_SELECT && <StepSheetSelect sheets={allSheetsData} onSelect={(name) => selectSheet(name)} onBack={handleReset} />}
         {appState === AppState.CONFIG && <div className="h-full"><StepConfig ref={stepConfigRef} rawData={rawData} columns={columns} onConfigComplete={handleConfigComplete} onBack={handleReset} sheetName={config.selectedSheetName} isProofreadMode={config.isProofreadMode} uiLang={uiLang} onBillingUpdate={handleConfigBillingUpdate} /></div>}
         {appState === AppState.GLOSSARY && <StepGlossary config={config} allTexts={rawData.map(row => row[config.sourceColumn!] || "")} onStartTranslation={handleStartProcess} onBack={() => setAppState(AppState.CONFIG)} uiLang={uiLang} isPremiumUnlocked={config.isPremiumUnlocked} />}
-        {appState === AppState.PROCESSING && <StepProcess items={translationItems} config={config as TranslationConfig} onReset={handleReset} rawFile={rawFile} onUnlockPremium={() => setConfig(p => ({ ...p, isPremiumUnlocked: true }))} />}
+        {appState === AppState.PROCESSING && <StepProcess items={translationItems} config={config as TranslationConfig} onReset={handleReset} rawFile={rawFile} onUnlockPremium={() => setConfig(p => ({ ...p, isPremiumUnlocked: true }))} orderId={currentOrderId} glossary={glossary} />}
       </main>
 
       {/* Fixed Bottom Billing Bar */}
