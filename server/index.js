@@ -207,8 +207,8 @@ app.post('/api/ai/generate', async (req, res) => {
             try {
                 db.get(
                     `SELECT
-                        (SELECT COUNT(*) FROM service_orders WHERE user_id = ? AND service_type = 'universalloc' AND status = 'fulfilled') as fulfilled_orders,
-                        (SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = 'universalloc') as game_balance
+                        (SELECT COUNT(*) FROM service_orders WHERE user_id = ? AND service_type = 'universalloc-ai' AND status IN ('fulfilled', 'completed')) as fulfilled_orders,
+                        (SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = 'universalloc-ai') as game_balance
                     `,
                     [userId, userId],
                     (err, row) => {
