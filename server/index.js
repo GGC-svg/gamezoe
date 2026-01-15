@@ -254,6 +254,7 @@ app.post('/api/ai/generate', async (req, res) => {
     const { model: modelName, contents, config } = req.body;
 
     if (!process.env.GEMINI_API_KEY) {
+        console.error("[AI API] GEMINI_API_KEY is not configured!");
         return res.status(500).json({ error: "Server missing API Key config" });
     }
 
