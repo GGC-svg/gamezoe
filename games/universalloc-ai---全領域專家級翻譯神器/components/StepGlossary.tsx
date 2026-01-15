@@ -338,7 +338,7 @@ export const StepGlossary: React.FC<StepGlossaryProps> = ({ config, allTexts, on
           )}
         </div>
       </div>
-      <button onClick={() => setTerms([{ term: "", description: "", translations: {} }, ...terms])} className="fixed bottom-20 right-6 w-12 h-12 bg-gaming-accent text-white rounded-full shadow-2xl flex items-center justify-center text-xl z-50 hover:scale-110 transition-all"><i className="fas fa-plus"></i></button>
+      <button onClick={() => setTerms([{ term: "", description: "", translations: {} }, ...terms])} className="fixed bottom-28 right-6 w-12 h-12 bg-gaming-accent text-white rounded-full shadow-2xl flex items-center justify-center text-xl z-50 hover:scale-110 transition-all"><i className="fas fa-plus"></i></button>
     </div>
   );
 };
