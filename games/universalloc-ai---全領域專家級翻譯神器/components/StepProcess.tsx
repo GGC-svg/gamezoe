@@ -42,6 +42,38 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
   // Scroll to bottom helper
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Handle download and upload result to server
+  const handleDownloadAndSave = async () => {
+    // First, trigger the normal Excel download
+    exportToExcel(internalItemsRef.current, "LocProject");
+
+    // If we have an orderId, upload the result to the server
+    if (orderId) {
+      try {
+        const blob = await generateExcelBlob(internalItemsRef.current, "LocProject");
+        const formData = new FormData();
+        formData.append('file', blob, 'result_' + orderId + '.xlsx');
+        if (glossary && glossary.length > 0) {
+          formData.append('glossary', JSON.stringify(glossary));
+        }
+
+        const res = await fetch('/api/service/' + orderId + '/upload-result', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (res.ok) {
+          console.log('[StepProcess] Result uploaded successfully');
+        } else {
+          console.warn('[StepProcess] Failed to upload result:', await res.text());
+        }
+      } catch (err) {
+        console.error('[StepProcess] Error uploading result:', err);
+      }
+    }
+  };
+
+
   useEffect(() => {
     // Initial Render
     setVisibleItems(internalItemsRef.current.slice(0, 20));
@@ -175,38 +207,8 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
     };
 
     process();
-  // Handle download and upload result to server
-  const handleDownloadAndSave = async () => {
-    // First, trigger the normal Excel download
-    exportToExcel(internalItemsRef.current, "LocProject");
 
-    // If we have an orderId, upload the result to the server
-    if (orderId) {
-      try {
-        const blob = await generateExcelBlob(internalItemsRef.current, "LocProject");
-        const formData = new FormData();
-        formData.append('file', blob, 'result_' + orderId + '.xlsx');
-        if (glossary && glossary.length > 0) {
-          formData.append('glossary', JSON.stringify(glossary));
-        }
-
-        const res = await fetch('/api/service/' + orderId + '/upload-result', {
-          method: 'POST',
-          body: formData
-        });
-
-        if (res.ok) {
-          console.log('[StepProcess] Result uploaded successfully');
-        } else {
-          console.warn('[StepProcess] Failed to upload result:', await res.text());
-        }
-      } catch (err) {
-        console.error('[StepProcess] Error uploading result:', err);
-      }
-    }
-  };
-
-  return () => { isCancelled = true; };
+    return () => { isCancelled = true; };
   }, [isUnlocked]);
 
   return (
