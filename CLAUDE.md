@@ -285,3 +285,50 @@ category TEXT,
 sqlite3 ~/gamezoe/server/gamezoe.db "UPDATE games SET thumbnailUrl = '/games/Rosebubble/thumbnail.jpg' WHERE id = 'rose-bubble';"
 pm2 restart all
 ```
+
+---
+
+## TypeScript 檔案修改規範
+
+### ⚠️ 禁止使用 sed/heredoc 修改 TypeScript 檔案
+
+**問題**：TypeScript 的模板字串使用反引號和 `${}` 語法，會被 shell 錯誤解釋：
+
+```typescript
+// 正確的 TypeScript
+row[`Trans_${langCode}`] = value;
+
+// sed/heredoc 處理後變成亂碼
+row[\`Trans_\${langCode}\`] = value;
+```
+
+### ❌ 避免的方法
+```bash
+# sed 會破壞模板字串
+sed -i 's/old/new with `template`/' file.ts
+
+# heredoc 會解釋 $ 和反引號
+cat > file.ts << 'EOF'
+row[`Trans_${langCode}`] = value;
+EOF
+```
+
+### ✅ 正確的方法：使用 Node.js 腳本
+
+```javascript
+// modify_file.js
+const fs = require('fs');
+let content = fs.readFileSync('file.ts', 'utf8');
+content = content.replace('oldCode', 'newCode with `template`');
+fs.writeFileSync('file.ts', content);
+```
+
+```bash
+node modify_file.js
+```
+
+### 為什麼 Node.js 更好？
+1. **原生支援 JavaScript 語法** - 不會錯誤解釋模板字串
+2. **精確的字串替換** - 使用 `.replace()` 方法
+3. **可讀性高** - 修改邏輯清晰明確
+4. **可重複執行** - 腳本可以版控和重用
