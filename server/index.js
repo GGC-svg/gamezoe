@@ -2402,7 +2402,7 @@ app.get('/api/wallet/transactions/:userId', (req, res) => {
             FROM wallet_transactions w
             LEFT JOIN p99_orders p ON w.order_id = p.order_id
             WHERE w.user_id = ?
-            ORDER BY w.created_at DESC, w.id ASC
+            ORDER BY w.created_at DESC, w.id DESC
             LIMIT ?`,
             [userId, limit],
             (err, rows) => {
