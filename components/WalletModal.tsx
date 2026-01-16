@@ -18,7 +18,19 @@ interface Transaction {
     created_at: string;
     p99_rrn?: string;
     balance_after?: number;
+    game_id?: string;
+    game_title?: string;
+    amount_usd?: number;
 }
+
+// Transaction type mapping to Chinese
+const TX_TYPE_LABELS: Record<string, string> = {
+    'deposit': '儲值',
+    'transfer': '轉點',
+    'service': '服務消費',
+    'purchase': '購買',
+    'refund': '退款'
+};
 
 const TOPUP_TIERS = [
     { price: 1, gold: 100, label: '$1.00' },
@@ -467,7 +479,23 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
                                                     {tx.amount > 0 ? <ArrowDownLeft className="h-5 w-5" /> : <ArrowUpRight className="h-5 w-5" />}
                                                 </div>
                                                 <div>
-                                                    <p className="font-medium text-white">{tx.description}</p>
+                                                    {/* Type Badge + Project */}
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                                            tx.type === 'deposit' ? 'bg-green-900/50 text-green-400' :
+                                                            tx.type === 'transfer' ? 'bg-blue-900/50 text-blue-400' :
+                                                            tx.type === 'service' ? 'bg-purple-900/50 text-purple-400' :
+                                                            tx.type === 'purchase' ? 'bg-yellow-900/50 text-yellow-400' :
+                                                            tx.type === 'refund' ? 'bg-red-900/50 text-red-400' :
+                                                            'bg-slate-700 text-slate-300'
+                                                        }`}>
+                                                            {TX_TYPE_LABELS[tx.type] || tx.type}
+                                                        </span>
+                                                        {(tx.game_title || tx.game_id) && (
+                                                            <span className="text-xs text-slate-400">{tx.game_title || tx.game_id}</span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-sm text-white">{tx.description}</p>
                                                     <p className="text-xs text-slate-500">{new Date(tx.created_at).toLocaleString()}</p>
                                                     {tx.order_id && (
                                                         <p className="text-xs text-slate-600 font-mono mt-1">
@@ -478,12 +506,15 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <p className={`font-bold ${tx.amount > 0 ? 'text-green-400' : 'text-white'}`}>
+                                                <p className={`font-bold ${tx.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
                                                     {tx.amount > 0 ? '+' : ''}{tx.amount}
                                                 </p>
                                                 <p className="text-xs uppercase text-slate-500 font-medium">
-                                                    {tx.currency === 'game_point' ? '遊戲點' : tx.currency}
+                                                    {tx.currency === 'game_point' ? '遊戲點' : tx.currency === 'gold' ? 'G' : 'S'}
                                                 </p>
+                                                {tx.amount_usd && (
+                                                    <p className="text-xs text-slate-400">${Number(tx.amount_usd).toFixed(2)} USD</p>
+                                                )}
                                                 {tx.balance_after !== undefined && (
                                                     <p className="text-xs text-yellow-500/70 mt-1">
                                                         餘額: {tx.balance_after.toLocaleString()} {tx.currency === 'game_point' ? '點' : 'G'}

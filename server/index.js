@@ -2396,14 +2396,16 @@ app.get('/api/wallet/transactions/:userId', (req, res) => {
 
         const currentBalance = user ? user.gold_balance : 0;
 
-        // Query transactions with P99 RRN via LEFT JOIN
+        // Query transactions with P99 RRN, game_title, and amount_usd via LEFT JOIN
         db.all(
             `SELECT
                 w.id, w.order_id, w.user_id, w.amount, w.currency, w.type,
                 w.description, w.reference_id, w.status, w.game_id, w.created_at,
-                p.rrn as p99_rrn
+                p.rrn as p99_rrn, p.amount_usd,
+                g.title as game_title
             FROM wallet_transactions w
             LEFT JOIN p99_orders p ON w.order_id = p.order_id
+            LEFT JOIN games g ON w.game_id = g.id
             WHERE w.user_id = ?
             ORDER BY w.created_at DESC, w.id DESC
             LIMIT ?`,
