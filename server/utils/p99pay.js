@@ -86,8 +86,19 @@ export class P99PayClient {
         const { coid, cuid, amount, paid, userAcctId } = params;
         const formattedAmount = this.formatAmount(amount);
 
-        // Build ERQC data string
+        // Build ERQC data string (PHP formula: CID + COID + CUID + PAID + AMOUNT(14) + USER_ACCTID + PWD)
         let erqcData = this.config.cid + coid + cuid + (paid || '') + formattedAmount + (userAcctId || '') + this.config.password;
+
+        console.log('[P99Pay ERQC Debug] Input:', {
+            cid: this.config.cid,
+            coid,
+            cuid,
+            paid: paid || '',
+            amount: formattedAmount,
+            userAcctId: userAcctId || '',
+            pwd: this.config.password ? '***' : 'MISSING'
+        });
+        console.log('[P99Pay ERQC Debug] Data string length:', erqcData.length);
 
         // Encrypt with 3DES
         const encryptedData = this.encryptTripleDES(erqcData);
@@ -96,6 +107,7 @@ export class P99PayClient {
         const sha1Hash = crypto.createHash('sha1').update(encryptedData).digest();
         const erqc = sha1Hash.toString('base64');
 
+        console.log('[P99Pay ERQC Debug] Result:', erqc);
         return erqc;
     }
 
