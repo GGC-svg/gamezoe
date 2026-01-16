@@ -51,3 +51,4 @@ server/*.db-*
 Billing/
 **/Billing/
 claude/
+server/gamezoe.db
