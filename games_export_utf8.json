@@ -862,5 +862,37 @@
     "rating": 4.8,
     "releaseDate": "2024-01-15",
     "displayOrder": 1
+  },
+  {
+    "id": "fish-api",
+    "title": "捕魚 API (Fish API)",
+    "description": "Egret 引擎捕魚遊戲",
+    "fullDescription": "基於 Egret 引擎開發的捕魚遊戲，精美畫面，流暢體驗！",
+    "thumbnailUrl": "/games/fish-api-master/resource/fish_01.png",
+    "coverUrl": "/games/fish-api-master/resource/fish_01.png",
+    "gameUrl": "/games/fish-api-master/",
+    "developer": "GameZoe",
+    "price": 0,
+    "isFree": 1,
+    "category": "捕魚",
+    "rating": 4.3,
+    "releaseDate": "2024-01-01",
+    "displayOrder": 56
+  },
+  {
+    "id": "fishing-game",
+    "title": "釣魚遊戲 (Fishing Game)",
+    "description": "休閒釣魚小遊戲",
+    "fullDescription": "輕鬆有趣的釣魚遊戲，體驗釣魚的樂趣！",
+    "thumbnailUrl": "/games/fishing_game/icon.png",
+    "coverUrl": "/games/fishing_game/icon.png",
+    "gameUrl": "/games/fishing_game/",
+    "developer": "GameZoe",
+    "price": 0,
+    "isFree": 1,
+    "category": "休閒",
+    "rating": 4,
+    "releaseDate": "2024-01-01",
+    "displayOrder": 57
   }
 ]
