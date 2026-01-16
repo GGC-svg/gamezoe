@@ -103,6 +103,8 @@ KEY3=value3' > ~/gamezoe/server/.env && pm2 restart gamezoe-web
 
 ## P99PAY 金流整合 (2026/01/15 完成)
 
+> **技術實作詳情請參考**: [SKILL_P99PAY.md](./SKILL_P99PAY.md) - 包含 ERQC 公式、加解密程式碼、完整支付流程圖
+
 ### 概述
 - **金流商**: 完美玖玖國際 (P99PAY)
 - **支付方式**: KIWI PIN 點數卡 / KIWI Wallet 錢包
@@ -332,3 +334,15 @@ node modify_file.js
 2. **精確的字串替換** - 使用 `.replace()` 方法
 3. **可讀性高** - 修改邏輯清晰明確
 4. **可重複執行** - 腳本可以版控和重用
+
+---
+
+## SKILL 技術文檔
+
+專門的技術實作參考文檔，包含詳細的程式碼範例和實作細節：
+
+| 文檔 | 說明 |
+|------|------|
+| [SKILL_P99PAY.md](./SKILL_P99PAY.md) | P99PAY 金流整合 - ERQC 公式、TripleDES 加解密、回調處理 |
+
+> 如需新增 SKILL 文檔，請使用 `SKILL_[主題].md` 命名格式。
