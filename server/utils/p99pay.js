@@ -87,7 +87,7 @@ export class P99PayClient {
         const formattedAmount = this.formatAmount(amount);
 
         // Build ERQC data string
-        let erqcData = this.config.cid + coid + cuid + formattedAmount + this.config.password;
+        let erqcData = this.config.cid + coid + cuid + (paid || '') + formattedAmount + (userAcctId || '') + this.config.password;
 
         // Encrypt with 3DES
         const encryptedData = this.encryptTripleDES(erqcData);
