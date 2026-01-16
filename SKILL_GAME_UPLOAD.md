@@ -282,6 +282,40 @@ pm2 restart all
 
 ---
 
+## 標準工作流程 (重要)
+
+**Claude 與用戶的協作模式：**
+
+### 流程
+
+```
+1. Claude 在本機修改程式碼/資料庫/設定
+2. Claude 推送到 Git (git add → commit → push)
+3. Claude 給用戶一行 SSH 指令
+4. 用戶複製指令到 Server SSH 執行
+```
+
+### Server 更新指令 (複製貼上用)
+
+```bash
+cd ~/gamezoe && git fetch origin && git reset --hard origin/master && pm2 restart all
+```
+
+### 如需重啟火花棋牌 (h5-admin)
+
+```bash
+pkill -f h5-admin-app.jar; nohup java -jar ~/h5-admin-app.jar > ~/h5-admin.log 2>&1 &
+```
+
+### 注意事項
+
+- **Claude 不要用 heredoc** - Server SSH 容易卡住
+- **Claude 給的指令要能直接複製貼上** - 一行搞定
+- **Server 不執行 build** - 所有 build 在本機完成
+- **資料庫更新用 `-f` 強制加入** - `git add -f server/gamezoe.db`
+
+---
+
 ## 相關文檔
 
 - [CLAUDE.md](./CLAUDE.md) - 專案開發指南
