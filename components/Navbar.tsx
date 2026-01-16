@@ -69,14 +69,26 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogin, onLogout, onOpenAdmin, o
                   {/* Wallet Display */}
                   <button
                     onClick={onOpenWallet}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-yellow-500/50 rounded-lg transition-all group"
+                    className={`flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 border rounded-lg transition-all group ${
+                      balance.gold === 0
+                        ? 'border-yellow-500/70 animate-pulse shadow-[0_0_10px_rgba(234,179,8,0.3)]'
+                        : 'border-slate-700/50 hover:border-yellow-500/50'
+                    }`}
                     title="儲值 / Top Up"
                   >
+                    {/* Hint text for zero balance */}
+                    {balance.gold === 0 && (
+                      <span className="hidden sm:inline text-yellow-500/80 text-xs mr-1">儲值 →</span>
+                    )}
                     <div className="flex flex-col items-end leading-none">
                       <span className="text-yellow-500 font-bold text-sm group-hover:text-yellow-400">{balance.gold.toLocaleString()} G</span>
                       <span className="text-slate-400 text-[10px]">{balance.silver.toLocaleString()} S</span>
                     </div>
-                    <div className="bg-yellow-500/20 p-1 rounded-md group-hover:bg-yellow-500/30 transition-colors">
+                    <div className={`p-1 rounded-md transition-colors ${
+                      balance.gold === 0
+                        ? 'bg-yellow-500/40 animate-bounce'
+                        : 'bg-yellow-500/20 group-hover:bg-yellow-500/30'
+                    }`}>
                       <Plus className="h-3 w-3 text-yellow-500" />
                     </div>
                   </button>
