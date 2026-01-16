@@ -185,7 +185,7 @@ export class P99PayClient {
             ERQC: this.getERQC({ coid, cuid, amount, paid, userAcctId }),
             RETURN_URL: returnUrl || this.config.returnUrl,
             ORDER_TYPE: paid ? 'M' : 'E', // M=指定PA, E=不指定
-            MID: this.config.mid,
+            // Note: MID is NOT included in order requests per PHP sample (only used in settle)
             PRODUCT_NAME: productName || '',
             PRODUCT_ID: productId || '',
             USER_ACCTID: userAcctId || '',
