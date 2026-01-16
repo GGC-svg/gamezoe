@@ -2765,7 +2765,7 @@ app.get('/api/admin/transactions', (req, res) => {
 // Get list of games/services for filter dropdown (from games table + platform)
 app.get('/api/admin/transactions/games', (req, res) => {
     db.all(
-        `SELECT id as game_id, title as game_title FROM games ORDER BY sort_order, title`,
+        `SELECT id as game_id, title as game_title FROM games ORDER BY displayOrder, title`,
         [],
         (err, games) => {
             if (err) return res.status(500).json({ error: err.message });
