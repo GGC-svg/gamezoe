@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Edit, Save, Link as LinkIcon, FileText, CreditCard, Activity, BarChart, GripVertical, Users, ChevronRight, Download, Search, Filter } from 'lucide-react';
+import { X, Plus, Trash2, Edit, Save, Link as LinkIcon, FileText, CreditCard, Activity, BarChart, GripVertical, Users, ChevronRight, ChevronLeft, Download, Search, Filter } from 'lucide-react';
 import { Game, GameCategory, User } from '../types';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -212,6 +212,9 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
    const [txFilterStartDate, setTxFilterStartDate] = useState<string>('');
    const [txFilterEndDate, setTxFilterEndDate] = useState<string>('');
    const [txIsLoading, setTxIsLoading] = useState(false);
+   const [txCurrentPage, setTxCurrentPage] = useState(1);
+   const [txTotalPages, setTxTotalPages] = useState(1);
+   const [txTotalRecords, setTxTotalRecords] = useState(0);
 
    // Pricing Tiers State
    const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
@@ -257,8 +260,8 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
       }
    }, [editingId, activeTab]);
 
-   // Fetch transaction with filters
-   const fetchTransactions = async () => {
+   // Fetch transaction with filters and pagination
+   const fetchTransactions = async (page: number = 1) => {
       setTxIsLoading(true);
       try {
          const params = new URLSearchParams();
@@ -266,10 +269,15 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
          if (txFilterType !== 'all') params.set('type', txFilterType);
          if (txFilterStartDate) params.set('startDate', txFilterStartDate);
          if (txFilterEndDate) params.set('endDate', txFilterEndDate);
+         params.set('page', page.toString());
+         params.set('limit', '200');
 
          const res = await fetch(`/api/admin/transactions?${params}`);
          const data = await res.json();
-         setPurchases(data);
+         setPurchases(data.transactions || []);
+         setTxCurrentPage(data.pagination?.page || 1);
+         setTxTotalPages(data.pagination?.totalPages || 1);
+         setTxTotalRecords(data.pagination?.total || 0);
       } catch (e) {
          console.error('Failed to fetch transactions', e);
       } finally {
@@ -650,7 +658,7 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
 
                         {/* Search Button */}
                         <button
-                           onClick={fetchTransactions}
+                           onClick={() => fetchTransactions(1)}
                            disabled={txIsLoading}
                            className="flex items-center gap-2 bg-nexus-accent hover:bg-nexus-accentHover text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50"
                         >
@@ -731,12 +739,33 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
                            )}
                         </tbody>
                      </table>
-                     {purchases.length > 0 && (
-                        <div className="p-4 border-t border-slate-700 text-sm text-slate-400 flex justify-between">
-                           <span>共 {purchases.length} 筆紀錄</span>
-                           <span>顯示最近 500 筆</span>
-                        </div>
-                     )}
+                     {/* Pagination Controls */}
+                     <div className="p-4 border-t border-slate-700 text-sm text-slate-400 flex items-center justify-between">
+                        <span>共 <span className="text-white font-medium">{txTotalRecords}</span> 筆紀錄</span>
+                        {txTotalPages > 1 && (
+                           <div className="flex items-center gap-4">
+                              <button
+                                 onClick={() => fetchTransactions(txCurrentPage - 1)}
+                                 disabled={txCurrentPage === 1 || txIsLoading}
+                                 className="flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm transition-colors"
+                              >
+                                 <ChevronLeft className="h-4 w-4" />
+                                 上一頁
+                              </button>
+                              <span className="text-slate-400">
+                                 第 <span className="text-white font-medium">{txCurrentPage}</span> / {txTotalPages} 頁
+                              </span>
+                              <button
+                                 onClick={() => fetchTransactions(txCurrentPage + 1)}
+                                 disabled={txCurrentPage === txTotalPages || txIsLoading}
+                                 className="flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm transition-colors"
+                              >
+                                 下一頁
+                                 <ChevronRight className="h-4 w-4" />
+                              </button>
+                           </div>
+                        )}
+                     </div>
                   </div>
                </div>
             )}

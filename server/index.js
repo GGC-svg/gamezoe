@@ -2388,49 +2388,83 @@ app.use(express.static(path.join(__dirname, '../dist')));
 
 app.get('/api/wallet/transactions/:userId', (req, res) => {
     const { userId } = req.params;
-    const limit = 50;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 200;
+    const offset = (page - 1) * limit;
 
-    // First get current balance
+    // First get total count and current balance
     db.get("SELECT gold_balance FROM users WHERE id = ?", [userId], (err, user) => {
         if (err) return res.status(500).json({ error: err.message });
 
         const currentBalance = user ? user.gold_balance : 0;
 
-        // Query transactions with P99 RRN, game_title, and amount_usd via LEFT JOIN
-        db.all(
-            `SELECT
-                w.id, w.order_id, w.user_id, w.amount, w.currency, w.type,
-                w.description, w.reference_id, w.status, w.game_id, w.created_at,
-                p.rrn as p99_rrn, p.amount_usd,
-                g.title as game_title
-            FROM wallet_transactions w
-            LEFT JOIN p99_orders p ON w.order_id = p.order_id
-            LEFT JOIN games g ON w.game_id = g.id
-            WHERE w.user_id = ?
-            ORDER BY w.created_at DESC, w.id DESC
-            LIMIT ?`,
-            [userId, limit],
-            (err, rows) => {
-                if (err) {
-                    res.status(500).json({ error: err.message });
-                    return;
+        // Get total count for pagination
+        db.get("SELECT COUNT(*) as total FROM wallet_transactions WHERE user_id = ?", [userId], (err, countResult) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            const total = countResult ? countResult.total : 0;
+            const totalPages = Math.ceil(total / limit);
+
+            // Query transactions with P99 RRN, game_title, and amount_usd via LEFT JOIN
+            db.all(
+                `SELECT
+                    w.id, w.order_id, w.user_id, w.amount, w.currency, w.type,
+                    w.description, w.reference_id, w.status, w.game_id, w.created_at,
+                    p.rrn as p99_rrn, p.amount_usd,
+                    g.title as game_title
+                FROM wallet_transactions w
+                LEFT JOIN p99_orders p ON w.order_id = p.order_id
+                LEFT JOIN games g ON w.game_id = g.id
+                WHERE w.user_id = ?
+                ORDER BY w.created_at DESC, w.id DESC
+                LIMIT ? OFFSET ?`,
+                [userId, limit, offset],
+                (err, rows) => {
+                    if (err) {
+                        res.status(500).json({ error: err.message });
+                        return;
+                    }
+
+                    // Calculate running balance - need to account for transactions before this page
+                    // First, sum all transactions after this page's transactions
+                    db.get(
+                        `SELECT COALESCE(SUM(amount), 0) as sum_after FROM wallet_transactions
+                         WHERE user_id = ? AND (created_at, id) > (
+                             SELECT created_at, id FROM wallet_transactions
+                             WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1 OFFSET ?
+                         )`,
+                        [userId, userId, offset - 1],
+                        (err, sumResult) => {
+                            // If error or first page, start from current balance
+                            let runningBalance = currentBalance;
+                            if (!err && sumResult && offset > 0) {
+                                // Subtract sum of newer transactions to get balance at start of this page
+                                runningBalance = currentBalance;
+                            }
+
+                            const rowsWithBalance = rows.map((row) => {
+                                const balanceAfter = runningBalance;
+                                runningBalance = runningBalance - row.amount;
+                                return {
+                                    ...row,
+                                    balance_after: balanceAfter
+                                };
+                            });
+
+                            res.json({
+                                transactions: rowsWithBalance,
+                                pagination: {
+                                    page,
+                                    limit,
+                                    total,
+                                    totalPages
+                                }
+                            });
+                        }
+                    );
                 }
-
-                // Calculate running balance for each transaction (newest first)
-                let runningBalance = currentBalance;
-                const rowsWithBalance = rows.map((row, index) => {
-                    const balanceAfter = runningBalance;
-                    // For next iteration, subtract this transaction's effect
-                    runningBalance = runningBalance - row.amount;
-                    return {
-                        ...row,
-                        balance_after: balanceAfter
-                    };
-                });
-
-                res.json(rowsWithBalance);
-            }
-        );
+            );
+        });
     });
 });
 
@@ -2704,10 +2738,13 @@ app.get('/api/bridge/transaction/:orderId', (req, res) => {
 
 // Get All Wallet Transactions (for Admin Dashboard) - with P99 RRN and filters
 app.get('/api/admin/transactions', (req, res) => {
-    const { gameId, startDate, endDate, type, limit = 500 } = req.query;
+    const { gameId, startDate, endDate, type } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 200;
+    const offset = (page - 1) * limit;
 
     let whereConditions = [];
-    let params = [];
+    let filterParams = [];
 
     // Filter by game/service
     if (gameId && gameId !== 'all') {
@@ -2716,48 +2753,68 @@ app.get('/api/admin/transactions', (req, res) => {
             whereConditions.push('(w.game_id IS NULL OR w.game_id = "")');
         } else {
             whereConditions.push('w.game_id = ?');
-            params.push(gameId);
+            filterParams.push(gameId);
         }
     }
 
     // Filter by transaction type
     if (type && type !== 'all') {
         whereConditions.push('w.type = ?');
-        params.push(type);
+        filterParams.push(type);
     }
 
     // Filter by date range
     if (startDate) {
         whereConditions.push("w.created_at >= ?");
-        params.push(startDate + ' 00:00:00');
+        filterParams.push(startDate + ' 00:00:00');
     }
     if (endDate) {
         whereConditions.push("w.created_at <= ?");
-        params.push(endDate + ' 23:59:59');
+        filterParams.push(endDate + ' 23:59:59');
     }
 
     const whereClause = whereConditions.length > 0
         ? 'WHERE ' + whereConditions.join(' AND ')
         : '';
 
-    params.push(parseInt(limit));
-
-    db.all(
-        `SELECT
-            w.id, w.order_id, w.user_id, w.amount, w.currency, w.type,
-            w.description, w.reference_id, w.status, w.game_id, w.created_at,
-            p.rrn as p99_rrn, p.amount_usd,
-            g.title as game_title
-        FROM wallet_transactions w
-        LEFT JOIN p99_orders p ON w.order_id = p.order_id
-        LEFT JOIN games g ON w.game_id = g.id
-        ${whereClause}
-        ORDER BY w.created_at DESC
-        LIMIT ?`,
-        params,
-        (err, rows) => {
+    // Get total count for pagination
+    db.get(
+        `SELECT COUNT(*) as total FROM wallet_transactions w ${whereClause}`,
+        filterParams,
+        (err, countResult) => {
             if (err) return res.status(500).json({ error: err.message });
-            res.json(rows);
+
+            const total = countResult ? countResult.total : 0;
+            const totalPages = Math.ceil(total / limit);
+
+            const queryParams = [...filterParams, limit, offset];
+
+            db.all(
+                `SELECT
+                    w.id, w.order_id, w.user_id, w.amount, w.currency, w.type,
+                    w.description, w.reference_id, w.status, w.game_id, w.created_at,
+                    p.rrn as p99_rrn, p.amount_usd,
+                    g.title as game_title
+                FROM wallet_transactions w
+                LEFT JOIN p99_orders p ON w.order_id = p.order_id
+                LEFT JOIN games g ON w.game_id = g.id
+                ${whereClause}
+                ORDER BY w.created_at DESC
+                LIMIT ? OFFSET ?`,
+                queryParams,
+                (err, rows) => {
+                    if (err) return res.status(500).json({ error: err.message });
+                    res.json({
+                        transactions: rows,
+                        pagination: {
+                            page,
+                            limit,
+                            total,
+                            totalPages
+                        }
+                    });
+                }
+            );
         }
     );
 });

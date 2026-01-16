@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, CheckCircle, AlertCircle, Coins, History, ArrowUpRight, ArrowDownLeft, CreditCard, Loader2 } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Coins, History, ArrowUpRight, ArrowDownLeft, CreditCard, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface WalletModalProps {
     isOpen: boolean;
@@ -68,6 +68,10 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
     const [showSuccessPopup, setShowSuccessPopup] = useState(false);
     const [addedGold, setAddedGold] = useState(0);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalRecords, setTotalRecords] = useState(0);
 
     // P99PAY payment state
     const [selectedTier, setSelectedTier] = useState<typeof TOPUP_TIERS[0] | null>(null);
@@ -112,9 +116,15 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
 
     useEffect(() => {
         if (isOpen && activeTab === 'history') {
-            fetchHistory();
+            fetchHistory(1);
         }
     }, [isOpen, activeTab]);
+
+    useEffect(() => {
+        if (isOpen && activeTab === 'history' && currentPage > 1) {
+            fetchHistory(currentPage);
+        }
+    }, [currentPage]);
 
     const getErrorMessage = (errorCode: string, rcode?: string): string => {
         // P99 official RCODE error codes (from P99 API doc v1.2.3)
@@ -185,15 +195,21 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
         }
     };
 
-    const fetchHistory = async () => {
+    const fetchHistory = async (page: number = 1) => {
+        setHistoryLoading(true);
         try {
-            const res = await fetch(`${API_BASE}/wallet/transactions/${userId}`);
+            const res = await fetch(`${API_BASE}/wallet/transactions/${userId}?page=${page}&limit=200`);
             if (res.ok) {
                 const data = await res.json();
-                setTransactions(data);
+                setTransactions(data.transactions || []);
+                setCurrentPage(data.pagination?.page || 1);
+                setTotalPages(data.pagination?.totalPages || 1);
+                setTotalRecords(data.pagination?.total || 0);
             }
         } catch (e) {
             console.error("Failed to fetch transactions");
+        } finally {
+            setHistoryLoading(false);
         }
     };
 
@@ -474,14 +490,26 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
                     ) : (
                         <>
                             {/* History View */}
-                            <div className="space-y-4">
-                                {transactions.length === 0 ? (
-                                    <div className="text-center text-slate-500 py-12">
-                                        <History className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                                        <p>尚無交易紀錄</p>
-                                    </div>
-                                ) : (
-                                    transactions.map(tx => (
+                            {/* Header with record count */}
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="text-sm text-slate-400">
+                                    共 <span className="text-white font-medium">{totalRecords}</span> 筆交易紀錄
+                                </div>
+                            </div>
+
+                            {historyLoading ? (
+                                <div className="text-center text-slate-500 py-12">
+                                    <Loader2 className="h-12 w-12 mx-auto mb-3 animate-spin opacity-50" />
+                                    <p>載入中...</p>
+                                </div>
+                            ) : transactions.length === 0 ? (
+                                <div className="text-center text-slate-500 py-12">
+                                    <History className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                                    <p>尚無交易紀錄</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {transactions.map(tx => (
                                         <div key={tx.id} className="flex items-center justify-between p-4 bg-slate-800/30 border border-slate-800 rounded-xl hover:border-slate-700 transition-colors">
                                             <div className="flex items-center gap-4">
                                                 <div className={`p-2 rounded-full ${tx.amount > 0 ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
@@ -492,8 +520,9 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
                                                     <div className="flex items-center gap-2 mb-1">
                                                         <span className={`px-2 py-0.5 rounded text-xs font-bold ${
                                                             tx.type === 'deposit' ? 'bg-green-900/50 text-green-400' :
-                                                            tx.type === 'transfer' ? 'bg-blue-900/50 text-blue-400' :
+                                                            tx.type === 'transfer' || tx.type === 'transfer_out' || tx.type === 'game_deposit' || tx.type === 'casino_deposit' ? 'bg-blue-900/50 text-blue-400' :
                                                             tx.type === 'service' ? 'bg-purple-900/50 text-purple-400' :
+                                                            tx.type === 'game_withdraw' || tx.type === 'WITHDRAW' ? 'bg-cyan-900/50 text-cyan-400' :
                                                             tx.type === 'purchase' ? 'bg-yellow-900/50 text-yellow-400' :
                                                             tx.type === 'refund' ? 'bg-red-900/50 text-red-400' :
                                                             'bg-slate-700 text-slate-300'
@@ -501,7 +530,7 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
                                                             {TX_TYPE_LABELS[tx.type] || tx.type}
                                                         </span>
                                                         {(tx.game_title || tx.game_id) && (
-                                                            <span className="text-xs text-slate-400">{tx.game_title || tx.game_id}</span>
+                                                            <span className="text-xs text-slate-400">| {tx.game_title || tx.game_id}</span>
                                                         )}
                                                     </div>
                                                     <p className="text-sm text-white">{tx.description}</p>
@@ -531,9 +560,34 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, userId, onTo
                                                 )}
                                             </div>
                                         </div>
-                                    ))
-                                )}
-                            </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Pagination Controls */}
+                            {totalPages > 1 && (
+                                <div className="flex items-center justify-center gap-4 mt-6 pt-4 border-t border-slate-800">
+                                    <button
+                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                        disabled={currentPage === 1 || historyLoading}
+                                        className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm transition-colors"
+                                    >
+                                        <ChevronLeft className="h-4 w-4" />
+                                        上一頁
+                                    </button>
+                                    <span className="text-sm text-slate-400">
+                                        第 <span className="text-white font-medium">{currentPage}</span> / {totalPages} 頁
+                                    </span>
+                                    <button
+                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                        disabled={currentPage === totalPages || historyLoading}
+                                        className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm transition-colors"
+                                    >
+                                        下一頁
+                                        <ChevronRight className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            )}
                         </>
                     )}
                 </div>
