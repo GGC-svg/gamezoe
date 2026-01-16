@@ -490,7 +490,7 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ isOpen, onClose, user
                                                                 {tx.amount > 0 ? '+' : ''}{tx.amount} {tx.currency === 'gold' ? 'G' : 'S'}
                                                             </p>
                                                             {tx.amount_usd && (
-                                                                <p className="text-xs text-slate-400">${tx.amount_usd} USD</p>
+                                                                <p className="text-xs text-slate-400">${Number(tx.amount_usd).toFixed(2)} USD</p>
                                                             )}
                                                             {tx.balance_after !== undefined && tx.currency === 'gold' && (
                                                                 <p className="text-xs text-slate-500 mt-1">

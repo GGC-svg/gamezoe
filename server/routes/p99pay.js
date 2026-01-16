@@ -165,7 +165,7 @@ router.post('/return', express.urlencoded({ extended: true }), (req, res) => {
                         db.run(
                             `INSERT OR IGNORE INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at)
                              VALUES (?, ?, ?, 'gold', 'deposit', ?, 'completed', datetime('now', '+8 hours'))`,
-                            [orderId, order.user_id, order.gold_amount, `P99PAY topup ${order.amount_usd} USD`]
+                            [orderId, order.user_id, order.gold_amount, `P99PAY topup ${Number(order.amount_usd).toFixed(2)} USD`]
                         );
 
                         db.run('COMMIT', () => {
@@ -276,7 +276,7 @@ router.post('/notify', express.urlencoded({ extended: true }), (req, res) => {
                         db.run(
                             `INSERT OR IGNORE INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at)
                              VALUES (?, ?, ?, 'gold', 'deposit', ?, 'completed', datetime('now', '+8 hours'))`,
-                            [orderId, order.user_id, order.gold_amount, `P99PAY topup ${order.amount_usd} USD`]
+                            [orderId, order.user_id, order.gold_amount, `P99PAY topup ${Number(order.amount_usd).toFixed(2)} USD`]
                         );
                         db.run('COMMIT', () => {
                             console.log(`[P99Pay Notify] Gold credited: ${order.gold_amount} to user ${order.user_id}`);
@@ -637,7 +637,7 @@ function fulfillServiceOrder(p99OrderId, callback) {
                                 serviceOrder.order_id,
                                 serviceOrder.user_id,
                                 -serviceOrder.gold_amount,
-                                `服務消費: ${serviceOrder.service_type} ($${serviceOrder.amount_usd} USD)`,
+                                `服務消費: ${serviceOrder.service_type} ($${Number(serviceOrder.amount_usd).toFixed(2)} USD)`,
                                 gameId
                             ]
                         );
@@ -760,7 +760,7 @@ export function startBatchJob() {
                                                 db.run(
                                                     `INSERT OR IGNORE INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at)
                                                      VALUES (?, ?, ?, 'gold', 'deposit', ?, 'completed', datetime('now', '+8 hours'))`,
-                                                    [order.order_id, fullOrder.user_id, fullOrder.gold_amount, `P99PAY batch topup ${fullOrder.amount_usd} USD`]
+                                                    [order.order_id, fullOrder.user_id, fullOrder.gold_amount, `P99PAY batch topup ${Number(fullOrder.amount_usd).toFixed(2)} USD`]
                                                 );
                                                 db.run('COMMIT', () => {
                                                     console.log(`[P99Pay Batch] Gold credited: ${fullOrder.gold_amount} to user ${fullOrder.user_id}`);
@@ -841,7 +841,7 @@ export function startBatchJob() {
                         db.run(
                             `INSERT OR IGNORE INTO wallet_transactions (order_id, user_id, amount, currency, type, description, status, created_at)
                              VALUES (?, ?, ?, 'gold', 'deposit', ?, 'completed', datetime('now', '+8 hours'))`,
-                            [order.order_id, order.user_id, order.gold_amount, `P99PAY reconcile topup ${order.amount_usd} USD`]
+                            [order.order_id, order.user_id, order.gold_amount, `P99PAY reconcile topup ${Number(order.amount_usd).toFixed(2)} USD`]
                         );
 
                         // Update order status

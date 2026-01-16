@@ -561,7 +561,7 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
                               <td className={`p-4 font-mono font-bold text-right ${record.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
                                  {record.amount > 0 ? '+' : ''}{record.amount}
                                  {record.amount_usd && (
-                                    <div className="text-xs text-slate-500">${record.amount_usd} USD</div>
+                                    <div className="text-xs text-slate-500">${Number(record.amount_usd).toFixed(2)} USD</div>
                                  )}
                               </td>
                            </tr>
