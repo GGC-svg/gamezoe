@@ -177,8 +177,8 @@ export class P99PayClient {
         // Truncate userAcctId to 20 chars max (P99 might have length limit)
         const safeUserAcctId = userAcctId ? userAcctId.substring(0, 20) : '';
 
-        // Default to VISA/MasterCard if no payment method specified
-        const effectivePaid = paid || 'BNKEZL01';
+        // Default to KIWI WALLET if no payment method specified
+        const effectivePaid = paid || 'COPKWP09';
 
         const orderData = {
             MSG_TYPE: '0100',           // 交易授權 Request
