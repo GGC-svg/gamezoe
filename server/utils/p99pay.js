@@ -174,27 +174,25 @@ export class P99PayClient {
 
         const cuid = 'USD'; // P99 uses USD as base currency
 
-        // Truncate userAcctId to 20 chars max (P99 might have length limit)
-        const safeUserAcctId = userAcctId ? userAcctId.substring(0, 20) : '';
-
         // Default to KIWI WALLET if no payment method specified
         const effectivePaid = paid || 'COPKWP09';
 
+        // Try without USER_ACCTID to match simpler PHP sample
         const orderData = {
             MSG_TYPE: '0100',           // 交易授權 Request
             PCODE: '300000',            // 一般交易
             CID: this.config.cid,
             COID: coid,
             CUID: cuid,
-            PAID: effectivePaid,        // BNKEZL01 = VISA/MasterCard USD
+            PAID: effectivePaid,        // COPKWP09 = KIWI WALLET
             AMOUNT: String(amount),
-            ERQC: this.getERQC({ coid, cuid, amount, paid: effectivePaid, userAcctId: safeUserAcctId }),
+            ERQC: this.getERQC({ coid, cuid, amount, paid: effectivePaid, userAcctId: '' }),
             RETURN_URL: returnUrl || this.config.returnUrl,
-            ORDER_TYPE: 'M',            // M=指定PA (always specify since we have default)
+            ORDER_TYPE: 'M',            // M=指定PA
             // Note: MID is NOT included in order requests per PHP sample (only used in settle)
             PRODUCT_NAME: productName || '',
             PRODUCT_ID: productId || '',
-            USER_ACCTID: safeUserAcctId,
+            USER_ACCTID: '',            // Empty for now - might be causing issues
             MEMO: memo || ''
         };
 
