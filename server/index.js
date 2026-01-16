@@ -2709,8 +2709,13 @@ app.get('/api/admin/transactions', (req, res) => {
 
     // Filter by game/service
     if (gameId && gameId !== 'all') {
-        whereConditions.push('w.game_id = ?');
-        params.push(gameId);
+        if (gameId === 'platform') {
+            // Platform deposits have NULL game_id
+            whereConditions.push('(w.game_id IS NULL OR w.game_id = "")');
+        } else {
+            whereConditions.push('w.game_id = ?');
+            params.push(gameId);
+        }
     }
 
     // Filter by transaction type
@@ -2755,26 +2760,20 @@ app.get('/api/admin/transactions', (req, res) => {
     );
 });
 
-// Get list of games/services for filter dropdown
+// Get list of games/services for filter dropdown (from games table + platform)
 app.get('/api/admin/transactions/games', (req, res) => {
     db.all(
-        `SELECT DISTINCT
-            COALESCE(w.game_id, 'platform') as game_id,
-            COALESCE(g.title,
-                CASE
-                    WHEN w.type = 'deposit' THEN '平台儲值'
-                    WHEN w.type = 'service' THEN w.game_id
-                    ELSE '平台'
-                END
-            ) as game_title
-        FROM wallet_transactions w
-        LEFT JOIN games g ON w.game_id = g.id
-        ORDER BY game_title`,
+        `SELECT id as game_id, title as game_title FROM games ORDER BY sort_order, title`,
         [],
-        (err, rows) => {
+        (err, games) => {
             if (err) return res.status(500).json({ error: err.message });
-            // Add "全部" option at the beginning
-            const result = [{ game_id: 'all', game_title: '全部' }, ...rows.filter(r => r.game_id)];
+
+            // Build complete list: 全部 + 平台儲值 + all games
+            const result = [
+                { game_id: 'all', game_title: '全部' },
+                { game_id: 'platform', game_title: '平台儲值' },
+                ...(games || [])
+            ];
             res.json(result);
         }
     );
@@ -2788,8 +2787,12 @@ app.get('/api/admin/transactions/export', (req, res) => {
     let params = [];
 
     if (gameId && gameId !== 'all') {
-        whereConditions.push('w.game_id = ?');
-        params.push(gameId);
+        if (gameId === 'platform') {
+            whereConditions.push('(w.game_id IS NULL OR w.game_id = "")');
+        } else {
+            whereConditions.push('w.game_id = ?');
+            params.push(gameId);
+        }
     }
 
     if (type && type !== 'all') {
