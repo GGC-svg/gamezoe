@@ -2192,7 +2192,7 @@ app.get('/api/admin/users/:userId/games', (req, res) => {
     });
 });
 
-// Get user transactions (with P99 order details)
+// Get user transactions (with P99 order details and game title)
 app.get('/api/admin/users/:userId/transactions', (req, res) => {
     const { userId } = req.params;
     db.all(`
@@ -2200,9 +2200,11 @@ app.get('/api/admin/users/:userId/transactions', (req, res) => {
             wt.*,
             p99.order_id,
             p99.rrn as p99_rrn,
-            p99.amount_usd
+            p99.amount_usd,
+            g.title as game_title
         FROM wallet_transactions wt
         LEFT JOIN p99_orders p99 ON wt.order_id = p99.order_id
+        LEFT JOIN games g ON wt.game_id = g.id
         WHERE wt.user_id = ?
         ORDER BY wt.created_at DESC
         LIMIT 100
@@ -2698,21 +2700,176 @@ app.get('/api/bridge/transaction/:orderId', (req, res) => {
 
 // --- ADMIN API EXTENSIONS ---
 
-// Get All Wallet Transactions (for Admin Dashboard) - with P99 RRN
+// Get All Wallet Transactions (for Admin Dashboard) - with P99 RRN and filters
 app.get('/api/admin/transactions', (req, res) => {
+    const { gameId, startDate, endDate, type, limit = 500 } = req.query;
+
+    let whereConditions = [];
+    let params = [];
+
+    // Filter by game/service
+    if (gameId && gameId !== 'all') {
+        whereConditions.push('w.game_id = ?');
+        params.push(gameId);
+    }
+
+    // Filter by transaction type
+    if (type && type !== 'all') {
+        whereConditions.push('w.type = ?');
+        params.push(type);
+    }
+
+    // Filter by date range
+    if (startDate) {
+        whereConditions.push("w.created_at >= ?");
+        params.push(startDate + ' 00:00:00');
+    }
+    if (endDate) {
+        whereConditions.push("w.created_at <= ?");
+        params.push(endDate + ' 23:59:59');
+    }
+
+    const whereClause = whereConditions.length > 0
+        ? 'WHERE ' + whereConditions.join(' AND ')
+        : '';
+
+    params.push(parseInt(limit));
+
     db.all(
         `SELECT
             w.id, w.order_id, w.user_id, w.amount, w.currency, w.type,
             w.description, w.reference_id, w.status, w.game_id, w.created_at,
-            p.rrn as p99_rrn, p.amount_usd
+            p.rrn as p99_rrn, p.amount_usd,
+            g.title as game_title
         FROM wallet_transactions w
         LEFT JOIN p99_orders p ON w.order_id = p.order_id
+        LEFT JOIN games g ON w.game_id = g.id
+        ${whereClause}
         ORDER BY w.created_at DESC
-        LIMIT 100`,
-        [],
+        LIMIT ?`,
+        params,
         (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json(rows);
+        }
+    );
+});
+
+// Get list of games/services for filter dropdown
+app.get('/api/admin/transactions/games', (req, res) => {
+    db.all(
+        `SELECT DISTINCT
+            COALESCE(w.game_id, 'platform') as game_id,
+            COALESCE(g.title,
+                CASE
+                    WHEN w.type = 'deposit' THEN '平台儲值'
+                    WHEN w.type = 'service' THEN w.game_id
+                    ELSE '平台'
+                END
+            ) as game_title
+        FROM wallet_transactions w
+        LEFT JOIN games g ON w.game_id = g.id
+        ORDER BY game_title`,
+        [],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            // Add "全部" option at the beginning
+            const result = [{ game_id: 'all', game_title: '全部' }, ...rows.filter(r => r.game_id)];
+            res.json(result);
+        }
+    );
+});
+
+// Export transactions to CSV for Excel
+app.get('/api/admin/transactions/export', (req, res) => {
+    const { gameId, startDate, endDate, type } = req.query;
+
+    let whereConditions = [];
+    let params = [];
+
+    if (gameId && gameId !== 'all') {
+        whereConditions.push('w.game_id = ?');
+        params.push(gameId);
+    }
+
+    if (type && type !== 'all') {
+        whereConditions.push('w.type = ?');
+        params.push(type);
+    }
+
+    if (startDate) {
+        whereConditions.push("w.created_at >= ?");
+        params.push(startDate + ' 00:00:00');
+    }
+    if (endDate) {
+        whereConditions.push("w.created_at <= ?");
+        params.push(endDate + ' 23:59:59');
+    }
+
+    const whereClause = whereConditions.length > 0
+        ? 'WHERE ' + whereConditions.join(' AND ')
+        : '';
+
+    db.all(
+        `SELECT
+            w.created_at as '時間',
+            w.order_id as '訂單編號',
+            w.user_id as '用戶ID',
+            CASE w.type
+                WHEN 'deposit' THEN '儲值'
+                WHEN 'transfer' THEN '轉點'
+                WHEN 'service' THEN '服務消費'
+                WHEN 'purchase' THEN '購買'
+                WHEN 'refund' THEN '退款'
+                ELSE w.type
+            END as '交易類型',
+            COALESCE(g.title, w.game_id, '平台') as '項目',
+            w.description as '描述',
+            w.amount as '變動金額',
+            w.currency as '幣種',
+            COALESCE(p.amount_usd, '') as 'USD金額',
+            p.rrn as 'P99交易號',
+            w.status as '狀態'
+        FROM wallet_transactions w
+        LEFT JOIN p99_orders p ON w.order_id = p.order_id
+        LEFT JOIN games g ON w.game_id = g.id
+        ${whereClause}
+        ORDER BY w.created_at DESC`,
+        params,
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            if (rows.length === 0) {
+                return res.status(404).json({ error: '沒有符合條件的交易紀錄' });
+            }
+
+            // Generate CSV with BOM for Excel UTF-8 support
+            const headers = Object.keys(rows[0]);
+            const csvRows = [headers.join(',')];
+
+            for (const row of rows) {
+                const values = headers.map(h => {
+                    let val = row[h];
+                    if (val === null || val === undefined) val = '';
+                    // Escape quotes and wrap in quotes if contains comma or quote
+                    val = String(val).replace(/"/g, '""');
+                    if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+                        val = `"${val}"`;
+                    }
+                    return val;
+                });
+                csvRows.push(values.join(','));
+            }
+
+            // UTF-8 BOM + CSV content
+            const bom = '\uFEFF';
+            const csvContent = bom + csvRows.join('\n');
+
+            const filename = `transactions_${startDate || 'all'}_${endDate || 'all'}.csv`;
+
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            res.send(csvContent);
         }
     );
 });

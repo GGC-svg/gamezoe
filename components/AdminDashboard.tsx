@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Edit, Save, Link as LinkIcon, FileText, CreditCard, Activity, BarChart, GripVertical, Users, ChevronRight } from 'lucide-react';
+import { X, Plus, Trash2, Edit, Save, Link as LinkIcon, FileText, CreditCard, Activity, BarChart, GripVertical, Users, ChevronRight, Download, Search, Filter } from 'lucide-react';
 import { Game, GameCategory, User } from '../types';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -57,7 +57,23 @@ interface WalletTransaction {
    created_at: string;
    p99_rrn?: string;
    amount_usd?: number;
+   game_id?: string;
+   game_title?: string;
 }
+
+interface GameOption {
+   game_id: string;
+   game_title: string;
+}
+
+// Transaction type mapping to Chinese
+const TRANSACTION_TYPE_MAP: Record<string, string> = {
+   'deposit': '儲值',
+   'transfer': '轉點',
+   'service': '服務消費',
+   'purchase': '購買',
+   'refund': '退款'
+};
 
 interface GameActivity {
    id: number;
@@ -175,10 +191,18 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
 
    // Data State
    const [logs, setLogs] = useState<LoginLog[]>([]);
-   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
+   const [purchases, setPurchases] = useState<WalletTransaction[]>([]);
    const [activities, setActivities] = useState<GameActivity[]>([]);
    const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
    const [localGames, setLocalGames] = useState<Game[]>([]);
+
+   // Transaction Filter State
+   const [txGameOptions, setTxGameOptions] = useState<GameOption[]>([]);
+   const [txFilterGameId, setTxFilterGameId] = useState<string>('all');
+   const [txFilterType, setTxFilterType] = useState<string>('all');
+   const [txFilterStartDate, setTxFilterStartDate] = useState<string>('');
+   const [txFilterEndDate, setTxFilterEndDate] = useState<string>('');
+   const [txIsLoading, setTxIsLoading] = useState(false);
 
    // Pricing Tiers State
    const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
@@ -224,12 +248,45 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
       }
    }, [editingId, activeTab]);
 
+   // Fetch transaction with filters
+   const fetchTransactions = async () => {
+      setTxIsLoading(true);
+      try {
+         const params = new URLSearchParams();
+         if (txFilterGameId !== 'all') params.set('gameId', txFilterGameId);
+         if (txFilterType !== 'all') params.set('type', txFilterType);
+         if (txFilterStartDate) params.set('startDate', txFilterStartDate);
+         if (txFilterEndDate) params.set('endDate', txFilterEndDate);
+
+         const res = await fetch(`/api/admin/transactions?${params}`);
+         const data = await res.json();
+         setPurchases(data);
+      } catch (e) {
+         console.error('Failed to fetch transactions', e);
+      } finally {
+         setTxIsLoading(false);
+      }
+   };
+
+   // Export transactions to CSV
+   const exportTransactions = () => {
+      const params = new URLSearchParams();
+      if (txFilterGameId !== 'all') params.set('gameId', txFilterGameId);
+      if (txFilterType !== 'all') params.set('type', txFilterType);
+      if (txFilterStartDate) params.set('startDate', txFilterStartDate);
+      if (txFilterEndDate) params.set('endDate', txFilterEndDate);
+
+      window.open(`/api/admin/transactions/export?${params}`, '_blank');
+   };
+
    // Fetch Data based on active tab
    useEffect(() => {
       if (activeTab === 'logs') {
          fetch('/api/admin/logs').then(res => res.json()).then(setLogs).catch(console.error);
       } else if (activeTab === 'purchases') {
-         fetch('/api/admin/transactions').then(res => res.json()).then(setPurchases).catch(console.error);
+         // Fetch game options for filter dropdown
+         fetch('/api/admin/transactions/games').then(res => res.json()).then(setTxGameOptions).catch(console.error);
+         fetchTransactions();
       } else if (activeTab === 'activities') {
          fetch('/api/admin/activities').then(res => res.json()).then(setActivities).catch(console.error);
       } else if (activeTab === 'analytics') {
@@ -525,52 +582,153 @@ const AdminDashboard = ({ isOpen, onClose, games, onAddGame, onUpdateGame, onDel
 
             {/* Content - Purchases */}
             {activeTab === 'purchases' && (
-               <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl">
-                  <table className="w-full text-left border-collapse">
-                     <thead>
-                        <tr className="bg-slate-900/50 text-slate-400 text-sm uppercase tracking-wider">
-                           <th className="p-4 border-b border-slate-700">時間 / 單號</th>
-                           <th className="p-4 border-b border-slate-700">用戶 ID</th>
-                           <th className="p-4 border-b border-slate-700">類型 / 狀態</th>
-                           <th className="p-4 border-b border-slate-700">描述</th>
-                           <th className="p-4 border-b border-slate-700 text-right">變動金額</th>
-                        </tr>
-                     </thead>
-                     <tbody className="divide-y divide-slate-700">
-                        {purchases.map((record: WalletTransaction) => (
-                           <tr key={record.id} className="hover:bg-slate-700/50 transition-colors">
-                              <td className="p-4 text-slate-300">
-                                 <div className="text-sm">{new Date(record.created_at).toLocaleString()}</div>
-                                 <div className="text-xs text-slate-500 font-mono mt-1">{record.order_id}</div>
-                                 {record.p99_rrn && (
-                                    <div className="text-xs text-blue-400 font-mono">P99: {record.p99_rrn}</div>
-                                 )}
-                              </td>
-                              <td className="p-4 text-nexus-accent font-mono text-xs">
-                                 {record.user_id}
-                              </td>
-                              <td className="p-4">
-                                 <div className="text-white font-bold">{record.type}</div>
-                                 <div className={`text-xs font-bold ${record.status === 'COMPLETED' ? 'text-green-500' : 'text-yellow-500'}`}>
-                                    {record.status}
-                                 </div>
-                              </td>
-                              <td className="p-4 text-slate-400 text-sm">
-                                 {record.description}
-                              </td>
-                              <td className={`p-4 font-mono font-bold text-right ${record.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                 {record.amount > 0 ? '+' : ''}{record.amount}
-                                 {record.amount_usd && (
-                                    <div className="text-xs text-slate-500">${Number(record.amount_usd).toFixed(2)} USD</div>
-                                 )}
-                              </td>
+               <div className="space-y-4">
+                  {/* Filter Bar */}
+                  <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+                     <div className="flex flex-wrap items-end gap-4">
+                        {/* Game/Service Filter */}
+                        <div className="flex-1 min-w-[200px]">
+                           <label className="block text-xs text-slate-400 mb-1">項目篩選</label>
+                           <select
+                              value={txFilterGameId}
+                              onChange={(e) => setTxFilterGameId(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-white text-sm"
+                           >
+                              {txGameOptions.map(opt => (
+                                 <option key={opt.game_id} value={opt.game_id}>{opt.game_title}</option>
+                              ))}
+                           </select>
+                        </div>
+
+                        {/* Type Filter */}
+                        <div className="min-w-[120px]">
+                           <label className="block text-xs text-slate-400 mb-1">交易類型</label>
+                           <select
+                              value={txFilterType}
+                              onChange={(e) => setTxFilterType(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-white text-sm"
+                           >
+                              <option value="all">全部</option>
+                              <option value="deposit">儲值</option>
+                              <option value="transfer">轉點</option>
+                              <option value="service">服務消費</option>
+                              <option value="purchase">購買</option>
+                              <option value="refund">退款</option>
+                           </select>
+                        </div>
+
+                        {/* Start Date */}
+                        <div className="min-w-[150px]">
+                           <label className="block text-xs text-slate-400 mb-1">開始日期</label>
+                           <input
+                              type="date"
+                              value={txFilterStartDate}
+                              onChange={(e) => setTxFilterStartDate(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-white text-sm"
+                           />
+                        </div>
+
+                        {/* End Date */}
+                        <div className="min-w-[150px]">
+                           <label className="block text-xs text-slate-400 mb-1">結束日期</label>
+                           <input
+                              type="date"
+                              value={txFilterEndDate}
+                              onChange={(e) => setTxFilterEndDate(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-white text-sm"
+                           />
+                        </div>
+
+                        {/* Search Button */}
+                        <button
+                           onClick={fetchTransactions}
+                           disabled={txIsLoading}
+                           className="flex items-center gap-2 bg-nexus-accent hover:bg-nexus-accentHover text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50"
+                        >
+                           <Search className="h-4 w-4" />
+                           {txIsLoading ? '查詢中...' : '查詢'}
+                        </button>
+
+                        {/* Export Button */}
+                        <button
+                           onClick={exportTransactions}
+                           className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors"
+                        >
+                           <Download className="h-4 w-4" />
+                           匯出 Excel
+                        </button>
+                     </div>
+                  </div>
+
+                  {/* Transactions Table */}
+                  <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl">
+                     <table className="w-full text-left border-collapse">
+                        <thead>
+                           <tr className="bg-slate-900/50 text-slate-400 text-sm uppercase tracking-wider">
+                              <th className="p-4 border-b border-slate-700">時間 / 單號</th>
+                              <th className="p-4 border-b border-slate-700">用戶 ID</th>
+                              <th className="p-4 border-b border-slate-700">類型</th>
+                              <th className="p-4 border-b border-slate-700">項目</th>
+                              <th className="p-4 border-b border-slate-700">描述</th>
+                              <th className="p-4 border-b border-slate-700 text-right">變動金額</th>
                            </tr>
-                        ))}
-                        {purchases.length === 0 && (
-                           <tr><td colSpan={5} className="p-8 text-center text-slate-500">尚無交易紀錄</td></tr>
-                        )}
-                     </tbody>
-                  </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-700">
+                           {purchases.map((record: WalletTransaction) => (
+                              <tr key={record.id} className="hover:bg-slate-700/50 transition-colors">
+                                 <td className="p-4 text-slate-300">
+                                    <div className="text-sm">{new Date(record.created_at).toLocaleString()}</div>
+                                    <div className="text-xs text-slate-500 font-mono mt-1">{record.order_id}</div>
+                                    {record.p99_rrn && (
+                                       <div className="text-xs text-blue-400 font-mono">P99: {record.p99_rrn}</div>
+                                    )}
+                                 </td>
+                                 <td className="p-4 text-nexus-accent font-mono text-xs">
+                                    {record.user_id}
+                                 </td>
+                                 <td className="p-4">
+                                    <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                       record.type === 'deposit' ? 'bg-green-900/50 text-green-400' :
+                                       record.type === 'transfer' ? 'bg-blue-900/50 text-blue-400' :
+                                       record.type === 'service' ? 'bg-purple-900/50 text-purple-400' :
+                                       record.type === 'purchase' ? 'bg-yellow-900/50 text-yellow-400' :
+                                       record.type === 'refund' ? 'bg-red-900/50 text-red-400' :
+                                       'bg-slate-700 text-slate-300'
+                                    }`}>
+                                       {TRANSACTION_TYPE_MAP[record.type] || record.type}
+                                    </span>
+                                    <div className={`text-xs mt-1 ${record.status === 'completed' ? 'text-green-500' : 'text-yellow-500'}`}>
+                                       {record.status === 'completed' ? '已完成' : record.status}
+                                    </div>
+                                 </td>
+                                 <td className="p-4 text-slate-300 text-sm">
+                                    {record.game_title || record.game_id || '平台'}
+                                 </td>
+                                 <td className="p-4 text-slate-400 text-sm max-w-[200px] truncate" title={record.description}>
+                                    {record.description}
+                                 </td>
+                                 <td className={`p-4 font-mono font-bold text-right ${record.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {record.amount > 0 ? '+' : ''}{record.amount}
+                                    {record.amount_usd && (
+                                       <div className="text-xs text-slate-500">${Number(record.amount_usd).toFixed(2)} USD</div>
+                                    )}
+                                 </td>
+                              </tr>
+                           ))}
+                           {purchases.length === 0 && (
+                              <tr><td colSpan={6} className="p-8 text-center text-slate-500">
+                                 {txIsLoading ? '載入中...' : '尚無交易紀錄，請調整篩選條件'}
+                              </td></tr>
+                           )}
+                        </tbody>
+                     </table>
+                     {purchases.length > 0 && (
+                        <div className="p-4 border-t border-slate-700 text-sm text-slate-400 flex justify-between">
+                           <span>共 {purchases.length} 筆紀錄</span>
+                           <span>顯示最近 500 筆</span>
+                        </div>
+                     )}
+                  </div>
                </div>
             )}
 

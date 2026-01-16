@@ -40,7 +40,18 @@ interface TransactionRecord {
     p99_rrn?: string;
     amount_usd?: number;
     balance_after?: number;
+    game_id?: string;
+    game_title?: string;
 }
+
+// Transaction type mapping to Chinese
+const TX_TYPE_MAP: Record<string, string> = {
+    'deposit': '儲值',
+    'transfer': '轉點',
+    'service': '服務消費',
+    'purchase': '購買',
+    'refund': '退款'
+};
 
 interface LoginLog {
     id: number;
@@ -469,7 +480,26 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({ isOpen, onClose, user
                                                 <div key={tx.id} className="bg-slate-800 rounded-lg p-4 border border-slate-700">
                                                     <div className="flex items-start justify-between">
                                                         <div className="flex-1">
-                                                            <p className="font-bold text-white">{tx.description || tx.type}</p>
+                                                            {/* Type Badge */}
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                                                    tx.type === 'deposit' ? 'bg-green-900/50 text-green-400' :
+                                                                    tx.type === 'transfer' ? 'bg-blue-900/50 text-blue-400' :
+                                                                    tx.type === 'service' ? 'bg-purple-900/50 text-purple-400' :
+                                                                    tx.type === 'purchase' ? 'bg-yellow-900/50 text-yellow-400' :
+                                                                    tx.type === 'refund' ? 'bg-red-900/50 text-red-400' :
+                                                                    'bg-slate-700 text-slate-300'
+                                                                }`}>
+                                                                    {TX_TYPE_MAP[tx.type] || tx.type}
+                                                                </span>
+                                                                {/* Project/Game */}
+                                                                {(tx.game_title || tx.game_id) && (
+                                                                    <span className="text-xs text-slate-400">
+                                                                        {tx.game_title || tx.game_id}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-white text-sm">{tx.description}</p>
                                                             <p className="text-xs text-slate-500">{formatDate(tx.created_at)}</p>
                                                             {/* Order IDs */}
                                                             {tx.order_id && (
