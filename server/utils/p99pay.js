@@ -174,6 +174,9 @@ export class P99PayClient {
 
         const cuid = 'USD'; // P99 uses USD as base currency
 
+        // Truncate userAcctId to 20 chars max (P99 might have length limit)
+        const safeUserAcctId = userAcctId ? userAcctId.substring(0, 20) : '';
+
         const orderData = {
             MSG_TYPE: '0100',           // 交易授權 Request
             PCODE: '300000',            // 一般交易
@@ -182,18 +185,21 @@ export class P99PayClient {
             CUID: cuid,
             PAID: paid || '',           // Empty = show payment selection
             AMOUNT: String(amount),
-            ERQC: this.getERQC({ coid, cuid, amount, paid, userAcctId }),
+            ERQC: this.getERQC({ coid, cuid, amount, paid, userAcctId: safeUserAcctId }),
             RETURN_URL: returnUrl || this.config.returnUrl,
             ORDER_TYPE: paid ? 'M' : 'E', // M=指定PA, E=不指定
             // Note: MID is NOT included in order requests per PHP sample (only used in settle)
             PRODUCT_NAME: productName || '',
             PRODUCT_ID: productId || '',
-            USER_ACCTID: userAcctId || '',
+            USER_ACCTID: safeUserAcctId,
             MEMO: memo || ''
         };
 
         const jsonString = JSON.stringify(orderData);
         const base64Data = Buffer.from(jsonString).toString('base64');
+
+        console.log('[P99Pay Order Debug] JSON:', jsonString);
+        console.log('[P99Pay Order Debug] Base64:', base64Data);
 
         return {
             jsonData: orderData,
