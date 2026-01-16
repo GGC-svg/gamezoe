@@ -2879,7 +2879,17 @@ app.get('/api/admin/transactions/export', (req, res) => {
             w.user_id as '用戶ID',
             CASE w.type
                 WHEN 'deposit' THEN '儲值'
+                WHEN 'p99_deposit' THEN 'P99儲值'
+                WHEN 'top_up' THEN '儲值入帳'
                 WHEN 'transfer' THEN '轉點'
+                WHEN 'transfer_out' THEN '轉出至遊戲'
+                WHEN 'game_deposit' THEN '遊戲轉入'
+                WHEN 'game_withdraw' THEN '遊戲轉出'
+                WHEN 'casino_deposit' THEN '遊戲點數初始化'
+                WHEN 'game_win' THEN '遊戲獲利'
+                WHEN 'game_rental' THEN '遊戲租借'
+                WHEN 'admin_award' THEN '管理員贈送'
+                WHEN 'initial_bonus' THEN '初始贈送'
                 WHEN 'service' THEN '服務消費'
                 WHEN 'purchase' THEN '購買'
                 WHEN 'refund' THEN '退款'

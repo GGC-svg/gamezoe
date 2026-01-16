@@ -316,6 +316,45 @@ pkill -f h5-admin-app.jar; nohup java -jar ~/h5-admin-app.jar > ~/h5-admin.log 2
 
 ---
 
+## ⚠️ 資料庫操作安全規範 (重要)
+
+### 修改前必須備份
+
+**在任何資料庫修改操作之前，Claude 必須先執行備份：**
+
+```bash
+# 本機端備份 (在修改 gamezoe.db 之前)
+cp server/gamezoe.db server/gamezoe.db.backup_$(date +%Y%m%d_%H%M%S)
+```
+
+### Server 端備份指令
+```bash
+cp ~/gamezoe/server/gamezoe.db ~/gamezoe/server/gamezoe.db.backup_$(date +%Y%m%d_%H%M%S)
+```
+
+### 禁止事項
+
+| 禁止 | 說明 |
+|------|------|
+| `git add -f server/gamezoe.db` | **禁止將本機資料庫推送覆蓋 Server** |
+| 直接修改 Server 資料庫 | 除非是還原操作 |
+
+### 正確的資料庫更新流程
+
+1. **遊戲資料更新**：使用 `games_export_utf8.json` + `restore_games.js`
+2. **新增遊戲**：在 Server 端執行 `node add_xxx_game.js`
+3. **修復資料**：在 Server 端執行修復腳本
+
+### 自動備份 (Server 端)
+
+Server 已設定每 6 小時自動備份，保留 7 份：
+```bash
+# 備份位置
+~/gamezoe/server/backups/gamezoe_backup_*.db
+```
+
+---
+
 ## 相關文檔
 
 - [CLAUDE.md](./CLAUDE.md) - 專案開發指南
