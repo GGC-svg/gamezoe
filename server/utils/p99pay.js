@@ -72,30 +72,28 @@ export class P99PayClient {
 
     /**
      * Generate ERQC (商家交易驗證資料壓碼)
-     * Formula: ERQC DATA = CID + COID + CUID(3) + AMOUNT(14) + PASSWORD
+     * Formula (per official docs V1.2.3): ERQC DATA = CID + COID + CUID(3) + AMOUNT(12,2) + PASSWORD
+     * Note: Official docs do NOT include PAID or USER_ACCTID in ERQC calculation
      *
      * @param {Object} params - Transaction parameters
      * @param {string} params.coid - Order ID
      * @param {string} params.cuid - Currency (USD/TWD)
      * @param {number} params.amount - Transaction amount
-     * @param {string} [params.paid] - Payment agent ID (optional for ERQC)
-     * @param {string} [params.userAcctId] - User account ID (optional)
      * @returns {string} ERQC verification code
      */
     getERQC(params) {
-        const { coid, cuid, amount, paid, userAcctId } = params;
+        const { coid, cuid, amount } = params;
         const formattedAmount = this.formatAmount(amount);
 
-        // Build ERQC data string (PHP formula: CID + COID + CUID + PAID + AMOUNT(14) + USER_ACCTID + PWD)
-        let erqcData = this.config.cid + coid + cuid + (paid || '') + formattedAmount + (userAcctId || '') + this.config.password;
+        // Build ERQC data string per official documentation (V1.2.3 附件五):
+        // ERQC DATA = CID + COID + CUID(3) + AMOUNT(12,2) + PASSWORD
+        let erqcData = this.config.cid + coid + cuid + formattedAmount + this.config.password;
 
-        console.log('[P99Pay ERQC Debug] Input:', {
+        console.log('[P99Pay ERQC Debug] Input (official formula):', {
             cid: this.config.cid,
             coid,
             cuid,
-            paid: paid || '',
             amount: formattedAmount,
-            userAcctId: userAcctId || '',
             pwd: this.config.password ? '***' : 'MISSING'
         });
         console.log('[P99Pay ERQC Debug] Data string length:', erqcData.length);
@@ -188,7 +186,7 @@ export class P99PayClient {
             CUID: cuid,
             PAID: effectivePaid,        // BNKEZL01 = VISA/MasterCard USD
             AMOUNT: String(amount),
-            ERQC: this.getERQC({ coid, cuid, amount, paid: effectivePaid, userAcctId: safeUserAcctId }),
+            ERQC: this.getERQC({ coid, cuid, amount }),
             RETURN_URL: returnUrl || this.config.returnUrl,
             ORDER_TYPE: 'M',            // M=指定PA, 直接跳到信用卡
             // Note: MID is NOT included in order requests per PHP sample (only used in settle)
