@@ -27,9 +27,18 @@ interface Transaction {
 const TX_TYPE_LABELS: Record<string, string> = {
     'deposit': '儲值',
     'transfer': '轉點',
+    'transfer_out': '轉入遊戲',
     'service': '服務消費',
     'purchase': '購買',
-    'refund': '退款'
+    'refund': '退款',
+    'game_deposit': '轉入遊戲',
+    'game_withdraw': '從遊戲提出',
+    'game_rental': '遊戲消費',
+    'game_win': '遊戲獲勝',
+    'casino_deposit': '轉入賭場',
+    'top_up': '管理員加值',
+    'admin_award': '管理員獎勵',
+    'WITHDRAW': '提領結算'
 };
 
 const TOPUP_TIERS = [
