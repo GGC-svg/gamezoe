@@ -175,8 +175,8 @@ export class P99PayClient {
         // Truncate userAcctId to 20 chars max (P99 might have length limit)
         const safeUserAcctId = userAcctId ? userAcctId.substring(0, 20) : '';
 
-        // PAID empty = let P99 show available payment options
-        const effectivePaid = paid || '';
+        // Default to VISA/MasterCard credit card
+        const effectivePaid = paid || 'BNKEZL01';
 
         const orderData = {
             MSG_TYPE: '0100',           // 交易授權 Request
@@ -184,11 +184,11 @@ export class P99PayClient {
             CID: this.config.cid,
             COID: coid,
             CUID: cuid,
-            PAID: effectivePaid,        // Empty = show available options
+            PAID: effectivePaid,        // BNKEZL01 = VISA/MasterCard USD
             AMOUNT: String(amount),
             ERQC: this.getERQC({ coid, cuid, amount }),
             RETURN_URL: returnUrl || this.config.returnUrl,
-            ORDER_TYPE: 'E',            // E=不指定PA, 顯示可用付款方式
+            ORDER_TYPE: 'M',            // M=指定PA, 直接跳到信用卡
             // Note: MID is NOT included in order requests per PHP sample (only used in settle)
             PRODUCT_NAME: productName || '',
             PRODUCT_ID: productId || '',
