@@ -41,8 +41,12 @@ db.serialize(() => {
         );
     });
 
-    stmt.finalize();
-    console.log(`✓ Restored ${games.length} games successfully!`);
+    stmt.finalize(() => {
+        console.log(`✓ Restored ${games.length} games successfully!`);
+        db.close((err) => {
+            if (err) console.error('Error closing database:', err);
+            else console.log('Database closed.');
+            process.exit(0);
+        });
+    });
 });
-
-db.close();
