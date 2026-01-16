@@ -1,6 +1,11 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
-const fs = require('fs');
+import sqlite3Pkg from 'sqlite3';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const sqlite3 = sqlite3Pkg.verbose();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const dbPath = path.join(__dirname, 'gamezoe.db');
 const gamesPath = path.join(__dirname, '..', 'games_export_utf8.json');
