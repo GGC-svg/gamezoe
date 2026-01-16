@@ -177,17 +177,20 @@ export class P99PayClient {
         // Truncate userAcctId to 20 chars max (P99 might have length limit)
         const safeUserAcctId = userAcctId ? userAcctId.substring(0, 20) : '';
 
+        // Default to VISA/MasterCard if no payment method specified
+        const effectivePaid = paid || 'BNKEZL01';
+
         const orderData = {
             MSG_TYPE: '0100',           // 交易授權 Request
             PCODE: '300000',            // 一般交易
             CID: this.config.cid,
             COID: coid,
             CUID: cuid,
-            PAID: paid || '',           // Empty = show payment selection
+            PAID: effectivePaid,        // BNKEZL01 = VISA/MasterCard USD
             AMOUNT: String(amount),
-            ERQC: this.getERQC({ coid, cuid, amount, paid, userAcctId: safeUserAcctId }),
+            ERQC: this.getERQC({ coid, cuid, amount, paid: effectivePaid, userAcctId: safeUserAcctId }),
             RETURN_URL: returnUrl || this.config.returnUrl,
-            ORDER_TYPE: paid ? 'M' : 'E', // M=指定PA, E=不指定
+            ORDER_TYPE: 'M',            // M=指定PA (always specify since we have default)
             // Note: MID is NOT included in order requests per PHP sample (only used in settle)
             PRODUCT_NAME: productName || '',
             PRODUCT_ID: productId || '',
@@ -374,9 +377,13 @@ export const RETRY_RCODES = ['9004', '9997', '9998', '9999'];
  * Payment Agent IDs
  */
 export const PAID_TYPES = {
+    VISA_MC_USD: 'BNKEZL01',  // VISA/MasterCard 信用卡 (USD)
     KIWI_PIN: 'COPKWP01',     // KIWI 點數卡
     KIWI_WALLET: 'COPKWP09'   // KIWI 錢包
 };
+
+// Default payment method for production
+export const DEFAULT_PAID = 'BNKEZL01';
 
 // Export default instance for convenience
 export default new P99PayClient();
