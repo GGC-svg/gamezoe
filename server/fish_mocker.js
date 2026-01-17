@@ -784,6 +784,28 @@ ports.forEach(port => {
         // [FIX] REVERT TO 1. "888888" caused undefined RoomConfig lookup -> NaN Errors
         const MOCK_ROOM_ID = 1;
 
+        // [CROSS-INSTANCE BROADCAST] Helper to broadcast across all io instances
+        // socket.broadcast.to() only works within a single io instance
+        // This function broadcasts to all sockets in the room across ALL io instances
+        const broadcastToRoom = (roomId, eventName, data, excludeSocketId = null) => {
+            const roomIdStr = String(roomId);
+            let sentCount = 0;
+            ioInstances.forEach(serverIO => {
+                const socketsMap = serverIO.sockets.sockets;
+                if (socketsMap) {
+                    socketsMap.forEach((s) => {
+                        if (String(s.currentRoomId) === roomIdStr) {
+                            if (excludeSocketId && s.id === excludeSocketId) return; // Skip sender
+                            s.emit(eventName, data);
+                            sentCount++;
+                        }
+                    });
+                }
+            });
+            // console.log(`[BROADCAST] ${eventName} to room ${roomId}: ${sentCount} sockets`);
+            return sentCount;
+        };
+
         // [FIX] VIP to CannonKind Mapping (Source: Go code)
         // Each VIP level has 3 cannons: base, base+1, base+2
         // VIP 0: 1,2,3  VIP 1: 4,5,6  VIP 2: 7,8,9  etc.
@@ -1105,7 +1127,8 @@ ports.forEach(port => {
                     socket.emit('new_user_comes_push', mySeatPayload);
 
                     // [BROADCAST FIX] Notify OTHER players in the room that a new user joined
-                    socket.broadcast.to('room_' + validRoomId).emit('new_user_comes_push', mySeatPayload);
+                    // [CROSS-INSTANCE] Use broadcastToRoom instead of socket.broadcast.to()
+                    broadcastToRoom(validRoomId, 'new_user_comes_push', mySeatPayload, socket.id);
                     console.log(`[BROADCAST] Notified other players in room_${validRoomId} about new user ${userId}`);
 
                     // [SYNC FIX] Send existing users' info to the new player
@@ -1394,7 +1417,8 @@ ports.forEach(port => {
                 reqData.chairId = (room.users[socket.userId]?.seatIndex || 0) + 1;
                 reqData.userId = socket.userId;
                 // [FIX] Use room prefix for laser broadcast
-                socket.broadcast.to('room_' + socket.currentRoomId).emit('user_fire_Reply', reqData);
+                // [CROSS-INSTANCE] Use broadcastToRoom instead of socket.broadcast.to()
+                broadcastToRoom(socket.currentRoomId, 'user_fire_Reply', reqData, socket.id);
                 return;  // Don't deduct score, don't add to aliveBullets
             }
 
@@ -1452,10 +1476,11 @@ ports.forEach(port => {
 
             // Broadcast to other users
             // [FIX] Use 'room_' prefix to match socket.join('room_' + roomId)
-            socket.broadcast.to('room_' + socket.currentRoomId).emit('user_fire_Reply', {
+            // [CROSS-INSTANCE] Use broadcastToRoom instead of socket.broadcast.to()
+            broadcastToRoom(socket.currentRoomId, 'user_fire_Reply', {
                 ...reqData,
                 userId: socket.userId // Ensure userId is sent
-            });
+            }, socket.id);
         });
 
         // --- LASER CATCH ---
@@ -1511,7 +1536,8 @@ ports.forEach(port => {
                     isLaser: true
                 };
 
-                io.in('room_' + socket.currentRoomId).emit('catch_fish_reply', catchReply);
+                // [CROSS-INSTANCE] Use broadcastToRoom instead of io.in()
+                broadcastToRoom(socket.currentRoomId, 'catch_fish_reply', catchReply);
                 console.log(`[LASER HIT] User ${socket.userId} hit ${killedFishes.length} fish. Reward: ${catchFishAddScore}`);
             }
         });
@@ -1547,7 +1573,8 @@ ports.forEach(port => {
                 chairId: room.users[socket.userId].seatIndex + 1,
                 cannonKind: cannonKind
             };
-            socket.broadcast.to('room_' + socket.currentRoomId).emit('user_change_cannon_reply', response);
+            // [CROSS-INSTANCE] Use broadcastToRoom instead of socket.broadcast.to()
+            broadcastToRoom(socket.currentRoomId, 'user_change_cannon_reply', response, socket.id);
         });
 
         // --- LOCK FISH (Restored) ---
@@ -1563,7 +1590,8 @@ ports.forEach(port => {
             };
 
             // [FIX] Use 'room_' prefix to match socket.join('room_' + roomId)
-            socket.broadcast.to('room_' + socket.currentRoomId).emit('lock_fish_reply', response);
+            // [CROSS-INSTANCE] Use broadcastToRoom instead of socket.broadcast.to()
+            broadcastToRoom(socket.currentRoomId, 'lock_fish_reply', response, socket.id);
             console.log(`[LOCK] User ${socket.userId} locked fish ${response.fishId}`);
         });
 
@@ -1579,7 +1607,8 @@ ports.forEach(port => {
             console.log(`[FROZEN] User ${socket.userId} froze the scene for 10s`);
 
             // Broadcast to ALL users (包括自己，如果客户端需要服务器确认)
-            io.in('room_' + socket.currentRoomId).emit('user_frozen_reply', {
+            // [CROSS-INSTANCE] Use broadcastToRoom instead of io.in()
+            broadcastToRoom(socket.currentRoomId, 'user_frozen_reply', {
                 cutDownTime: 10000 // Client expects MILLISECONDS (10s)
             });
         });
@@ -1598,7 +1627,8 @@ ports.forEach(port => {
             const room = roomManager.getRoom(socket.currentRoomId);
 
             // 1. Broadcast exit to other players
-            io.in(roomName).emit('exit_notify_push', socket.userId);
+            // [CROSS-INSTANCE] Use broadcastToRoom instead of io.in()
+            broadcastToRoom(socket.currentRoomId, 'exit_notify_push', socket.userId);
 
             // 2. Leave room channel to stop receiving broadcasts
             socket.leave(roomName);
@@ -1816,7 +1846,8 @@ ports.forEach(port => {
                 };
                 console.log(`[CATCH SUCCESS] Broadcasting catch_fish_reply:`, catchReply);
                 // [FIX] Broadcast to room only, not all sockets globally
-                io.in('room_' + socket.currentRoomId).emit('catch_fish_reply', catchReply);
+                // [CROSS-INSTANCE] Use broadcastToRoom instead of io.in()
+                broadcastToRoom(socket.currentRoomId, 'catch_fish_reply', catchReply);
             }
 
             // Delete bullet after catch (Canonical behavior from GO implementation)
@@ -2019,7 +2050,8 @@ ports.forEach(port => {
             // [FIX] Broadcast exit to current room before cleanup
             if (socket.currentRoomId && socket.userId) {
                 const roomName = 'room_' + socket.currentRoomId;
-                io.in(roomName).emit('exit_notify_push', socket.userId);
+                // [CROSS-INSTANCE] Use broadcastToRoom instead of io.in()
+                broadcastToRoom(socket.currentRoomId, 'exit_notify_push', socket.userId);
                 // [CRITICAL] Leave room to stop receiving broadcasts
                 socket.leave(roomName);
                 console.log(`[DISCONNECT] User ${socket.userId} left ${roomName} and broadcasted exit`);
