@@ -214,6 +214,28 @@ const checkPayment = () => {
 
 ---
 
+## 常見問題：Vite Build Cache
+
+**問題**：修改代碼後 rebuild，但新代碼沒有出現在 production bundle 中。
+
+**原因**：Vite 的 `node_modules/.vite` 目錄有 cache，可能使用舊的編譯結果。
+
+**解決方案**：
+```bash
+# 清除 cache 後重新 build
+rm -rf node_modules/.vite dist
+npm run build
+```
+
+**驗證方法**：
+```bash
+# 檢查 built JS 是否包含特定字串
+grep -c "YOUR_LOG_STRING" dist/assets/index-*.js
+# 如果返回 0，表示代碼沒有被編譯進去
+```
+
+---
+
 ## Checklist：新增 Admin 解鎖功能
 
 當為新服務加入「管理員免費使用」功能時：
