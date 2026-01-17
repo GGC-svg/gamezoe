@@ -569,6 +569,13 @@ ports.forEach(port => {
 
     app.get('/get_user_status', (req, res) => { res.json({ errcode: 0, status: 1 }); });
     app.get('/get_message', (req, res) => { res.json({ errcode: 0, data: [], version: 1, msg: "Welcome!" }); });
+
+    // [FIX] Handle /enter_private_room to avoid 404, return error so client uses public room
+    app.get('/enter_private_room', (req, res) => {
+        console.log(`[EnterPrivateRoom] Rejected - private rooms not supported. Client will use public room.`);
+        res.json({ errcode: 1, errmsg: "Private room not found" });
+    });
+
     app.get('/enter_public_room', (req, res) => {
         const { account, baseParam } = req.query;
 
