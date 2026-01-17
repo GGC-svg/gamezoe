@@ -506,7 +506,7 @@ ports.forEach(port => {
     function handleLogin(req, res, port) {
         const account = req.query.account || req.body.account || "guest_10086";
         // [GAME_ID_FIX] Read gameId from query parameter (injected by client)
-        const gameId = req.query.gameId || req.body.gameId || 'fish';
+        const gameId = req.query.gameId || req.body.gameId || 'fish-master';
         console.log(`[HTTP] Login Request: ${account}, GameID: ${gameId}`);
 
         // [GAME_ID_CACHE] Store user's gameId for socket login to use later
@@ -622,7 +622,7 @@ ports.forEach(port => {
     // This solves the "balance not syncing during gameplay" problem
     app.get('/api/room/balance', (req, res) => {
         const userId = req.query.userId;
-        const gameId = req.query.gameId || 'fish';
+        const gameId = req.query.gameId || 'fish-master';
 
         if (!userId) {
             return res.status(400).json({ success: false, error: 'userId required' });
@@ -735,7 +735,7 @@ ports.forEach(port => {
     // Helper to save user score to DB
     // [ARCH FIX] ONLY update fish_balance (Game Points). NEVER touch gold_balance (Platform Coins) here.
     // [GAME_ID_FIX] Now accepts gameId parameter to save to specific game only
-    function saveUserToDB(userId, score, gameId = 'fish') {
+    function saveUserToDB(userId, score, gameId = 'fish-master') {
         if (!userId || userId === 'guest') return;
 
         // Convert integer balance back to float for DB storage
@@ -830,8 +830,8 @@ ports.forEach(port => {
             // 1. Cache from HTTP login (most reliable - fixes socket race condition)
             // 2. Socket handshake query (if client patch applied in time)
             // 3. Login event payload
-            // 4. Default to 'fish'
-            let gameId = 'fish';
+            // 4. Default to 'fish-master'
+            let gameId = 'fish-master';
             const cachedGameId = userGameIdCache.get(userId);
             if (cachedGameId && (Date.now() - cachedGameId.timestamp < 300000)) { // 5 min cache
                 gameId = cachedGameId.gameId;
@@ -2111,9 +2111,9 @@ ports.forEach(port => {
                     Object.values(room.users).forEach(u => {
                         if (u.userId !== 'guest' && u.online) {
                             // [GAME_ID_FIX] Pass user's stored gameId
-                            const gameIdToSave = u.gameId || 'fish';
+                            const gameIdToSave = u.gameId || 'fish-master';
                             if (!u.gameId) {
-                                console.warn(`[PeriodicSave] WARNING: User ${u.userId} has no gameId! Defaulting to 'fish'`);
+                                console.warn(`[PeriodicSave] WARNING: User ${u.userId} has no gameId! Defaulting to 'fish-master'`);
                             }
                             saveUserToDB(u.userId, u.score, gameIdToSave);
                             savedCount++;

@@ -932,7 +932,7 @@ const verifyBridgeKey = (req, res, next) => {
 // 1. Get Balance (Bridge) - Updated to use per-game balance table
 app.get('/api/bridge/balance/:userId', verifyBridgeKey, (req, res) => {
     const { userId } = req.params;
-    const gameId = req.query.gameId || 'fish';  // Default to 'fish' for backward compatibility
+    const gameId = req.query.gameId || 'fish-master';  // Default to 'fish-master' for Fish Master game
 
     db.get("SELECT gold_balance, silver_balance FROM users WHERE id = ?", [userId], (err, userRow) => {
         if (err) {
@@ -978,7 +978,7 @@ app.get('/api/bridge/balance/:userId', verifyBridgeKey, (req, res) => {
 // 1.5 Deposit to Game (Specific for Fish Master Passthrough) - Updated to use per-game balance table
 app.post('/api/bridge/deposit', verifyBridgeKey, (req, res) => {
     const { userId, amount, gameId } = req.body;
-    const targetGameId = gameId || 'fish';  // Default to 'fish' for backward compatibility
+    const targetGameId = gameId || 'fish-master';  // Default to 'fish-master' for Fish Master game
 
     // Rate: 1 Gold = 1 Game Point (1:1)
     if (!userId || !amount || amount <= 0) {
@@ -3042,7 +3042,7 @@ app.post('/api/bridge/transaction/deposit', verifyBridgeKey, (req, res) => {
                         if (gameRes.code === 200) {
                             db.run("UPDATE wallet_transactions SET status = 'COMPLETED' WHERE order_id = ?", [orderId]);
                             // Also update per-game balance table for tracking
-                            const targetGameId = gameId || 'fish';
+                            const targetGameId = gameId || 'fish-master';
                             db.run(`INSERT INTO user_game_balances (user_id, game_id, balance, total_deposited, created_at, updated_at)
                                     VALUES (?, ?, ?, ?, datetime('now', '+8 hours'), datetime('now', '+8 hours'))
                                     ON CONFLICT(user_id, game_id) DO UPDATE SET
@@ -3084,7 +3084,7 @@ app.post('/api/bridge/transaction/withdraw', (req, res) => {
     // TODO: Verify Signature using verifySignature(req.body, signature)
 
     const processWithdrawal = (isUpdate) => {
-        const gameId = req.body.game_id || 'fish';
+        const gameId = req.body.game_id || 'fish-master';
 
         // Add Gold
         db.run("UPDATE users SET gold_balance = gold_balance + ? WHERE id = ?", [amount, user_id], (err) => {
