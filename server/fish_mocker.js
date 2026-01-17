@@ -934,7 +934,8 @@ ports.forEach(port => {
                             saveUserToDB(userId, oldRoom.users[userId].score, existingSocket.gameId || oldRoom.users[userId].gameId);
                             delete oldRoom.users[userId];
                             console.log(`[KICK] Removed user ${userId} from old room ${existingSocket.currentRoomId}`);
-                            ioInst.in(oldRoomName).emit('exit_notify_push', userId);
+                            // [FIX] Use cross-instance broadcast instead of single-instance ioInst.in()
+                            broadcastToRoom(existingSocket.currentRoomId, 'exit_notify_push', userId);
                         }
 
                         roomManager.checkAndDeleteEmptyRoom(existingSocket.currentRoomId);
@@ -1158,8 +1159,9 @@ ports.forEach(port => {
 
                     // [BROADCAST FIX] Notify OTHER players in the room that a new user joined
                     // [CROSS-INSTANCE] Use broadcastToRoom instead of socket.broadcast.to()
-                    broadcastToRoom(validRoomId, 'new_user_comes_push', mySeatPayload, socket.id);
-                    console.log(`[BROADCAST] Notified other players in room_${validRoomId} about new user ${userId}`);
+                    const sentCount = broadcastToRoom(validRoomId, 'new_user_comes_push', mySeatPayload, socket.id);
+                    console.log(`[SEAT_SYNC] User ${userId} joined seat ${mySeatPayload.seatIndex}. Notified ${sentCount} other players in room ${validRoomId}`);
+                    console.log(`[SEAT_SYNC] Payload:`, JSON.stringify({ userId: mySeatPayload.userId, seatIndex: mySeatPayload.seatIndex, cannonKind: mySeatPayload.cannonKind }));
 
                     // [SYNC FIX] Send existing users' info to the new player
                     // This ensures new player sees existing players' cannons and state
@@ -1663,7 +1665,8 @@ ports.forEach(port => {
 
             // 1. Broadcast exit to other players
             // [CROSS-INSTANCE] Use broadcastToRoom instead of io.in()
-            broadcastToRoom(socket.currentRoomId, 'exit_notify_push', socket.userId);
+            const exitSentCount = broadcastToRoom(socket.currentRoomId, 'exit_notify_push', socket.userId);
+            console.log(`[SEAT_SYNC] User ${socket.userId} exiting room ${socket.currentRoomId}. Notified ${exitSentCount} other players`);
 
             // 2. Leave room channel to stop receiving broadcasts
             socket.leave(roomName);
