@@ -1177,12 +1177,26 @@ ports.forEach(port => {
                         }
                     });
 
-                    // [SYNC FIX] Do NOT send existing fish to new players
-                    // This ensures all players see fish at the SAME position via live broadcasts
-                    // Spawn happens every 2s (small fish), so new player won't wait long
-                    const existingFishCount = room.aliveFish ? Object.keys(room.aliveFish).length : 0;
-                    console.log(`[SYNC] New user ${userId} joined. Skipping ${existingFishCount} existing fish (will sync via live broadcasts)`);
-                    // Fish will arrive via RoomManager spawn broadcasts within 2 seconds
+                    // [SYNC FIX] Send existing fish with serverTime for position calculation
+                    // Client should calculate: elapsed = serverTime - activeTime
+                    // Then position fish at the correct point along its trace
+                    const serverTime = Date.now();
+                    const existingFishList = [];
+                    if (room.aliveFish) {
+                        Object.values(room.aliveFish).forEach(f => {
+                            // Only send fish that haven't expired (120s lifetime)
+                            if (serverTime - f.activeTime < 120000) {
+                                existingFishList.push({
+                                    ...f,
+                                    serverTime: serverTime  // Client uses this to calculate elapsed time
+                                });
+                            }
+                        });
+                    }
+                    console.log(`[SYNC] Sending ${existingFishList.length} existing fish to new user ${userId} (serverTime: ${serverTime})`);
+                    if (existingFishList.length > 0) {
+                        socket.emit('build_fish_reply', existingFishList);
+                    }
 
                 }, 500);
 
