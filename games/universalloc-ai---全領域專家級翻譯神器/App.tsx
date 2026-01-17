@@ -370,8 +370,6 @@ const App: React.FC = () => {
                  (window.parent !== window && (window.parent as any).GameZoe?.currentUser);
     const isAdmin = user?.role === 'admin';
 
-    console.log('[UniversalLoc] handleFileLoaded - user:', user?.id, 'role:', user?.role, 'isAdmin:', isAdmin);
-
     // 使用 prev 保留之前的解鎖狀態（如果已經是 admin 解鎖的話）
     setConfig(prev => ({
       ...prev,  // 保留之前的設定（包括 isPremiumUnlocked）
