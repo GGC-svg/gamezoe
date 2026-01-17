@@ -362,9 +362,18 @@ const App: React.FC = () => {
 
   const handleFileLoaded = (file: File, data: any, mode: 'translate' | 'clean' | 'proofread') => {
     setTranslationItems([]);
+
+    // 檢查是否為管理員 (保留 Admin 解鎖狀態)
+    const user = (window as any).currentUser ||
+                 (window as any).GameZoe?.currentUser ||
+                 (window.parent !== window && (window.parent as any).currentUser) ||
+                 (window.parent !== window && (window.parent as any).GameZoe?.currentUser);
+    const isAdmin = user?.role === 'admin';
+
     setConfig({
       isProofreadMode: mode === 'proofread',
-      isPremiumUnlocked: false,
+      isPremiumUnlocked: isAdmin, // 管理員自動解鎖，否則需付費
+      internalAccessKey: isAdmin ? 'GAMELOC_INTERNAL_2025' : undefined,
       workMode: mode  // 儲存模式: translate/proofread/clean
     });
     setRawFile(file);
