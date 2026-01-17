@@ -1079,22 +1079,22 @@ ports.forEach(port => {
                 const mySeat = room.users[userId];
                 const TARGET_SEAT_INDEX = mySeat.seatIndex;
 
-                // [FIX] SHOTGUN APPROACH: Send both Casing styles to satisfy Client
+                // [GO_ALIGNED] Match Go's UserInfo struct for new_user_comes_push
+                // Go sends: userId, score, name, ready, seatIndex, vip, cannonKind, power, lockFishId, online, ip
                 const mySeatPayload = {
                     ...mySeat,
-                    userId: userId, userid: userId,          // Both
-                    seatIndex: TARGET_SEAT_INDEX, seatindex: TARGET_SEAT_INDEX, // Both
-                    chairId: TARGET_SEAT_INDEX + 1, // [SEAT_SYNC_FIX] Client expects 1-indexed chairId
+                    userId: userId, userid: userId,          // Both casings
+                    seatIndex: TARGET_SEAT_INDEX, seatindex: TARGET_SEAT_INDEX, // Both casings
+                    name: mySeat.name || ("Hunter_" + userId.substring(0, 5)), // [GO] Ensure name is set
                     cannonKind: correctCannonKind,
                     vip: userVip,
-                    online: true, // [SEAT_SYNC_FIX] Explicitly mark as online
-                    // [FIX] Add Cannon Power/Multiplier Properties
-                    power: 1,    // [FIX] Power Level (1-10)
-                    multiplier: 1, // [FIX] Multiplier
-                    cannonPower: 1,
-                    bullet: 1,   // [FIX] Bullet Level (for UI display)
-                    score: toDisplayFloat(mySeat.score), // Game Points -> FLOAT
-                    gold: toDisplayFloat(mySeat.gold)    // Platform Coin -> FLOAT
+                    online: true,        // [GO] UserInfo.Online
+                    ready: true,         // [GO] UserInfo.Ready - CRITICAL for client to show cannon
+                    lockFishId: 0,       // [GO] UserInfo.LockFishId
+                    ip: "::1",           // [GO] UserInfo.Ip
+                    power: mySeat.power || 0,  // [GO] Use actual power
+                    score: toDisplayFloat(mySeat.score), // Game Points -> FLOAT (Go: ConversionScore)
+                    gold: toDisplayFloat(mySeat.gold)    // Platform Coin (extra field)
                 };
 
                 const emptySeat = { userid: 0, userId: "0", score: 0, name: "", online: false, cannonKind: 1, vip: 0, seatIndex: -1, seatindex: -1, power: 0, bullet: 0 };
@@ -1162,24 +1162,29 @@ ports.forEach(port => {
                     // [BROADCAST FIX] Notify OTHER players in the room that a new user joined
                     // [CROSS-INSTANCE] Use broadcastToRoom instead of socket.broadcast.to()
                     const sentCount = broadcastToRoom(validRoomId, 'new_user_comes_push', mySeatPayload, socket.id);
-                    console.log(`[SEAT_SYNC] User ${userId} joined seat ${mySeatPayload.seatIndex} (chairId ${mySeatPayload.chairId}). Notified ${sentCount} other players in room ${validRoomId}`);
+                    console.log(`[SEAT_SYNC] User ${userId} joined seat ${mySeatPayload.seatIndex}. Notified ${sentCount} other players in room ${validRoomId}`);
                     console.log(`[SEAT_SYNC] FULL Payload:`, JSON.stringify(mySeatPayload));
 
                     // [SYNC FIX] Send existing users' info to the new player
                     // This ensures new player sees existing players' cannons and state
+                    // [GO_ALIGNED] Match Go's UserInfo struct
                     Object.values(room.users).forEach(existingUser => {
                         if (existingUser.userId !== userId) {
                             const existingUserPayload = {
                                 ...existingUser,
                                 userId: existingUser.userId, userid: existingUser.userId,
                                 seatIndex: existingUser.seatIndex, seatindex: existingUser.seatIndex,
-                                chairId: existingUser.seatIndex + 1, // [SEAT_SYNC_FIX] Client expects 1-indexed chairId
-                                online: true, // [SEAT_SYNC_FIX] Explicitly mark as online
+                                name: existingUser.name || ("Hunter_" + existingUser.userId.substring(0, 5)),
+                                online: true,
+                                ready: true,         // [GO] UserInfo.Ready
+                                lockFishId: 0,       // [GO] UserInfo.LockFishId
+                                ip: "::1",           // [GO] UserInfo.Ip
+                                power: existingUser.power || 0,
                                 score: toDisplayFloat(existingUser.score),
                                 gold: toDisplayFloat(existingUser.gold)
                             };
                             socket.emit('new_user_comes_push', existingUserPayload);
-                            console.log(`[SYNC] Sent existing user ${existingUser.userId} (seat ${existingUser.seatIndex}, chairId ${existingUser.seatIndex + 1}) info to new user ${userId}`);
+                            console.log(`[SYNC] Sent existing user ${existingUser.userId} (seat ${existingUser.seatIndex}) info to new user ${userId}`);
                         }
                     });
 
