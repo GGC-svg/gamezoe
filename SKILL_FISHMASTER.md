@@ -808,6 +808,67 @@ app.get('/enter_private_room', (req, res) => {
 });
 ```
 
+### 11. 離開再進入房間時魚群資料混淆 (2026/01/18 修復)
+
+**症狀**:
+- 玩家離開房間，短時間內重新進入
+- 看到大量舊魚或魚的位置不正確
+- 魚群顯示混亂
+
+**原因**: Node.js 實作與 Go 原始碼行為不一致
+
+| 項目 | Go 原始碼 | Node.js (修復前) |
+|------|-----------|------------------|
+| 空房間處理 | 立即刪除 | 60 秒寬限期 |
+| spawn timers | 立即停止 | 繼續運行 |
+| 魚群資料 | 清空 | 持續累積 |
+
+Go 原始碼 (`request.go`):
+```go
+if len(client.Room.Users) == 0 {
+    delete(RoomMgr.Rooms, client.Room.RoomId)
+    client.Room.Exit <- true  // 立即停止房間 goroutine
+}
+```
+
+Node.js 修復前 (`RoomManager.js:84-99`):
+```javascript
+// 有 60 秒寬限期，導致魚群持續生成累積
+setTimeout(() => {
+    this.deleteRoom(roomId);
+}, 60000);
+```
+
+**問題流程**:
+1. 玩家 A 離開房間 → `checkAndDeleteEmptyRoom` 被呼叫
+2. 60 秒寬限期開始，**但 spawn timers 繼續運行**
+3. 魚群持續生成並累積在 `room.aliveFish`
+4. 玩家 A 在 60 秒內重新進入
+5. 系統發送所有累積的舊魚
+6. 舊魚的 `activeTime` 是過去時間，客戶端計算位置錯誤
+
+**修復**: 移除 60 秒寬限期，改為立即刪除空房間（與 Go 行為一致）
+
+```javascript
+// RoomManager.js - 修復後
+checkAndDeleteEmptyRoom(roomId) {
+    const room = this.getRoom(roomId);
+    if (!room) return;
+
+    const userCount = Object.keys(room.users).length;
+    if (userCount === 0) {
+        // [FIX] Delete immediately like Go server does
+        console.log(`[ROOM] Room ${roomId} is empty, deleting immediately`);
+        this.deleteRoom(roomId);  // 停止 timers + 清空資料
+    }
+}
+```
+
+**為什麼不影響多人廣播**:
+- 房間刪除只在**完全無人**時發生
+- 如果還有其他玩家，房間不會被刪除
+- 廣播邏輯 (`socket.broadcast.to()`, `io.in()`) 不受影響
+
 ---
 
 ## 關鍵檔案清單

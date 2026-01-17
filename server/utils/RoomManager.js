@@ -79,7 +79,9 @@ export class RoomManager {
     }
 
     /**
-     * Check if room is empty and schedule deletion
+     * Check if room is empty and delete immediately (aligned with Go behavior)
+     * Go code: request.go deletes room immediately when len(Users) == 0
+     * No grace period - prevents stale fish accumulation when user re-enters
      */
     checkAndDeleteEmptyRoom(roomId) {
         const room = this.getRoom(roomId);
@@ -87,14 +89,11 @@ export class RoomManager {
 
         const userCount = Object.keys(room.users).length;
         if (userCount === 0) {
-            // Grace period: wait 60s before deleting
-            console.log(`[ROOM] Room ${roomId} is empty, scheduling deletion in 60s...`);
-            setTimeout(() => {
-                const stillExists = this.getRoom(roomId);
-                if (stillExists && Object.keys(stillExists.users).length === 0) {
-                    this.deleteRoom(roomId);
-                }
-            }, 60000);
+            // [FIX] Delete immediately like Go server does
+            // Go: if len(client.Room.Users) == 0 { delete(RoomMgr.Rooms, ...) }
+            // This prevents spawn timers from running and fish from accumulating
+            console.log(`[ROOM] Room ${roomId} is empty, deleting immediately (Go-aligned behavior)`);
+            this.deleteRoom(roomId);
         }
     }
 
