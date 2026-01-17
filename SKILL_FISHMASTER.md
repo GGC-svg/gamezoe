@@ -760,6 +760,54 @@ pm2 logs 0 --lines 20 --nostream
 
 **修復**: 根據日誌判斷是權限問題還是 game_id 問題，然後重啟服務
 
+### 9. git reset --hard 導致資料庫被清空 (2026/01/18 修復)
+
+**症狀**:
+- 部署後遊戲餘額重置回初始值
+- `sqlite3 gamezoe.db ".tables"` 沒有輸出或報錯 `no such table`
+- 資料庫檔案大小為 0 bytes
+
+**原因**: `gamezoe.db` 被 Git 追蹤，`git reset --hard` 會用 Git 版本覆蓋 Server 上的資料庫
+
+**修復歷程**:
+```bash
+# 1. 從 Git 移除追蹤 (本機執行)
+git rm --cached gamezoe.db server/gamezoe.db
+# 確保 .gitignore 包含 gamezoe.db
+
+# 2. 從備份還原 (Server 執行)
+ls ~/gamezoe/server/*.db.bak*  # 找到最新備份
+cp ~/gamezoe/server/gamezoe.db.bak.XXXXXXXX ~/gamezoe/server/gamezoe.db
+chmod 666 ~/gamezoe/server/gamezoe.db
+```
+
+**預防**:
+- ✅ 已將 `gamezoe.db` 從 Git 移除追蹤
+- ✅ 已加入 `.gitignore`
+- 未來 `git reset --hard` 不會影響資料庫
+
+### 10. /enter_private_room 404 錯誤
+
+**症狀**:
+- Console 顯示 `GET /enter_private_room?...&roomid=X 404`
+- 不影響遊戲功能，但有錯誤訊息
+
+**原因**:
+- 登入回應包含 `roomid` 欄位
+- 客戶端會嘗試進入該房間
+- 原始 Go 伺服器沒有實作此 API
+
+**修復**:
+1. 將登入回應的 `roomid: 1` 改為 `roomid: 0`
+2. 新增 `/enter_private_room` 端點回傳 `{errcode: 1}`，讓客戶端跳過
+
+```javascript
+// fish_mocker.js
+app.get('/enter_private_room', (req, res) => {
+    res.json({ errcode: 1, errmsg: "Private room not found" });
+});
+```
+
 ---
 
 ## 關鍵檔案清單
@@ -824,7 +872,14 @@ saveUserToDB(userId, score, socket.gameId);
 
 ## 備份提醒
 
-修改前務必備份：
+### ⚠️ 資料庫操作必須先備份！
+
+```bash
+# 任何資料庫修改前，務必執行：
+cp ~/gamezoe/server/gamezoe.db ~/gamezoe/server/gamezoe.db.bak.$(date +%Y%m%d%H%M%S)
+```
+
+### 程式碼修改前備份
 
 ```bash
 # 本機
@@ -833,6 +888,13 @@ cp server/utils/RoomManager.js server/utils/RoomManager.js.bak
 
 # Server
 cp ~/gamezoe/server/fish_mocker.js ~/gamezoe/server/fish_mocker.js.bak
+```
+
+### 備份檔案清理
+
+定期清理超過 7 天的備份：
+```bash
+find ~/gamezoe/server -name "*.bak.*" -mtime +7 -delete
 ```
 
 ---
