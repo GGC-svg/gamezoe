@@ -68,15 +68,15 @@ npm install -g egret
 # 進入前端目錄
 cd games/egret-H5-qipai-game-main/h5-client
 
-# 修改配置指向正式伺服器
+# 修改配置指向正式伺服器 (透過 nginx 代理)
 # 編輯 resource/config/global.json:
 {
     "IsDebug": false,
     "GoldMode": false,
     "HttpSerever": "https://gamezoe.com",
-    "SocketUrl": "wss://gamezoe.com:5014/websocket",
-    "SocketServer": "gamezoe.com:5014/websocket",
-    "SocketPort": 5014
+    "SocketUrl": "wss://gamezoe.com/huohua-ws/websocket",
+    "SocketServer": "gamezoe.com/huohua-ws/websocket",
+    "SocketPort": 443
 }
 
 # 編譯
@@ -230,9 +230,11 @@ mysql -u gameserver -pbosan204 -e "SHOW DATABASES;" | grep ma_lai
 
 #### 步驟 5: 啟動 h5-server
 
+> ⚠️ **注意**: Launcher.class 在根目錄，不是在 package 內，所以不需要包名。
+
 ```bash
 cd ~/h5-server/game-server-malai-h5-1.0.0
-java -cp ".:conf:lib/*" com.idealighter.game.server.Launcher
+java -cp "conf:lib/*" Launcher
 ```
 
 #### 步驟 6: 使用 PM2 管理 (推薦)
@@ -242,7 +244,7 @@ java -cp ".:conf:lib/*" com.idealighter.game.server.Launcher
 ```bash
 echo '#!/bin/bash
 cd ~/h5-server/game-server-malai-h5-1.0.0
-exec java -cp ".:conf:lib/*" com.idealighter.game.server.Launcher' > ~/start-h5-server.sh
+exec java -cp "conf:lib/*" Launcher' > ~/start-h5-server.sh
 chmod +x ~/start-h5-server.sh
 ```
 
@@ -304,19 +306,42 @@ sudo ufw allow 4014/tcp
 
 ---
 
-## Nginx WebSocket 代理 (可選)
+## Nginx WebSocket 代理 (必要)
 
-如果要用 wss://gamezoe.com/ws 代替 wss://gamezoe.com:5014：
+> ⚠️ **重要**: 直接連接 `wss://gamezoe.com:5014` 會失敗，因為 5014 port 是 WS 而非 WSS。必須透過 nginx 代理。
+
+### 配置 (已部署)
+
+在 `/etc/nginx/sites-enabled/gamezoe` 的 server block 內加入：
 
 ```nginx
-location /ws {
-    proxy_pass http://127.0.0.1:5014;
+location /huohua-ws/ {
+    proxy_pass http://localhost:5014/;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
     proxy_set_header Host $host;
     proxy_read_timeout 86400;
 }
+```
+
+### 前端配置 (global.json)
+
+```json
+{
+    "IsDebug": false,
+    "GoldMode": false,
+    "HttpSerever": "https://gamezoe.com",
+    "SocketUrl": "wss://gamezoe.com/huohua-ws/websocket",
+    "SocketServer": "gamezoe.com/huohua-ws/websocket",
+    "SocketPort": 443
+}
+```
+
+### 重載 nginx
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ---
@@ -368,6 +393,32 @@ location /ws {
 1. 建立 `gameserver` 用戶 (見上方步驟)
 2. 更新配置檔使用 `gameserver` 用戶
 
+### Q: MySQL 8.0 認證插件錯誤 (caching_sha2_password)？
+
+**A**: 舊版 JDBC driver 不支援 MySQL 8.0 的預設認證方式。
+
+**錯誤訊息**: `Unable to load authentication plugin 'caching_sha2_password'`
+
+**解決方案**: 改用傳統認證方式：
+
+```bash
+sudo mysql -e "ALTER USER 'gameserver'@'localhost' IDENTIFIED WITH mysql_native_password BY 'bosan204'; FLUSH PRIVILEGES;"
+```
+
+### Q: MySQL 8.0 query_cache_size 錯誤？
+
+**A**: MySQL 8.0 已移除 query_cache 功能，舊版 JDBC driver 會報錯。
+
+**錯誤訊息**: `Unknown system variable 'query_cache_size'`
+
+**解決方案**: 升級 MySQL JDBC driver 到 8.0+：
+
+```bash
+cd ~/h5-server/game-server-malai-h5-1.0.0/lib
+rm mysql-connector-java-5.1.42.jar
+wget https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.28/mysql-connector-java-8.0.28.jar
+```
+
 ### Q: h5-server 啟動後立即退出？
 
 **A**: 檢查日誌：
@@ -417,7 +468,7 @@ E:\steam\gamezoe\games\egret-H5-qipai-game-main\
 
 ```
 本機:
-1. 修改 h5-client/resource/config/global.json → gamezoe.com:5014
+1. 修改 h5-client/resource/config/global.json → gamezoe.com/huohua-ws/websocket
 2. egret build && egret publish
 3. cp bin-release/web/[ts]/* games/huohua-qipai/
 4. git add + commit + push
@@ -428,11 +479,65 @@ Server:
 7. pm2 restart all (前端完成)
 
 8. tar -xzf h5-server 建置包
-9. sudo mysql 建立 gameserver 用戶
+9. sudo mysql 建立 gameserver 用戶 (用 mysql_native_password)
 10. sed 更新 jdbc 配置
-11. java 或 pm2 啟動 h5-server
-12. ufw 開放 5014 port
+11. 升級 MySQL JDBC driver 到 8.0.28
+12. java -cp "conf:lib/*" Launcher 或 pm2 啟動 h5-server
+13. 設定 nginx WebSocket 代理 (/huohua-ws/)
+14. sudo systemctl reload nginx
 ```
+
+---
+
+## 測試紀錄 (2026/01/17)
+
+### 問題 1: MySQL 認證失敗
+
+**症狀**: h5-server 無法連接 MySQL
+
+**錯誤**: `Unable to load authentication plugin 'caching_sha2_password'`
+
+**原因**: MySQL 8.0 預設使用新的認證插件，但 JDBC 5.1.42 不支援
+
+**解決**:
+```bash
+sudo mysql -e "ALTER USER 'gameserver'@'localhost' IDENTIFIED WITH mysql_native_password BY 'bosan204';"
+```
+
+### 問題 2: MySQL query_cache_size 錯誤
+
+**症狀**: h5-server 啟動後立即報錯
+
+**錯誤**: `Unknown system variable 'query_cache_size'`
+
+**原因**: MySQL 8.0 移除了 query_cache 功能
+
+**解決**: 升級 JDBC driver
+```bash
+cd ~/h5-server/game-server-malai-h5-1.0.0/lib
+rm mysql-connector-java-5.1.42.jar
+wget https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.28/mysql-connector-java-8.0.28.jar
+```
+
+### 問題 3: WebSocket 連線失敗
+
+**症狀**: 遊戲載入後連不上伺服器
+
+**錯誤**: Console 顯示 WebSocket connection failed
+
+**原因**: 前端配置直連 `wss://gamezoe.com:5014`，但 5014 是 WS 不是 WSS
+
+**解決**:
+1. 新增 nginx 代理 `/huohua-ws/` → `localhost:5014`
+2. 修改 global.json 使用 `wss://gamezoe.com/huohua-ws/websocket`
+
+### 問題 4: 登入系統未整合 (待處理)
+
+**症狀**: 遊戲顯示獨立登入頁面 (帳號/密碼/驗證碼)
+
+**原因**: h5-client 有自己的認證系統，未與 GameZoe 平台整合
+
+**狀態**: 待規劃整合方案
 
 ---
 
@@ -445,3 +550,11 @@ Server:
 | `start_game_server.bat` | 本機啟動遊戲伺服器 |
 | `start_h5_admin.bat` | 本機啟動後台管理 |
 | `test001_mysql_data.sql` | 資料庫初始化腳本 |
+
+---
+
+## 備份記錄
+
+| 日期 | 備份路徑 | 說明 |
+|------|----------|------|
+| 2026/01/17 | `backups/huohua-qipai-20260117/` | 登入整合前的完整備份 |
