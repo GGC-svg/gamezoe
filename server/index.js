@@ -1129,7 +1129,7 @@ app.post('/api/bridge/transfer', verifyBridgeKey, (req, res) => {
 const getGameConfig = (gameId) => {
     return new Promise((resolve, reject) => {
         db.get(
-            "SELECT has_game_db, game_api_url FROM games WHERE id = ?",
+            "SELECT has_game_db, game_api_url, game_api_token FROM games WHERE id = ?",
             [gameId],
             (err, row) => {
                 if (err) {
@@ -1143,16 +1143,23 @@ const getGameConfig = (gameId) => {
 };
 
 // Helper: Call h5-server API for balance operations
-const callGameServerApi = async (gameApiUrl, endpoint, method, data = null) => {
+const callGameServerApi = async (gameApiUrl, endpoint, method, data = null, authToken = null) => {
     const url = `${gameApiUrl}${endpoint}`;
     console.log(`[GameServer API] ${method} ${url}`, data);
 
     try {
+        const headers = {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        };
+
+        // Add Authorization header if token provided
+        if (authToken) {
+            headers['Authorization'] = authToken;
+        }
+
         const options = {
             method,
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
+            headers
         };
 
         if (method === 'POST' && data) {
@@ -1250,7 +1257,9 @@ app.get('/api/game-balance/:userId/:gameId', async (req, res) => {
                 const result = await callGameServerApi(
                     gameConfig.game_api_url,
                     `/player/getGoldByCode?code=${encodeURIComponent(platformCode)}`,
-                    'GET'
+                    'GET',
+                    null,
+                    gameConfig.game_api_token
                 );
 
                 if (result.success) {
@@ -1381,7 +1390,8 @@ app.post('/api/game-balance/deposit', async (req, res) => {
                     gameConfig.game_api_url,
                     '/player/addGoldByCode',
                     'POST',
-                    { code: platformCode, gold: amountInt }
+                    { code: platformCode, gold: amountInt },
+                    gameConfig.game_api_token
                 );
 
                 if (!apiResult.success) {
@@ -1561,7 +1571,9 @@ app.post('/api/game-balance/withdraw', async (req, res) => {
                 const balanceCheck = await callGameServerApi(
                     gameConfig.game_api_url,
                     `/player/getGoldByCode?code=${encodeURIComponent(platformCode)}`,
-                    'GET'
+                    'GET',
+                    null,
+                    gameConfig.game_api_token
                 );
 
                 if (!balanceCheck.success) {
@@ -1586,7 +1598,8 @@ app.post('/api/game-balance/withdraw', async (req, res) => {
                     gameConfig.game_api_url,
                     '/player/deductGoldByCode',
                     'POST',
-                    { code: platformCode, gold: amountInt }
+                    { code: platformCode, gold: amountInt },
+                    gameConfig.game_api_token
                 );
 
                 if (!apiResult.success) {
