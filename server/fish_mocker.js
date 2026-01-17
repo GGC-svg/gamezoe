@@ -600,6 +600,76 @@ ports.forEach(port => {
     });
 
     // -------------------------------------------------------------------------
+    // REAL-TIME BALANCE API (For Platform Sync)
+    // -------------------------------------------------------------------------
+    // Platform calls this to get user's REAL-TIME balance from room memory
+    // This solves the "balance not syncing during gameplay" problem
+    app.get('/api/room/balance', (req, res) => {
+        const userId = req.query.userId;
+        const gameId = req.query.gameId || 'fish';
+
+        if (!userId) {
+            return res.status(400).json({ success: false, error: 'userId required' });
+        }
+
+        // Search for user in all rooms
+        let userRoom = null;
+        let userScore = null;
+        let roomId = null;
+
+        if (roomManager) {
+            for (const [rId, room] of roomManager.rooms) {
+                if (room.users && room.users[userId]) {
+                    userRoom = room;
+                    userScore = room.users[userId].score;
+                    roomId = rId;
+                    break;
+                }
+            }
+        }
+
+        if (userRoom && userScore !== null) {
+            // User is in a room - return real-time balance from memory
+            const displayBalance = toDisplayFloat(userScore);
+            console.log(`[RoomBalance] User ${userId} in room ${roomId}, memory score: ${userScore} (display: ${displayBalance})`);
+
+            res.json({
+                success: true,
+                source: 'memory',
+                userId: userId,
+                gameId: gameId,
+                balance: displayBalance,
+                roomId: roomId,
+                inRoom: true
+            });
+        } else {
+            // User not in any room - return from DB
+            db.get(
+                `SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = ?`,
+                [userId, gameId],
+                (err, row) => {
+                    if (err) {
+                        console.error(`[RoomBalance] DB Error:`, err);
+                        return res.status(500).json({ success: false, error: 'DB Error' });
+                    }
+
+                    const dbBalance = row ? row.balance : 0;
+                    console.log(`[RoomBalance] User ${userId} not in room, DB balance: ${dbBalance}`);
+
+                    res.json({
+                        success: true,
+                        source: 'database',
+                        userId: userId,
+                        gameId: gameId,
+                        balance: dbBalance,
+                        inRoom: false
+                    });
+                }
+            );
+        }
+    });
+
+    // -------------------------------------------------------------------------
     // SOCKET.IO EVENTS
     // -------------------------------------------------------------------------
 

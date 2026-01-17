@@ -1177,7 +1177,58 @@ app.get('/api/game-balance/:userId/:gameId', async (req, res) => {
     const { userId, gameId } = req.params;
 
     try {
-        // Check if game has independent database
+        // -----------------------------------------------------------------
+        // [REAL-TIME SYNC] Check if game has a real-time room server
+        // Fish game uses fish_mocker.js with in-memory room balance
+        // -----------------------------------------------------------------
+        const REALTIME_GAMES = {
+            'fish': 'http://127.0.0.1:9000',
+            'fish-master': 'http://127.0.0.1:9000'
+        };
+
+        if (REALTIME_GAMES[gameId]) {
+            try {
+                const roomBalanceUrl = `${REALTIME_GAMES[gameId]}/api/room/balance?userId=${encodeURIComponent(userId)}&gameId=${encodeURIComponent(gameId)}`;
+                console.log(`[GameBalance] Querying real-time room balance: ${roomBalanceUrl}`);
+
+                const response = await fetch(roomBalanceUrl, { timeout: 3000 });
+                const result = await response.json();
+
+                if (result.success) {
+                    console.log(`[GameBalance] Real-time balance for ${userId}/${gameId}: ${result.balance} (source: ${result.source}, inRoom: ${result.inRoom})`);
+
+                    // Get additional stats from DB
+                    const stats = await new Promise((resolve) => {
+                        db.get(
+                            "SELECT total_deposited, total_consumed, total_withdrawn FROM user_game_balances WHERE user_id = ? AND game_id = ?",
+                            [userId, gameId],
+                            (err, row) => resolve(row || {})
+                        );
+                    });
+
+                    res.json({
+                        success: true,
+                        user_id: userId,
+                        game_id: gameId,
+                        balance: result.balance,
+                        source: result.source,
+                        inRoom: result.inRoom,
+                        roomId: result.roomId,
+                        total_deposited: stats.total_deposited || 0,
+                        total_consumed: stats.total_consumed || 0,
+                        total_withdrawn: stats.total_withdrawn || 0
+                    });
+                    return;
+                }
+            } catch (roomError) {
+                console.warn(`[GameBalance] Real-time query failed, falling back to DB:`, roomError.message);
+                // Fall through to DB query
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Check if game has independent database (h5-server style)
+        // -----------------------------------------------------------------
         const gameConfig = await getGameConfig(gameId);
 
         if (gameConfig.has_game_db === 1 && gameConfig.game_api_url) {
