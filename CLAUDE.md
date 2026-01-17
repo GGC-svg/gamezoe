@@ -190,8 +190,8 @@ P99_KEY=NTJ1aXpyM1RSUVJNZGdtYWVheWNpWkY3
 P99_IV=UzZKWWRvUm0=
 P99_PASSWORD=VpLQyKrUXe
 P99_API_URL=https://api.p99pay.com/v1
-P99_RETURN_URL=https://gamezoe.cc/api/payment/p99/return
-P99_NOTIFY_URL=https://gamezoe.cc/api/payment/p99/notify
+P99_RETURN_URL=https://gamezoe.com/api/payment/p99/return
+P99_NOTIFY_URL=https://gamezoe.com/api/payment/p99/notify
 ```
 
 > ⚠️ 以上為**測試環境**金鑰，正式上線需更換。
