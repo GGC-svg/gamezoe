@@ -891,8 +891,19 @@ ports.forEach(port => {
                         existingSocket.disconnect(true);
                         console.log(`[KICK] Disconnected old socket ${existingSocket.id}`);
                     } else if (existingSocket.currentRoomId === validRoomId) {
-                        // Same room reconnect - just log, don't kick
-                        console.log(`[RECONNECT] User ${userId} reconnecting to same room ${validRoomId}, keeping old socket`);
+                        // [FIX] Same room reconnect - MUST kick old socket!
+                        // If we don't kick, when old socket eventually times out,
+                        // its disconnect handler will delete room.users[userId],
+                        // causing the new socket to lose their user data!
+                        console.log(`[RECONNECT] User ${userId} reconnecting to same room ${validRoomId}, kicking old socket to prevent data loss`);
+
+                        // Don't delete from room.users - new socket will use existing data
+                        // Just disconnect the old socket cleanly
+                        existingSocket.leave('room_' + validRoomId);
+                        existingSocket.currentRoomId = null;  // Clear to prevent disconnect handler cleanup
+                        existingSocket.userId = null;         // Clear to prevent disconnect handler cleanup
+                        existingSocket.disconnect(true);
+                        console.log(`[RECONNECT] Disconnected old socket ${existingSocket.id}`);
                     }
                 });
             });
