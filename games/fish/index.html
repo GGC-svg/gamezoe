@@ -57,6 +57,24 @@
   <!-- LOGIN DATA SYNC -->
   <script>
     (function () {
+      // [FIX] Clear old room data to prevent /enter_private_room 404
+      try {
+        // Clear any stored roomid from localStorage
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.includes('room') || key.includes('Room'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => {
+          console.log("[RoomCleanup] Removing stored room data:", key);
+          localStorage.removeItem(key);
+        });
+      } catch (e) {
+        console.warn("[RoomCleanup] Failed to clear localStorage:", e);
+      }
+
       // 1. Get Platform User ID and Game ID from URL
       const urlParams = new URLSearchParams(window.location.search);
       let platformUserId = urlParams.get('userId');

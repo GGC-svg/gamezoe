@@ -197,7 +197,7 @@ ports.forEach(port => {
             gems: balance,
 
             vip: calculateVip(balance), // [VIP_FIX] specific to HTTP login: use balance as proxy for recharge history
-            roomid: 1, sex: 1, ip: "127.0.0.1",
+            roomid: 0, sex: 1, ip: "127.0.0.1",  // [FIX] Use 0 to skip /enter_private_room
             item: {
                 ice: 100
             }

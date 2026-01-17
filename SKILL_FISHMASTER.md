@@ -1,6 +1,6 @@
 # SKILL_FISHMASTER - 捕魚大師完整技術文檔
 
-> 最後更新: 2026/01/17
+> 最後更新: 2026/01/18
 >
 > **重要**：此文檔記錄了 Go → Node.js 轉譯後的完整架構，避免日後重建。
 
@@ -10,7 +10,7 @@
 
 | 項目 | 內容 |
 |------|------|
-| 遊戲 ID | `fish` (平台) / `fish-master` (舊) |
+| 遊戲 ID | `fish-master` ⚠️ (games 表和 user_game_balances 必須一致) |
 | 客戶端引擎 | Cocos Creator (Cocos2d-JS) |
 | 伺服器語言 | **Node.js** (從 Go 轉譯) |
 | 通訊協議 | Socket.io (WebSocket) |
@@ -535,12 +535,25 @@ location /games/fish/ {
 
 ## PM2 服務管理
 
+### 服務對照表
+
+| PM2 ID | PM2 名稱 | 腳本 | Port | 說明 |
+|--------|----------|------|------|------|
+| 0 | gamezoe-fish-serv | fish_mocker.js | 4000, 9000, 4002 | 捕魚大師主服務 |
+| 1 | gamezoe-fish-game | myfish_server.js | 9001 | my-fish-egret 服務 |
+| 2 | gamezoe-web | index.js | 3000 | 平台主服務 |
+| 3 | h5-game-server | (Java) | 8080 | 棋牌 H5 遊戲 |
+
 ### 查看狀態
 
 ```bash
 pm2 list
 pm2 logs gamezoe-fish-serv
 pm2 logs gamezoe-fish-serv --err
+
+# 或用 ID 查看
+pm2 logs 0             # fish_mocker.js
+pm2 show 0 | grep script  # 確認腳本路徑
 ```
 
 ### 重啟服務
@@ -559,6 +572,34 @@ node fish_mocker.js
 ---
 
 ## 故障排除
+
+### 快速診斷清單
+
+遇到餘額問題時，按順序檢查：
+
+```bash
+# 1. 確認服務運行
+pm2 list
+
+# 2. 檢查資料庫權限
+ls -la ~/gamezoe/server/gamezoe.db
+# 應為 -rw-rw-rw- (666)
+
+# 3. 檢查 game_id 是否一致
+sqlite3 ~/gamezoe/server/gamezoe.db "SELECT id FROM games WHERE id LIKE '%fish%';"
+# 應返回: fish-master
+
+sqlite3 ~/gamezoe/server/gamezoe.db "SELECT DISTINCT game_id FROM user_game_balances WHERE game_id LIKE '%fish%';"
+# 應返回: fish-master (必須與上面一致!)
+
+# 4. 測試遊戲伺服器 API
+curl "http://127.0.0.1:9000/api/room/balance?userId=TEST&gameId=fish-master"
+
+# 5. 檢查錯誤日誌
+pm2 logs 0 --err --lines 20 --nostream
+```
+
+---
 
 ### 1. WebSocket 連接失敗
 
@@ -623,6 +664,101 @@ pm2 logs gamezoe-fish-serv | grep LASER
 **原因**: 新玩家加入時未收到現有魚
 
 **已修復**: login 時發送 `existingFishList` (見 fish_mocker.js:1016-1027)
+
+### 6. 平台遊戲點數顯示 0 (2026/01/18 修復)
+
+**症狀**:
+- 平台介面遊戲點數顯示 0
+- 遊戲大廳顯示 0.000
+- 無法進入魚場 (餘額不足)
+
+**原因**: `games` 表中遊戲 ID 是 `fish-master`，但 `user_game_balances` 表中的記錄用的是 `fish`
+
+**診斷步驟**:
+```bash
+# 1. 檢查 games 表中的遊戲 ID
+sqlite3 ~/gamezoe/server/gamezoe.db "SELECT id, title FROM games WHERE title LIKE '%魚%';"
+# 結果: fish-master|捕魚大師 (Fish Master)
+
+# 2. 檢查 user_game_balances 的 game_id
+sqlite3 ~/gamezoe/server/gamezoe.db "SELECT * FROM user_game_balances WHERE user_id = 'xxx';"
+# 結果: game_id = 'fish' (錯誤!)
+
+# 3. 測試 API
+curl "http://localhost:3000/api/game-balance/xxx/fish-master"
+# 返回 balance: 0 (因為沒有 fish-master 記錄)
+```
+
+**修復**:
+```bash
+# 將所有 'fish' 改為 'fish-master'
+sqlite3 ~/gamezoe/server/gamezoe.db "UPDATE user_game_balances SET game_id = 'fish-master' WHERE game_id = 'fish';"
+
+# 重啟服務
+pm2 restart all
+```
+
+**預防**: 確保新用戶註冊時建立的 game_id 與 games 表一致
+
+### 7. SQLITE_READONLY 資料庫錯誤 (2026/01/18 修復)
+
+**症狀**:
+- PM2 日誌顯示 `SQLITE_READONLY: attempt to write a readonly database`
+- 遊戲餘額無法存檔
+- 離開遊戲後餘額重置
+
+**原因**: 資料庫檔案權限不足，Node.js 進程無法寫入
+
+**診斷**:
+```bash
+# 檢查 PM2 日誌
+pm2 logs gamezoe-fish-serv --lines 50 --nostream | grep READONLY
+
+# 檢查檔案權限
+ls -la ~/gamezoe/server/gamezoe.db
+# 如果顯示 -rw-r--r-- (644)，其他用戶無寫入權限
+```
+
+**修復**:
+```bash
+# 修改權限為 666 (所有人可讀寫)
+chmod 666 ~/gamezoe/server/gamezoe.db
+
+# 驗證
+ls -la ~/gamezoe/server/gamezoe.db
+# 應顯示 -rw-rw-rw-
+
+# 重啟服務
+pm2 restart all
+```
+
+**預防**:
+- Git pull 後檢查檔案權限
+- 可在部署腳本中加入 `chmod 666 ~/gamezoe/server/gamezoe.db`
+
+### 8. 餘額查詢返回 0 但資料庫有值
+
+**症狀**:
+- 資料庫確認有餘額記錄
+- API 查詢返回 balance: 0
+
+**原因**: 平台 API 會先向遊戲伺服器 (fish_mocker.js) 查詢，遊戲伺服器再查 DB
+
+**診斷**:
+```bash
+# 1. 直接查詢遊戲伺服器
+curl "http://127.0.0.1:9000/api/room/balance?userId=xxx&gameId=fish-master"
+
+# 2. 如果返回 0，檢查遊戲伺服器日誌
+pm2 logs 0 --lines 20 --nostream
+
+# 3. 常見原因:
+# - SQLITE_READONLY (見問題 7)
+# - game_id 不匹配 (見問題 6)
+# - 遊戲伺服器未重啟 (緩存舊資料)
+```
+
+**修復**: 根據日誌判斷是權限問題還是 game_id 問題，然後重啟服務
 
 ---
 
