@@ -167,18 +167,18 @@ class LoginStart {
 				// 有舊 session，嘗試重連
 				this.reLogin(reloginCode, reloginType);
 			} else {
-				// 無舊 session，觸發遊客登入
-				console.log('[LoginStart] No existing session, triggering tourist login...');
+				// 無舊 session，使用平台用戶 ID 登入（綁定平台帳號與遊戲帳號）
+				console.log('[LoginStart] No existing session, platform login with userId:', platformUser.id);
 				LoginReq.send_loginByTourist((success, msg) => {
 					if (success) {
-						console.log('[LoginStart] Tourist login success');
+						console.log('[LoginStart] Platform login success, userId:', platformUser.id);
 						GameApp.PlayerInfo.loginType = LoginType.Tourist;
 						egret.localStorage.setItem('reloginType', LoginType.Tourist + '');
 					} else {
 						console.error('[LoginStart] Tourist login failed');
 						App.ViewManager.open(ViewConst.Login);
 					}
-				}, this);
+				}, this, platformUser.id);  // 傳入平台用戶 ID
 			}
 		}, this);
 
