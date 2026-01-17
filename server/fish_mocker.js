@@ -1190,6 +1190,45 @@ ports.forEach(port => {
                     const existingFishCount = room.aliveFish ? Object.keys(room.aliveFish).length : 0;
                     console.log(`[SYNC] New user ${userId} joined. NOT sending ${existingFishCount} existing fish (sync via live broadcasts only)`);
 
+                    // [SEAT_VISIBILITY_FIX] Broadcast game_sync_push to ALL players when someone joins
+                    // Client may only update seats from game_sync_push, not from new_user_comes_push
+                    const syncSeatList = [];
+                    const syncEmptySeat = { userid: 0, userId: "0", score: 0, name: "", online: false, cannonKind: 1, vip: 0, seatIndex: -1, seatindex: -1, chairId: 0, power: 0, bullet: 0 };
+                    for (let i = 0; i < 4; i++) {
+                        let seatUser = { ...syncEmptySeat, seatIndex: i, seatindex: i, chairId: i + 1 };
+                        for (let uid in room.users) {
+                            if (room.users[uid].seatIndex === i) {
+                                const u = room.users[uid];
+                                seatUser = {
+                                    ...u,
+                                    score: toDisplayFloat(u.score),
+                                    gold: toDisplayFloat(u.gold),
+                                    userId: u.userId, userid: u.userId,
+                                    seatIndex: i, seatindex: i,
+                                    chairId: i + 1,
+                                    online: true
+                                };
+                                break;
+                            }
+                        }
+                        syncSeatList.push(seatUser);
+                    }
+                    const gameSyncPayload = {
+                        state: 0,
+                        gamestate: 0,
+                        time_remaining: 9999,
+                        seats: syncSeatList,
+                        conf: {
+                            gamebasescore: room.baseScore,
+                            roomId: String(validRoomId)
+                        },
+                        roomBaseScore: room.baseScore * 1000
+                    };
+                    // Broadcast to ALL players in room (including self)
+                    const syncSentCount = broadcastToRoom(validRoomId, 'game_sync_push', gameSyncPayload);
+                    console.log(`[SEAT_VISIBILITY] Broadcasted game_sync_push to ${syncSentCount} players in room ${validRoomId}`);
+                    console.log(`[SEAT_VISIBILITY] Seats:`, syncSeatList.map(s => ({ seatIndex: s.seatIndex, chairId: s.chairId, userId: s.userId, online: s.online })));
+
                 }, 500);
 
                 // [REFACTOR] Spawn timers now managed by RoomManager on room creation
