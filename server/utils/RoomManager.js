@@ -239,34 +239,39 @@ export class RoomManager {
             addFish(paths[0]);
         }
 
-        // Broadcast to room channel
+        // [GO_ALIGNED] Broadcast by iterating room.users (like Go's broadcast function)
+        // Go: for _, userInfo := range room.Users { if userInfo.client != nil { userInfo.client.sendMsg() } }
         if (fishList.length > 0 && this.ioInstances) {
-            const roomIdStr = String(roomId);
             let sentCount = 0;
             const sentTo = [];
 
-            // Log ioInstances count for diagnostics
-            const ioCount = this.ioInstances.length;
+            // Iterate over room.users (like Go)
+            for (const oddsUserId in room.users) {
+                const userInRoom = room.users[oddsUserId];
+                if (!userInRoom) continue;
 
-            this.ioInstances.forEach((serverIO, ioIdx) => {
-                const socketsMap = serverIO.sockets?.sockets;
-                if (!socketsMap) {
-                    console.warn(`[SPAWN_WARN] ioInstances[${ioIdx}] has no sockets map!`);
-                    return;
-                }
+                // Find this user's socket across all io instances
+                let socketFound = false;
+                for (const serverIO of this.ioInstances) {
+                    const socketsMap = serverIO.sockets?.sockets;
+                    if (!socketsMap) continue;
 
-                socketsMap.forEach((socket) => {
-                    if (String(socket.currentRoomId) === roomIdStr) {
-                        socket.emit('build_fish_reply', fishList);
-                        sentTo.push(`${socket.userId}@io${ioIdx}`);
-                        sentCount++;
+                    for (const [socketId, socket] of socketsMap) {
+                        if (socket.userId === oddsUserId && String(socket.currentRoomId) === String(roomId)) {
+                            socket.emit('build_fish_reply', fishList);
+                            sentTo.push(oddsUserId);
+                            sentCount++;
+                            socketFound = true;
+                            break; // Found socket for this user
+                        }
                     }
-                });
-            });
+                    if (socketFound) break;
+                }
+            }
 
             // Log fish IDs for tracking
             const fishIds = fishList.map(f => f.fishId).join(',');
-            console.log(`[SPAWN] Room ${roomId} | Fish:[${fishIds}] Kind:${fishList[0]?.fishKind} | Sent to ${sentCount} sockets (${ioCount} io instances): [${sentTo.join(', ')}]`);
+            console.log(`[SPAWN] Room ${roomId} | Fish:[${fishIds}] Kind:${fishList[0]?.fishKind} | Sent to ${sentCount} users: [${sentTo.join(', ')}]`);
         }
     }
 
