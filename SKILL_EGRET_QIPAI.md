@@ -243,16 +243,53 @@ cp -r bin-release/web/[timestamp]/* ../../../games/huohua-qipai/
 
 **遊戲入口**: `/games/huohua-qipai/`
 
-**資料庫設定** (games 表):
-```sql
-UPDATE games SET
-    gameUrl = '/games/huohua-qipai/',
-    thumbnailUrl = '/games/huohua-qipai/thumbnail.jpg',
-    coverUrl = '/games/huohua-qipai/thumbnail.jpg'
-WHERE id = 'huohua-qipai';
+---
+
+## Server 端部署流程
+
+### 步驟 1: 備份資料庫
+
+```bash
+cp ~/gamezoe/server/gamezoe.db ~/gamezoe/server/gamezoe.db.bak.$(date +%Y%m%d%H%M%S)
 ```
 
-### 後端部署
+### 步驟 2: 拉取最新代碼
+
+```bash
+cd ~/gamezoe && git fetch origin && git reset --hard origin/master
+```
+
+### 步驟 3: 更新資料庫
+
+```bash
+sqlite3 ~/gamezoe/server/gamezoe.db "UPDATE games SET gameUrl = '/games/huohua-qipai/', thumbnailUrl = '/games/huohua-qipai/thumbnail.jpg', coverUrl = '/games/huohua-qipai/thumbnail.jpg' WHERE id = 'huohua-qipai';"
+```
+
+### 步驟 4: 重啟服務
+
+```bash
+pm2 restart all
+```
+
+### 步驟 5: 驗證
+
+```bash
+# 確認遊戲入口
+curl -I https://gamezoe.com/games/huohua-qipai/
+
+# 確認資料庫更新
+sqlite3 ~/gamezoe/server/gamezoe.db "SELECT id, title, gameUrl FROM games WHERE id = 'huohua-qipai';"
+```
+
+### 一鍵部署指令 (含備份)
+
+```bash
+cp ~/gamezoe/server/gamezoe.db ~/gamezoe/server/gamezoe.db.bak.$(date +%Y%m%d%H%M%S) && cd ~/gamezoe && git fetch origin && git reset --hard origin/master && sqlite3 server/gamezoe.db "UPDATE games SET gameUrl = '/games/huohua-qipai/', thumbnailUrl = '/games/huohua-qipai/thumbnail.jpg', coverUrl = '/games/huohua-qipai/thumbnail.jpg' WHERE id = 'huohua-qipai';" && pm2 restart all
+```
+
+---
+
+## h5-server 遊戲伺服器部署
 
 遊戲伺服器需要獨立的 Java 運行環境：
 
