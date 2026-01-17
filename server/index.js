@@ -1191,7 +1191,14 @@ app.get('/api/game-balance/:userId/:gameId', async (req, res) => {
                 const roomBalanceUrl = `${REALTIME_GAMES[gameId]}/api/room/balance?userId=${encodeURIComponent(userId)}&gameId=${encodeURIComponent(gameId)}`;
                 console.log(`[GameBalance] Querying real-time room balance: ${roomBalanceUrl}`);
 
-                const response = await fetch(roomBalanceUrl, { timeout: 3000 });
+                // [FIX] Node.js native fetch doesn't support timeout option directly
+                // Use AbortController for proper timeout handling
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+                const response = await fetch(roomBalanceUrl, { signal: controller.signal });
+                clearTimeout(timeoutId);
+
                 const result = await response.json();
 
                 if (result.success) {
@@ -1219,9 +1226,12 @@ app.get('/api/game-balance/:userId/:gameId', async (req, res) => {
                         total_withdrawn: stats.total_withdrawn || 0
                     });
                     return;
+                } else {
+                    console.warn(`[GameBalance] Real-time query returned success:false, falling back to DB. Result:`, result);
+                    // Fall through to DB query
                 }
             } catch (roomError) {
-                console.warn(`[GameBalance] Real-time query failed, falling back to DB:`, roomError.message);
+                console.warn(`[GameBalance] Real-time query error, falling back to DB:`, roomError.message);
                 // Fall through to DB query
             }
         }

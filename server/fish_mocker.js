@@ -2029,15 +2029,24 @@ ports.forEach(port => {
     if (port === 9000) {
         setInterval(() => {
             if (!roomManager) return;
+            let savedCount = 0;
             for (const [roomId, room] of roomManager.rooms) {
                 if (room.users) {
                     Object.values(room.users).forEach(u => {
                         if (u.userId !== 'guest' && u.online) {
                             // [GAME_ID_FIX] Pass user's stored gameId
-                            saveUserToDB(u.userId, u.score, u.gameId);
+                            const gameIdToSave = u.gameId || 'fish';
+                            if (!u.gameId) {
+                                console.warn(`[PeriodicSave] WARNING: User ${u.userId} has no gameId! Defaulting to 'fish'`);
+                            }
+                            saveUserToDB(u.userId, u.score, gameIdToSave);
+                            savedCount++;
                         }
                     });
                 }
+            }
+            if (savedCount > 0) {
+                console.log(`[PeriodicSave] Saved ${savedCount} users`);
             }
         }, 10000);
     }
