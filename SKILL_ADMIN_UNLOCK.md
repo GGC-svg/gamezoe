@@ -177,7 +177,40 @@ useEffect(() => {
 |------|------|
 | `games/universalloc-ai.../App.tsx` | Admin 檢測 useEffect + handleFileLoaded 修正 |
 | `games/universalloc-ai.../components/StepGlossary.tsx` | UI 根據 isPremiumUnlocked 顯示鎖定/解鎖 |
+| `server/index.js` | 後端 AI API 的 admin 繞過付款驗證 |
 | `server/routes/users.js` | 後台用戶管理 API（設定 role） |
+
+---
+
+## 後端 API 的 Admin 繞過
+
+前端解鎖 UI 後，後端 API 也需要允許 admin 繞過付款驗證：
+
+```javascript
+// server/index.js - /api/ai/generate 路由
+const checkPayment = () => {
+    return new Promise((resolve) => {
+        // 先檢查是否為管理員
+        db.get(
+            `SELECT role FROM users WHERE id = ?`,
+            [userId],
+            (err, userRow) => {
+                if (!err && userRow && userRow.role === 'admin') {
+                    console.log(`[AI API] Admin user ${userId} - bypassing payment check`);
+                    resolve(true);  // Admin 直接通過
+                    return;
+                }
+
+                // 非管理員，繼續正常的付款驗證...
+            }
+        );
+    });
+};
+```
+
+**重要**：前端和後端都需要實作 admin 檢查，否則：
+- 只有前端：UI 解鎖但 API 會返回 403
+- 只有後端：API 通過但 UI 仍然鎖定
 
 ---
 
