@@ -370,12 +370,16 @@ const App: React.FC = () => {
                  (window.parent !== window && (window.parent as any).GameZoe?.currentUser);
     const isAdmin = user?.role === 'admin';
 
-    setConfig({
+    console.log('[UniversalLoc] handleFileLoaded - user:', user?.id, 'role:', user?.role, 'isAdmin:', isAdmin);
+
+    // 使用 prev 保留之前的解鎖狀態（如果已經是 admin 解鎖的話）
+    setConfig(prev => ({
+      ...prev,  // 保留之前的設定（包括 isPremiumUnlocked）
       isProofreadMode: mode === 'proofread',
-      isPremiumUnlocked: isAdmin, // 管理員自動解鎖，否則需付費
-      internalAccessKey: isAdmin ? 'GAMELOC_INTERNAL_2025' : undefined,
+      isPremiumUnlocked: prev.isPremiumUnlocked || isAdmin, // 保留已解鎖狀態 OR 檢測到 admin
+      internalAccessKey: (prev.isPremiumUnlocked || isAdmin) ? 'GAMELOC_INTERNAL_2025' : undefined,
       workMode: mode  // 儲存模式: translate/proofread/clean
-    });
+    }));
     setRawFile(file);
     if (mode === 'clean') {
       const flatRows = Array.isArray(data) ? data : data[0]?.rows || [];
