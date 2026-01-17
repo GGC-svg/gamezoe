@@ -99,7 +99,8 @@ app.use(helmet({
     crossOriginOpenerPolicy: false,
     crossOriginEmbedderPolicy: false,
     strictTransportSecurity: false, // Disable HSTS for HTTP
-    contentSecurityPolicy: false // Disable CSP for now to prevent upgrade-insecure-requests
+    contentSecurityPolicy: false, // Disable CSP for now to prevent upgrade-insecure-requests
+    frameguard: false // Allow iframe embedding for games
 }));
 
 // [FIX] Explicitly set COOP header to allow Google OAuth popups
