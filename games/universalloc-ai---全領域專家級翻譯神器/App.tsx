@@ -54,9 +54,13 @@ const App: React.FC = () => {
   // 管理員自動解鎖 Premium (內部使用)
   useEffect(() => {
     const checkAdminStatus = () => {
+      // 嘗試多種方式獲取用戶資料
       const user = (window as any).currentUser ||
                    (window as any).GameZoe?.currentUser ||
-                   (window.parent !== window && (window.parent as any).currentUser);
+                   (window.parent !== window && (window.parent as any).currentUser) ||
+                   (window.parent !== window && (window.parent as any).GameZoe?.currentUser);
+
+      console.log('[UniversalLoc] Checking admin status, user:', user?.id, 'role:', user?.role);
 
       if (user?.role === 'admin') {
         console.log('[UniversalLoc] Admin detected, auto-unlocking premium');
@@ -64,10 +68,16 @@ const App: React.FC = () => {
       }
     };
 
-    // Check immediately and also after a short delay (in case user loads async)
+    // Check immediately and also after delays (user data may load async)
     checkAdminStatus();
-    const timer = setTimeout(checkAdminStatus, 1000);
-    return () => clearTimeout(timer);
+    const timer1 = setTimeout(checkAdminStatus, 500);
+    const timer2 = setTimeout(checkAdminStatus, 1500);
+    const timer3 = setTimeout(checkAdminStatus, 3000);
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+    };
   }, []);
 
   // Tell parent GamePlayer to hide its billing bar (we have our own)
