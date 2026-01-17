@@ -23,7 +23,8 @@
 
       if (userId) {
         try {
-          const res = await fetch('/api/game-balance/' + userId + '/' + GAME_ID);
+          // [FIX] Add cache-busting to ensure latest balance from DB
+          const res = await fetch('/api/game-balance/' + userId + '/' + GAME_ID + '?t=' + Date.now());
           const data = await res.json();
           if (data.success) {
             const balance = Math.floor(data.balance || 0);
@@ -78,12 +79,13 @@
     const userId = new URLSearchParams(window.location.search).get('userId');
 
     let lastSyncedBalance = 0;
+    let syncInitialized = false;
 
     console.log("[SlotMachine] Boot. UserID:", userId, "GameID:", GAME_ID);
 
     // Sync localStorage changes back to database
     async function syncBalanceToDatabase() {
-      if (!userId) return;
+      if (!userId || !syncInitialized) return;
 
       const currentBal = parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
       if (Math.abs(currentBal - lastSyncedBalance) < 0.01) return;
@@ -115,15 +117,27 @@
       }
     }
 
-    // Set initial lastSyncedBalance from localStorage
-    lastSyncedBalance = parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
+    // [FIX] Wait for preload to complete before initializing sync
+    // This prevents race condition where old localStorage value overwrites new deposit
+    function waitForPreloadAndInitSync() {
+      if (window.GAME_BALANCE_READY) {
+        // Preload complete - now set lastSyncedBalance from updated localStorage
+        lastSyncedBalance = parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
+        syncInitialized = true;
+        console.log("[SlotMachine] Sync initialized after preload. lastSyncedBalance:", lastSyncedBalance);
 
-    // Sync to database every 5 seconds
-    setInterval(syncBalanceToDatabase, 5000);
+        // Start sync timer
+        setInterval(syncBalanceToDatabase, 5000);
+      } else {
+        // Wait and retry
+        setTimeout(waitForPreloadAndInitSync, 100);
+      }
+    }
+    waitForPreloadAndInitSync();
 
     // Sync on page unload
     window.addEventListener('beforeunload', () => {
-      if (userId) {
+      if (userId && syncInitialized) {
         const currentBal = parseFloat(localStorage.getItem(GAME_INTERNAL_KEY) || 0);
         const consumed = Math.max(0, lastSyncedBalance - currentBal);
         navigator.sendBeacon('/api/game-balance/sync', JSON.stringify({
