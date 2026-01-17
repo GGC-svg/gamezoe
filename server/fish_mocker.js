@@ -127,6 +127,10 @@ const ioInstances = []; // Global store for all IO instances
 // -------------------------------------------------------------------------
 let roomManager = null;  // Will be initialized after all ioInstances are collected
 
+// [GAME_ID_FIX] Cache user's gameId from HTTP login for socket login to use
+// This fixes the race condition where socket connects before client-side patch applies
+const userGameIdCache = new Map();  // userId -> { gameId, timestamp }
+
 ports.forEach(port => {
     const app = express();
     app.use(cors());
@@ -505,6 +509,11 @@ ports.forEach(port => {
         const gameId = req.query.gameId || req.body.gameId || 'fish';
         console.log(`[HTTP] Login Request: ${account}, GameID: ${gameId}`);
 
+        // [GAME_ID_CACHE] Store user's gameId for socket login to use later
+        // This fixes the race condition where socket connects before client patch applies
+        userGameIdCache.set(account, { gameId, timestamp: Date.now() });
+        console.log(`[GameIdCache] Stored ${account} -> ${gameId}`);
+
         // [GAME_ID_FIX] Read balance ONLY from the specified gameId
         db.get(`SELECT u.name, u.fish_balance,
                        COALESCE(g.balance, 0) as game_balance
@@ -788,8 +797,25 @@ ports.forEach(port => {
             // This is vital for the client to match "My User ID" with "Seat User ID"
             userId = String(userId);
 
-            // [GAME_ID_FIX] Get gameId from socket handshake query (injected by client socket.io patch)
-            const gameId = socket.handshake?.query?.gameId || reqData.gameId || 'fish';
+            // [GAME_ID_FIX] Get gameId from multiple sources (priority order):
+            // 1. Cache from HTTP login (most reliable - fixes socket race condition)
+            // 2. Socket handshake query (if client patch applied in time)
+            // 3. Login event payload
+            // 4. Default to 'fish'
+            let gameId = 'fish';
+            const cachedGameId = userGameIdCache.get(userId);
+            if (cachedGameId && (Date.now() - cachedGameId.timestamp < 300000)) { // 5 min cache
+                gameId = cachedGameId.gameId;
+                console.log(`[GameIdCache] Using cached gameId for ${userId}: ${gameId}`);
+            } else if (socket.handshake?.query?.gameId) {
+                gameId = socket.handshake.query.gameId;
+                console.log(`[GameIdCache] Using socket query gameId: ${gameId}`);
+            } else if (reqData.gameId) {
+                gameId = reqData.gameId;
+                console.log(`[GameIdCache] Using reqData gameId: ${gameId}`);
+            } else {
+                console.log(`[GameIdCache] No gameId found, using default: ${gameId}`);
+            }
             socket.gameId = gameId; // Store for later use (e.g., saveUserToDB)
             console.log(`[DEBUG] Login Parsed UserID: ${userId}, GameID: ${gameId}`);
 
