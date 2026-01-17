@@ -105,14 +105,77 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
 
         const allBatches = chunkArray<TranslationItem>(itemsToProc, BATCH_SIZE);
 
-        // Process in chunks of CONCURRENT_REQUESTS
-        for (let i = 0; i < allBatches.length; i += CONCURRENT_REQUESTS) {
+        // ====== 兩階段處理：確保詞彙一致性 ======
+        // 階段1: 第一批次單獨處理，鎖定詞彙和模式
+        if (allBatches.length > 0 && !isCancelled) {
+          const firstBatch = allBatches[0];
+          setCurrentAction(`[${langName}] Phase 1: Locking Vocabulary (Batch 1/${allBatches.length})`);
+
+          const existingMap = new Map<string, string>();
+          firstBatch.forEach(item => {
+            if (item.translations[langCode]) {
+              existingMap.set(item.id, item.translations[langCode]);
+            }
+          });
+
+          try {
+            const res = await translateBatch(
+              firstBatch,
+              langCode,
+              langName,
+              "Source",
+              config,
+              existingMap,
+              currentPattern,
+              currentLangVocab
+            );
+
+            // 立即更新詞彙鏈和模式（在並行處理前）
+            if (res.termDecisions) {
+              Object.assign(currentLangVocab, res.termDecisions);
+              setGlobalVocab(prev => ({ ...prev, ...res.termDecisions }));
+              console.log(`[Phase1] Locked ${Object.keys(res.termDecisions).length} terms for ${langCode}`);
+            }
+            if (!currentPattern && res.detectedPattern) {
+              currentPattern = res.detectedPattern;
+              setLockedPatterns(prev => ({ ...prev, [langCode]: currentPattern }));
+              console.log(`[Phase1] Locked pattern for ${langCode}: ${currentPattern}`);
+            }
+
+            // 處理第一批次的結果
+            let wordsAdded = 0;
+            res.translations.forEach((val, id) => {
+              const idx = workingItems.findIndex(w => w.id === id);
+              if (idx !== -1) {
+                const isOver = res.overLimitFlags?.get(id) || false;
+                workingItems[idx] = {
+                  ...workingItems[idx],
+                  status: 'completed',
+                  translations: { ...workingItems[idx].translations, [langCode]: val },
+                  isOverLimit: { ...workingItems[idx].isOverLimit, [langCode]: isOver }
+                };
+                wordsAdded += countWords(val);
+                if (isOver) totalIssues++;
+              }
+            });
+            addSessionUsage(wordsAdded);
+            currentCompleted += firstBatch.length;
+            setProgress(Math.min((currentCompleted / totalWorkUnits) * 100, 100));
+            setAuditCount(totalIssues);
+          } catch (e) {
+            console.error(`[Phase1] First batch failed for ${langCode}`, e);
+          }
+        }
+
+        // 階段2: 剩餘批次並行處理（已有鎖定的詞彙）
+        const remainingBatches = allBatches.slice(1);
+        for (let i = 0; i < remainingBatches.length; i += CONCURRENT_REQUESTS) {
           if (isCancelled) break;
 
-          const concurrentBatches = allBatches.slice(i, i + CONCURRENT_REQUESTS);
+          const concurrentBatches = remainingBatches.slice(i, i + CONCURRENT_REQUESTS);
           const promises = concurrentBatches.map(async (batch, idx) => {
-            const batchIndex = i + idx;
-            setCurrentAction(`Processing [${langName}] Batch ${batchIndex + 1}/${allBatches.length}`);
+            const batchIndex = i + idx + 1; // +1 因為第一批次已處理
+            setCurrentAction(`[${langName}] Phase 2: Batch ${batchIndex + 1}/${allBatches.length} (Vocab Locked: ${Object.keys(currentLangVocab).length})`);
 
             const existingMap = new Map<string, string>();
             batch.forEach(item => {
@@ -122,7 +185,7 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
             });
 
             try {
-              // Pass current vocabulary chain
+              // 傳入已鎖定的詞彙鏈
               const res = await translateBatch(
                 batch,
                 langCode,
@@ -135,7 +198,7 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
               );
               return { res, batch };
             } catch (e) {
-              console.error(`Batch ${batchIndex} failed`, e);
+              console.error(`Batch ${batchIndex + 1} failed`, e);
               return null;
             }
           });
