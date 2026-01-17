@@ -51,6 +51,25 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // 管理員自動解鎖 Premium (內部使用)
+  useEffect(() => {
+    const checkAdminStatus = () => {
+      const user = (window as any).currentUser ||
+                   (window as any).GameZoe?.currentUser ||
+                   (window.parent !== window && (window.parent as any).currentUser);
+
+      if (user?.role === 'admin') {
+        console.log('[UniversalLoc] Admin detected, auto-unlocking premium');
+        setConfig(prev => ({ ...prev, isPremiumUnlocked: true, internalAccessKey: 'GAMELOC_INTERNAL_2025' }));
+      }
+    };
+
+    // Check immediately and also after a short delay (in case user loads async)
+    checkAdminStatus();
+    const timer = setTimeout(checkAdminStatus, 1000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Tell parent GamePlayer to hide its billing bar (we have our own)
   useEffect(() => {
     if (window.parent !== window) {
