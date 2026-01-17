@@ -1163,7 +1163,7 @@ ports.forEach(port => {
                     // [CROSS-INSTANCE] Use broadcastToRoom instead of socket.broadcast.to()
                     const sentCount = broadcastToRoom(validRoomId, 'new_user_comes_push', mySeatPayload, socket.id);
                     console.log(`[SEAT_SYNC] User ${userId} joined seat ${mySeatPayload.seatIndex} (chairId ${mySeatPayload.chairId}). Notified ${sentCount} other players in room ${validRoomId}`);
-                    console.log(`[SEAT_SYNC] Payload:`, JSON.stringify({ userId: mySeatPayload.userId, seatIndex: mySeatPayload.seatIndex, chairId: mySeatPayload.chairId, cannonKind: mySeatPayload.cannonKind, online: mySeatPayload.online }));
+                    console.log(`[SEAT_SYNC] FULL Payload:`, JSON.stringify(mySeatPayload));
 
                     // [SYNC FIX] Send existing users' info to the new player
                     // This ensures new player sees existing players' cannons and state
