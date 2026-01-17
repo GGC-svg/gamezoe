@@ -2189,7 +2189,7 @@ app.post('/api/auth/login', (req, res) => {
                 }
 
                 // Initialize 500 balance for specific games in user_game_balances
-                const initialGames = ['fish', 'my-fish-egret', 'slot-machine'];
+                const initialGames = ['fish-master', 'my-fish-egret', 'slot-machine'];
                 const initialBalance = 500;
                 initialGames.forEach(gameId => {
                     db.run(
