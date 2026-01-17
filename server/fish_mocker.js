@@ -1084,8 +1084,10 @@ ports.forEach(port => {
                     ...mySeat,
                     userId: userId, userid: userId,          // Both
                     seatIndex: TARGET_SEAT_INDEX, seatindex: TARGET_SEAT_INDEX, // Both
+                    chairId: TARGET_SEAT_INDEX + 1, // [SEAT_SYNC_FIX] Client expects 1-indexed chairId
                     cannonKind: correctCannonKind,
                     vip: userVip,
+                    online: true, // [SEAT_SYNC_FIX] Explicitly mark as online
                     // [FIX] Add Cannon Power/Multiplier Properties
                     power: 1,    // [FIX] Power Level (1-10)
                     multiplier: 1, // [FIX] Multiplier
@@ -1160,8 +1162,8 @@ ports.forEach(port => {
                     // [BROADCAST FIX] Notify OTHER players in the room that a new user joined
                     // [CROSS-INSTANCE] Use broadcastToRoom instead of socket.broadcast.to()
                     const sentCount = broadcastToRoom(validRoomId, 'new_user_comes_push', mySeatPayload, socket.id);
-                    console.log(`[SEAT_SYNC] User ${userId} joined seat ${mySeatPayload.seatIndex}. Notified ${sentCount} other players in room ${validRoomId}`);
-                    console.log(`[SEAT_SYNC] Payload:`, JSON.stringify({ userId: mySeatPayload.userId, seatIndex: mySeatPayload.seatIndex, cannonKind: mySeatPayload.cannonKind }));
+                    console.log(`[SEAT_SYNC] User ${userId} joined seat ${mySeatPayload.seatIndex} (chairId ${mySeatPayload.chairId}). Notified ${sentCount} other players in room ${validRoomId}`);
+                    console.log(`[SEAT_SYNC] Payload:`, JSON.stringify({ userId: mySeatPayload.userId, seatIndex: mySeatPayload.seatIndex, chairId: mySeatPayload.chairId, cannonKind: mySeatPayload.cannonKind, online: mySeatPayload.online }));
 
                     // [SYNC FIX] Send existing users' info to the new player
                     // This ensures new player sees existing players' cannons and state
@@ -1171,11 +1173,13 @@ ports.forEach(port => {
                                 ...existingUser,
                                 userId: existingUser.userId, userid: existingUser.userId,
                                 seatIndex: existingUser.seatIndex, seatindex: existingUser.seatIndex,
+                                chairId: existingUser.seatIndex + 1, // [SEAT_SYNC_FIX] Client expects 1-indexed chairId
+                                online: true, // [SEAT_SYNC_FIX] Explicitly mark as online
                                 score: toDisplayFloat(existingUser.score),
                                 gold: toDisplayFloat(existingUser.gold)
                             };
                             socket.emit('new_user_comes_push', existingUserPayload);
-                            console.log(`[SYNC] Sent existing user ${existingUser.userId} info to new user ${userId}`);
+                            console.log(`[SYNC] Sent existing user ${existingUser.userId} (seat ${existingUser.seatIndex}, chairId ${existingUser.seatIndex + 1}) info to new user ${userId}`);
                         }
                     });
 
