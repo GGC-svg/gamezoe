@@ -1,6 +1,6 @@
 # SKILL: Egret H5 棋牌遊戲建置
 
-> 白鹭引擎 H5 棋牌遊戲中心的建置與部署指南
+> 白鹭引擎 H5 棋牌遊戲中心的完整建置與部署指南
 
 ---
 
@@ -8,103 +8,91 @@
 
 **路徑**: `games/egret-H5-qipai-game-main/`
 
-這是一個完整的棋牌遊戲平台，包含：
-- **h5-client** - 白鹭引擎前端 (TypeScript + Egret)
-- **h5-server** - Java 遊戲伺服器 (Netty + Spring)
-- **h5-admin** - Java 後台管理系統 (Spring Boot)
-- **MySQL 資料庫** - 4 個資料庫
+這是一個完整的棋牌遊戲平台，包含三個獨立組件：
 
-### 重要區分
+| 組件 | 用途 | 技術 | Port | 部署位置 |
+|------|------|------|------|----------|
+| **h5-client** | 遊戲前端 | TypeScript + Egret | 443 (nginx) | `/games/huohua-qipai/` |
+| **h5-server** | 遊戲伺服器 | Java + Netty | TCP:4014, WS:5014 | `~/h5-server/` |
+| **h5-admin** | 後台管理 | Java + Spring Boot | HTTP:8090 | `~/h5-admin-app.jar` |
 
-| 專案 | 用途 | 技術 | Port |
-|------|------|------|------|
-| `h5-server` | **遊戲伺服器** - 處理遊戲邏輯、WebSocket 連線 | Netty + Java | TCP:4014, WS:5014 |
-| `h5-admin` | **後台管理** - 玩家管理、數據報表 | Spring Boot | HTTP:8090 |
-
-> ⚠️ **注意**: `h5-admin` 是管理後台，不是遊戲伺服器！
+> ⚠️ **重要**: `h5-admin` 是管理後台，不是遊戲伺服器！遊戲需要 `h5-server` 才能運行。
 
 ---
 
-## 目錄結構
+## 資料庫架構
 
-```
-egret-H5-qipai-game-main/
-├── h5-client/              # 前端 (Egret 白鹭引擎)
-│   ├── src/                # TypeScript 源碼
-│   ├── resource/           # 遊戲資源
-│   ├── egretProperties.json
-│   └── index.html
-├── h5-server/              # 遊戲伺服器 (Java)
-│   ├── game-server/        # 主伺服器
-│   ├── game-core/          # 核心邏輯
-│   └── pom.xml
-├── h5-admin/               # 後台管理 (Java)
-│   └── huohua-admin/
-└── test001_mysql_data.sql  # 資料庫初始化
-```
-
----
-
-## 資料庫設置
-
-### 資料庫列表
+### 四個 MySQL 資料庫
 
 ```sql
-CREATE DATABASE ma_lai_h5_game_data;   -- 遊戲數據 (玩家、遊戲記錄)
-CREATE DATABASE ma_lai_h5_game_dic;    -- 遊戲字典 (配置表)
-CREATE DATABASE ma_lai_h5_game_log;    -- 遊戲日誌
-CREATE DATABASE ma_lai_h5_web_manage;  -- 後台管理
+ma_lai_h5_game_data   -- 遊戲數據 (玩家、遊戲記錄)
+ma_lai_h5_game_dic    -- 遊戲字典 (配置表)
+ma_lai_h5_game_log    -- 遊戲日誌
+ma_lai_h5_web_manage  -- 後台管理
 ```
 
-### 初始化
+### MySQL 用戶設置
+
+Ubuntu 的 MySQL root 預設使用 socket 認證，Java 應用無法用密碼連線。需建立專用用戶：
 
 ```bash
-# 導入資料庫
-mysql -u root -p < test001_mysql_data.sql
+sudo mysql -e "
+CREATE USER IF NOT EXISTS 'gameserver'@'localhost' IDENTIFIED BY 'bosan204';
+GRANT ALL PRIVILEGES ON ma_lai_h5_game_data.* TO 'gameserver'@'localhost';
+GRANT ALL PRIVILEGES ON ma_lai_h5_game_dic.* TO 'gameserver'@'localhost';
+GRANT ALL PRIVILEGES ON ma_lai_h5_game_log.* TO 'gameserver'@'localhost';
+GRANT ALL PRIVILEGES ON ma_lai_h5_web_manage.* TO 'gameserver'@'localhost';
+FLUSH PRIVILEGES;
+"
 ```
-
-### 配置檔案位置
-
-| 檔案 | 用途 |
-|------|------|
-| `h5-server/game-server/src/main/resources/config/jdbc/datadb.properties` | 遊戲數據庫 |
-| `h5-server/game-server/src/main/resources/config/jdbc/dicdb.properties` | 字典數據庫 |
-| `h5-server/game-server/src/main/resources/config/jdbc/logdb.properties` | 日誌數據庫 |
-| `h5-admin/huohua-admin/src/main/resources/application-local.properties` | 管理後台 |
 
 ---
 
-## 建置步驟
+## 本機建置流程
 
-### 1. 前端 (h5-client)
+### 環境需求
 
-**環境需求**: Node.js, Egret CLI
+| 工具 | 版本 | 用途 |
+|------|------|------|
+| Node.js | 14+ | Egret CLI |
+| Egret CLI | 5.x | 前端建置 |
+| JDK | 8+ | Java 編譯 |
+| Maven | 3.9+ | Java 建置 |
+
+### 1. 建置 h5-client (前端)
 
 ```bash
-# 安裝 Egret CLI
+# 安裝 Egret CLI (首次)
 npm install -g egret
 
 # 進入前端目錄
-cd h5-client
+cd games/egret-H5-qipai-game-main/h5-client
 
-# 開發模式編譯
+# 修改配置指向正式伺服器
+# 編輯 resource/config/global.json:
+{
+    "IsDebug": false,
+    "GoldMode": false,
+    "HttpSerever": "https://gamezoe.com",
+    "SocketUrl": "wss://gamezoe.com:5014/websocket",
+    "SocketServer": "gamezoe.com:5014/websocket",
+    "SocketPort": 5014
+}
+
+# 編譯
 egret build
 
-# 發佈模式編譯 (優化)
-egret build -r
+# 發佈 (壓縮優化)
+egret publish
 
-# 本地運行
-egret run
+# 複製到遊戲目錄
+cp -r bin-release/web/[timestamp]/* ../../huohua-qipai/
 ```
 
-**輸出**: `bin-release/` 目錄
-
-### 2. 遊戲伺服器 (h5-server)
-
-**環境需求**: JDK 8+, Maven 3.9+
+### 2. 建置 h5-server (遊戲伺服器)
 
 ```bash
-cd h5-server
+cd games/egret-H5-qipai-game-main/h5-server
 
 # 編譯 (跳過測試)
 mvn clean package -DskipTests
@@ -113,10 +101,10 @@ mvn clean package -DskipTests
 # game-server/target/game-server-malai-h5-1.0.0-assembly.tar.gz
 ```
 
-### 3. 後台管理 (h5-admin)
+### 3. 建置 h5-admin (後台管理)
 
 ```bash
-cd h5-admin/huohua-admin
+cd games/egret-H5-qipai-game-main/h5-admin/huohua-admin
 
 # 編譯
 mvn clean package -DskipTests
@@ -125,31 +113,7 @@ mvn clean package -DskipTests
 # target/huohua-admin.jar
 ```
 
----
-
-## 啟動順序
-
-```bash
-# 1. 確保 MySQL 已啟動
-
-# 2. 啟動遊戲伺服器
-cd h5-server/game-server/target/game-server-malai-h5-1.0.0
-java -cp ".:conf:lib/*" Launcher
-
-# 3. 啟動後台管理 (可選)
-cd h5-admin/huohua-admin/target
-java -jar huohua-admin.jar
-
-# 4. 訪問前端
-# 方法 A: 直接開啟 h5-client/index.html
-# 方法 B: egret run (開發模式)
-```
-
----
-
-## 依賴問題
-
-### com.idealighter:utils-core 缺失
+### Maven 依賴問題
 
 原始專案依賴 `com.idealighter:utils-core`，但該 Maven 倉庫已關閉。
 
@@ -166,23 +130,194 @@ java -jar huohua-admin.jar
 
 ---
 
+## 推送到 Git
+
+```bash
+cd /e/Steam/gamezoe
+
+# 推送 h5-client 前端
+git add -f games/huohua-qipai/
+git commit -m "Add huohua-qipai h5-client build"
+
+# 推送 h5-server 建置包
+git add -f games/egret-H5-qipai-game-main/h5-server/game-server/target/game-server-malai-h5-1.0.0-assembly.tar.gz
+git commit -m "Add h5-server build package"
+
+git push origin master
+```
+
+---
+
+## Server 端部署
+
+### 一、部署 h5-client (前端)
+
+#### 步驟 1: 備份資料庫
+
+```bash
+cp ~/gamezoe/server/gamezoe.db ~/gamezoe/server/gamezoe.db.bak.$(date +%Y%m%d%H%M%S)
+```
+
+#### 步驟 2: 拉取最新代碼
+
+```bash
+cd ~/gamezoe && git fetch origin && git reset --hard origin/master
+```
+
+#### 步驟 3: 更新 GameZoe 資料庫
+
+```bash
+sqlite3 ~/gamezoe/server/gamezoe.db "UPDATE games SET gameUrl = '/games/huohua-qipai/', thumbnailUrl = '/games/huohua-qipai/thumbnail.jpg', coverUrl = '/games/huohua-qipai/thumbnail.jpg' WHERE id = 'huohua-qipai';"
+```
+
+#### 步驟 4: 重啟 GameZoe 服務
+
+```bash
+pm2 restart all
+```
+
+#### 步驟 5: 驗證前端
+
+```bash
+curl -I https://gamezoe.com/games/huohua-qipai/
+# 預期: HTTP/1.1 200 OK
+```
+
+#### 一鍵部署前端 (含備份)
+
+```bash
+cp ~/gamezoe/server/gamezoe.db ~/gamezoe/server/gamezoe.db.bak.$(date +%Y%m%d%H%M%S) && cd ~/gamezoe && git fetch origin && git reset --hard origin/master && sqlite3 server/gamezoe.db "UPDATE games SET gameUrl = '/games/huohua-qipai/', thumbnailUrl = '/games/huohua-qipai/thumbnail.jpg', coverUrl = '/games/huohua-qipai/thumbnail.jpg' WHERE id = 'huohua-qipai';" && pm2 restart all
+```
+
+---
+
+### 二、部署 h5-server (遊戲伺服器)
+
+#### 步驟 1: 解壓 h5-server
+
+```bash
+mkdir -p ~/h5-server
+tar -xzf ~/gamezoe/games/egret-H5-qipai-game-main/h5-server/game-server/target/game-server-malai-h5-1.0.0-assembly.tar.gz -C ~/h5-server
+```
+
+#### 步驟 2: 建立 MySQL 用戶
+
+```bash
+sudo mysql -e "
+CREATE USER IF NOT EXISTS 'gameserver'@'localhost' IDENTIFIED BY 'bosan204';
+GRANT ALL PRIVILEGES ON ma_lai_h5_game_data.* TO 'gameserver'@'localhost';
+GRANT ALL PRIVILEGES ON ma_lai_h5_game_dic.* TO 'gameserver'@'localhost';
+GRANT ALL PRIVILEGES ON ma_lai_h5_game_log.* TO 'gameserver'@'localhost';
+GRANT ALL PRIVILEGES ON ma_lai_h5_web_manage.* TO 'gameserver'@'localhost';
+FLUSH PRIVILEGES;
+"
+```
+
+#### 步驟 3: 更新資料庫配置
+
+將 `root` 改為 `gameserver`：
+
+```bash
+sed -i 's/jdbc.user=root/jdbc.user=gameserver/g' ~/h5-server/game-server-malai-h5-1.0.0/conf/config/jdbc/*.properties
+sed -i 's/username=root/username=gameserver/g' ~/h5-server/game-server-malai-h5-1.0.0/conf/config/jdbc/*.properties
+```
+
+#### 步驟 4: 驗證資料庫連線
+
+```bash
+mysql -u gameserver -pbosan204 -e "SHOW DATABASES;" | grep ma_lai
+```
+
+#### 步驟 5: 啟動 h5-server
+
+```bash
+cd ~/h5-server/game-server-malai-h5-1.0.0
+java -cp ".:conf:lib/*" com.idealighter.game.server.Launcher
+```
+
+#### 步驟 6: 使用 PM2 管理 (推薦)
+
+建立啟動腳本：
+
+```bash
+echo '#!/bin/bash
+cd ~/h5-server/game-server-malai-h5-1.0.0
+exec java -cp ".:conf:lib/*" com.idealighter.game.server.Launcher' > ~/start-h5-server.sh
+chmod +x ~/start-h5-server.sh
+```
+
+用 PM2 啟動：
+
+```bash
+pm2 start ~/start-h5-server.sh --name h5-game-server
+pm2 save
+```
+
+#### 步驟 7: 驗證 h5-server
+
+```bash
+ss -tlnp | grep 5014
+# 預期: LISTEN 0 ... *:5014
+```
+
+---
+
+### 三、部署 h5-admin (後台管理)
+
+```bash
+# 上傳 huohua-admin.jar 到伺服器後
+java -jar ~/h5-admin-app.jar &
+
+# 或用 PM2
+pm2 start "java -jar ~/h5-admin-app.jar" --name h5-admin
+pm2 save
+```
+
+訪問: `http://gamezoe.com:8090`
+
+---
+
 ## 連接埠配置
 
 ### 遊戲伺服器 (h5-server)
 
-| Port | 用途 |
-|------|------|
-| 4014 | TCP 連線 |
-| 5014 | WebSocket |
-| 6014 | HTTP API |
-| 7014 | Web HTTP |
-| 8014 | 第三方接口 |
+| Port | 用途 | 防火牆 |
+|------|------|--------|
+| 4014 | TCP 連線 | 需開放 |
+| 5014 | WebSocket | 需開放 |
+| 6014 | HTTP API | 可選 |
+| 7014 | Web HTTP | 可選 |
+| 8014 | 第三方接口 | 可選 |
 
 ### 後台管理 (h5-admin)
 
-| Port | 用途 |
-|------|------|
-| 8090 | HTTP (Spring Boot) |
+| Port | 用途 | 防火牆 |
+|------|------|--------|
+| 8090 | HTTP | 可選 |
+
+### 開放防火牆
+
+```bash
+sudo ufw allow 5014/tcp
+sudo ufw allow 4014/tcp
+```
+
+---
+
+## Nginx WebSocket 代理 (可選)
+
+如果要用 wss://gamezoe.com/ws 代替 wss://gamezoe.com:5014：
+
+```nginx
+location /ws {
+    proxy_pass http://127.0.0.1:5014;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_read_timeout 86400;
+}
+```
 
 ---
 
@@ -198,107 +333,7 @@ java -jar huohua-admin.jar
 
 ---
 
-## 部署到 GameZoe
-
-### 建置狀態 (2026/01/17)
-
-| 組件 | 狀態 | 說明 |
-|------|------|------|
-| h5-client | 已建置 | 發佈至 `games/huohua-qipai/` |
-| h5-server | 已建置 | 待部署到伺服器 |
-| h5-admin | 已建置 | 後台管理系統 |
-| MySQL | 已建置 | 4 個資料庫已初始化 |
-
-### 前端配置
-
-**檔案**: `h5-client/resource/config/global.json`
-
-```json
-{
-    "IsDebug": false,
-    "GoldMode": false,
-    "HttpSerever": "https://gamezoe.com",
-    "SocketUrl": "wss://gamezoe.com:5014/websocket",
-    "SocketServer": "gamezoe.com:5014/websocket",
-    "SocketPort": 5014
-}
-```
-
-### 前端建置
-
-```bash
-cd games/egret-H5-qipai-game-main/h5-client
-
-# 開發模式
-egret build
-
-# 發佈模式 (壓縮優化)
-egret publish
-
-# 複製到遊戲目錄
-cp -r bin-release/web/[timestamp]/* ../../../games/huohua-qipai/
-```
-
-### GameZoe 平台整合
-
-**遊戲入口**: `/games/huohua-qipai/`
-
----
-
-## Server 端部署流程
-
-### 步驟 1: 備份資料庫
-
-```bash
-cp ~/gamezoe/server/gamezoe.db ~/gamezoe/server/gamezoe.db.bak.$(date +%Y%m%d%H%M%S)
-```
-
-### 步驟 2: 拉取最新代碼
-
-```bash
-cd ~/gamezoe && git fetch origin && git reset --hard origin/master
-```
-
-### 步驟 3: 更新資料庫
-
-```bash
-sqlite3 ~/gamezoe/server/gamezoe.db "UPDATE games SET gameUrl = '/games/huohua-qipai/', thumbnailUrl = '/games/huohua-qipai/thumbnail.jpg', coverUrl = '/games/huohua-qipai/thumbnail.jpg' WHERE id = 'huohua-qipai';"
-```
-
-### 步驟 4: 重啟服務
-
-```bash
-pm2 restart all
-```
-
-### 步驟 5: 驗證
-
-```bash
-# 確認遊戲入口
-curl -I https://gamezoe.com/games/huohua-qipai/
-
-# 確認資料庫更新
-sqlite3 ~/gamezoe/server/gamezoe.db "SELECT id, title, gameUrl FROM games WHERE id = 'huohua-qipai';"
-```
-
-### 一鍵部署指令 (含備份)
-
-```bash
-cp ~/gamezoe/server/gamezoe.db ~/gamezoe/server/gamezoe.db.bak.$(date +%Y%m%d%H%M%S) && cd ~/gamezoe && git fetch origin && git reset --hard origin/master && sqlite3 server/gamezoe.db "UPDATE games SET gameUrl = '/games/huohua-qipai/', thumbnailUrl = '/games/huohua-qipai/thumbnail.jpg', coverUrl = '/games/huohua-qipai/thumbnail.jpg' WHERE id = 'huohua-qipai';" && pm2 restart all
-```
-
----
-
-## h5-server 遊戲伺服器部署
-
-遊戲伺服器需要獨立的 Java 運行環境：
-
-1. 上傳 `game-server-malai-h5-1.0.0-assembly.tar.gz` 到伺服器
-2. 解壓並配置資料庫連線
-3. 使用 PM2 或 systemd 管理進程
-4. 確保 Port 5014 開放 (WebSocket)
-
-### 點數轉換系統 (待實作)
+## 點數轉換系統 (待實作)
 
 | 設定 | 值 |
 |------|---|
@@ -322,10 +357,82 @@ cp ~/gamezoe/server/gamezoe.db ~/gamezoe/server/gamezoe.db.bak.$(date +%Y%m%d%H%
 
 ### Q: 遊戲連不上伺服器？
 
-**A**: 檢查：
-1. 遊戲伺服器是否已啟動
-2. WebSocket Port 5014 是否開放
+**A**: 依序檢查：
+1. h5-server 是否已啟動: `ss -tlnp | grep 5014`
+2. 防火牆是否開放: `sudo ufw status | grep 5014`
 3. 前端配置的伺服器地址是否正確
+
+### Q: MySQL 連線被拒絕 (Access denied)？
+
+**A**: Ubuntu MySQL root 預設用 socket 認證。解決方案：
+1. 建立 `gameserver` 用戶 (見上方步驟)
+2. 更新配置檔使用 `gameserver` 用戶
+
+### Q: h5-server 啟動後立即退出？
+
+**A**: 檢查日誌：
+```bash
+cat ~/h5-server/game-server-malai-h5-1.0.0/logs/*.log
+```
+常見原因：
+- MySQL 連線失敗
+- Port 已被佔用
+
+---
+
+## 檔案結構
+
+### 伺服器端
+
+```
+~/
+├── gamezoe/                           # GameZoe 主專案
+│   └── games/
+│       ├── huohua-qipai/              # h5-client 前端 (已部署)
+│       └── egret-H5-qipai-game-main/  # 源碼 + 建置包
+│           └── h5-server/game-server/target/
+│               └── game-server-malai-h5-1.0.0-assembly.tar.gz
+├── h5-server/                         # h5-server 解壓後
+│   └── game-server-malai-h5-1.0.0/
+│       ├── conf/config/jdbc/          # 資料庫配置
+│       └── lib/                       # Java 依賴
+└── h5-admin-app.jar                   # 後台管理
+```
+
+### 本機端
+
+```
+E:\steam\gamezoe\games\egret-H5-qipai-game-main\
+├── h5-client/                   # 前端源碼
+│   ├── resource/config/global.json  # WebSocket 配置
+│   └── bin-release/             # 發佈輸出
+├── h5-server/                   # 伺服器源碼
+│   └── game-server/target/      # 建置輸出
+└── h5-admin/                    # 後台源碼
+```
+
+---
+
+## 完整部署流程摘要
+
+```
+本機:
+1. 修改 h5-client/resource/config/global.json → gamezoe.com:5014
+2. egret build && egret publish
+3. cp bin-release/web/[ts]/* games/huohua-qipai/
+4. git add + commit + push
+
+Server:
+5. git pull
+6. sqlite3 更新 games 表
+7. pm2 restart all (前端完成)
+
+8. tar -xzf h5-server 建置包
+9. sudo mysql 建立 gameserver 用戶
+10. sed 更新 jdbc 配置
+11. java 或 pm2 啟動 h5-server
+12. ufw 開放 5014 port
+```
 
 ---
 
@@ -333,8 +440,8 @@ cp ~/gamezoe/server/gamezoe.db ~/gamezoe/server/gamezoe.db.bak.$(date +%Y%m%d%H%
 
 | 檔案 | 說明 |
 |------|------|
-| `build_server.bat` | 編譯遊戲伺服器 |
-| `build_admin.bat` | 編譯後台管理 |
-| `start_game_server.bat` | 啟動遊戲伺服器 |
-| `start_h5_admin.bat` | 啟動後台管理 |
+| `build_server.bat` | 本機編譯遊戲伺服器 |
+| `build_admin.bat` | 本機編譯後台管理 |
+| `start_game_server.bat` | 本機啟動遊戲伺服器 |
+| `start_h5_admin.bat` | 本機啟動後台管理 |
 | `test001_mysql_data.sql` | 資料庫初始化腳本 |
