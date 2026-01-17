@@ -1183,8 +1183,8 @@ ports.forEach(port => {
                     }
                     if (existingFishList.length > 0) {
                         console.log(`[SYNC] Sending ${existingFishList.length} existing fish to new user ${userId}`);
-                        // [FORMAT FIX] Use same format as spawn: { detail: fishList }
-                        socket.emit('build_fish_reply', { detail: existingFishList });
+                        // Send array directly (client expects array format)
+                        socket.emit('build_fish_reply', existingFishList);
                     }
 
                 }, 500);
@@ -1999,7 +1999,8 @@ ports.forEach(port => {
             if (fishList.length > 0) {
                 // [CROSS-INSTANCE FIX] Use globalBroadcastToRoom instead of io.in()
                 // io.in() only works within single instance, causing desync in multi-port setup
-                const sentCount = globalBroadcastToRoom(roomId, 'build_fish_reply', { detail: fishList });
+                // Send array directly (client expects array format)
+                const sentCount = globalBroadcastToRoom(roomId, 'build_fish_reply', fishList);
                 // console.log(`[SPAWN] Room ${roomId} fish broadcast to ${sentCount} sockets`);
             }
         }
