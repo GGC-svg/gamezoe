@@ -107,6 +107,11 @@ export const translateBatch = async (
     2. VOCABULARY UNIFICATION: Do not use synonyms for the same concept. (e.g. Choose "Схватка" OR "Стычка", stay consistent).
     3. NUMERICAL FORMAT: Preserve numerical notation (Arabic vs Roman vs Word) as per source.
 
+    [BATCH CONSISTENCY PROTOCOL - STRICT]
+    1. SCAN THE ENTIRE BATCH before translating. If multiple rows share a structure (e.g. "Stage 1", "Stage 2", "Floor 3"), you MUST use the IDENTICAL vocabulary for the common parts.
+    2. DO NOT switch synonyms for variety. For UI lists, consistency > creativity. (e.g. Do NOT mix "Piso" and "Andar" for "Floor" in the same list. Do NOT alternate between "階" and "層".)
+    3. Pick ONE term and use it consistently throughout the entire batch.
+
     [NUMERICAL CONCORD PROTOCOL]
     - When a noun follows a number (e.g. "5 stars"), YOU MUST apply correct declension/pluralization for the target language.
     - UNIVERSAL SYNTAX RULES (Apply for ${targetLangName}):
@@ -217,6 +222,7 @@ export const translateBatch = async (
           contents: `LOCALIZATION TASK: ${JSON.stringify(inputList)}\n\nGLOSSARY:\n${glossaryLines}`,
           config: {
             systemInstruction: systemInstruction,
+            temperature: 0.3, // 降低溫度以減少隨機性，提高一致性
             responseMimeType: "application/json",
             responseSchema: {
               type: Type.OBJECT,
@@ -341,6 +347,7 @@ export const generateGlossarySuggestions = async (
           contents: prompt,
           config: {
             systemInstruction: systemPrompt,
+            temperature: 0.3, // 降低溫度以提高術語提取一致性
             responseMimeType: "application/json",
             responseSchema: {
               type: Type.ARRAY,
