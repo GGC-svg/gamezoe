@@ -205,31 +205,45 @@ app.post('/api/ai/generate', async (req, res) => {
     const checkPayment = () => {
         return new Promise((resolve) => {
             try {
+                // 先檢查是否為管理員
                 db.get(
-                    `SELECT
-                        (SELECT COUNT(*) FROM service_orders WHERE user_id = ? AND service_type = 'universalloc-ai' AND status IN ('fulfilled', 'completed')) as fulfilled_orders,
-                        (SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = 'universalloc-ai') as game_balance
-                    `,
-                    [userId, userId],
-                    (err, row) => {
-                        if (err) {
-                            console.error('[AI API] Payment check error:', err.message);
-                            // If table doesn't exist or query fails, allow access temporarily
+                    `SELECT role FROM users WHERE id = ?`,
+                    [userId],
+                    (err, userRow) => {
+                        if (!err && userRow && userRow.role === 'admin') {
+                            console.log(`[AI API] Admin user ${userId} - bypassing payment check`);
                             resolve(true);
                             return;
                         }
-                        // Allow if has any fulfilled order OR has positive game balance
-                        // Also allow if row is null (tables don't exist yet)
-                        if (!row) {
-                            console.log('[AI API] Payment check: No data, allowing access');
-                            resolve(true);
-                            return;
-                        }
-                        const fulfilledOrders = row.fulfilled_orders || 0;
-                        const gameBalance = row.game_balance || 0;
-                        const hasPaid = fulfilledOrders > 0 || gameBalance > 0;
-                        console.log(`[AI API] Payment check for ${userId}: fulfilled=${fulfilledOrders}, balance=${gameBalance}, hasPaid=${hasPaid}`);
-                        resolve(hasPaid);
+
+                        // 非管理員，檢查付款狀態
+                        db.get(
+                            `SELECT
+                                (SELECT COUNT(*) FROM service_orders WHERE user_id = ? AND service_type = 'universalloc-ai' AND status IN ('fulfilled', 'completed')) as fulfilled_orders,
+                                (SELECT balance FROM user_game_balances WHERE user_id = ? AND game_id = 'universalloc-ai') as game_balance
+                            `,
+                            [userId, userId],
+                            (err, row) => {
+                                if (err) {
+                                    console.error('[AI API] Payment check error:', err.message);
+                                    // If table doesn't exist or query fails, allow access temporarily
+                                    resolve(true);
+                                    return;
+                                }
+                                // Allow if has any fulfilled order OR has positive game balance
+                                // Also allow if row is null (tables don't exist yet)
+                                if (!row) {
+                                    console.log('[AI API] Payment check: No data, allowing access');
+                                    resolve(true);
+                                    return;
+                                }
+                                const fulfilledOrders = row.fulfilled_orders || 0;
+                                const gameBalance = row.game_balance || 0;
+                                const hasPaid = fulfilledOrders > 0 || gameBalance > 0;
+                                console.log(`[AI API] Payment check for ${userId}: fulfilled=${fulfilledOrders}, balance=${gameBalance}, hasPaid=${hasPaid}`);
+                                resolve(hasPaid);
+                            }
+                        );
                     }
                 );
             } catch (e) {
