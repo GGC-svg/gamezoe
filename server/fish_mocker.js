@@ -123,6 +123,29 @@ const ports = [4000, 9000, 4002];
 const ioInstances = []; // Global store for all IO instances
 
 // -------------------------------------------------------------------------
+// GLOBAL BROADCAST FUNCTION (Cross-Instance)
+// -------------------------------------------------------------------------
+// This function broadcasts to all sockets in a room across ALL io instances
+// Must be used instead of io.in('room_').emit() which only works within single instance
+function globalBroadcastToRoom(roomId, eventName, data, excludeSocketId = null) {
+    const roomIdStr = String(roomId);
+    let sentCount = 0;
+    ioInstances.forEach(serverIO => {
+        const socketsMap = serverIO.sockets?.sockets;
+        if (socketsMap) {
+            socketsMap.forEach((s) => {
+                if (String(s.currentRoomId) === roomIdStr) {
+                    if (excludeSocketId && s.id === excludeSocketId) return;
+                    s.emit(eventName, data);
+                    sentCount++;
+                }
+            });
+        }
+    });
+    return sentCount;
+}
+
+// -------------------------------------------------------------------------
 // GLOBAL ROOM MANAGER (Initialized after forEach)
 // -------------------------------------------------------------------------
 let roomManager = null;  // Will be initialized after all ioInstances are collected
@@ -1160,7 +1183,8 @@ ports.forEach(port => {
                     }
                     if (existingFishList.length > 0) {
                         console.log(`[SYNC] Sending ${existingFishList.length} existing fish to new user ${userId}`);
-                        socket.emit('build_fish_reply', existingFishList);
+                        // [FORMAT FIX] Use same format as spawn: { detail: fishList }
+                        socket.emit('build_fish_reply', { detail: existingFishList });
                     }
 
                 }, 500);
@@ -1973,16 +1997,10 @@ ports.forEach(port => {
             }
 
             if (fishList.length > 0) {
-                // [DIAGNOSTIC] Only log if abnormal socket count
-                io.in('room_' + roomId).fetchSockets().then(sockets => {
-                    if (sockets.length > 4) {
-                        console.warn(`[BROADCAST_WARN] ⚠️ Room ${roomId} has ${sockets.length} sockets! (Max 4). Fish: ${fishList.length}`);
-                        console.warn(`[BROADCAST_WARN] Socket IDs:`, sockets.map(s => s.id));
-                    }
-                });
-                io.in('room_' + roomId).emit('build_fish_reply', {
-                    detail: fishList
-                });
+                // [CROSS-INSTANCE FIX] Use globalBroadcastToRoom instead of io.in()
+                // io.in() only works within single instance, causing desync in multi-port setup
+                const sentCount = globalBroadcastToRoom(roomId, 'build_fish_reply', { detail: fishList });
+                // console.log(`[SPAWN] Room ${roomId} fish broadcast to ${sentCount} sockets`);
             }
         }
 

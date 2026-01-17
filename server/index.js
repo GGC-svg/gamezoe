@@ -593,7 +593,7 @@ app.post('/api/auth/google-verify', async (req, res) => {
                     }
 
                     // Initialize 500 balance for specific games in user_game_balances
-                    const initialGames = ['fish', 'my-fish-egret', 'slot-machine'];
+                    const initialGames = ['fish-master', 'my-fish-egret', 'slot-machine'];
                     const initialBalance = 500;
                     initialGames.forEach(gameId => {
                         db.run(
@@ -1023,7 +1023,7 @@ app.post('/api/bridge/deposit', verifyBridgeKey, (req, res) => {
                     }
 
                     // 3. Log Transaction
-                    const gameNames = { 'fish': 'Fish Master', 'slot-machine': 'Slot Machine' };
+                    const gameNames = { 'fish': 'Fish Master', 'fish-master': 'Fish Master', 'slot-machine': 'Slot Machine' };
                     const gameName = gameNames[targetGameId] || targetGameId;
                     const logDesc = `Deposit to ${gameName}`;
                     db.run("INSERT INTO wallet_transactions (user_id, amount, currency, type, description, game_id, created_at) VALUES (?, ?, 'gold', 'casino_deposit', ?, ?, datetime('now', '+8 hours'))",
@@ -3006,7 +3006,9 @@ app.post('/api/bridge/transaction/deposit', verifyBridgeKey, (req, res) => {
         // 2. Create Pending Record
         const gameNames = {
             'fish': 'Fish Master',
+            'fish-master': 'Fish Master',
             'slot': 'Slot Machine',
+            'slot-machine': 'Slot Machine',
             'g1': 'Star Voyage',
             'g2': 'Abyss Dungeon'
         };
@@ -3101,7 +3103,9 @@ app.post('/api/bridge/transaction/withdraw', (req, res) => {
             // Log / Update Log
             const gameNames = {
                 'fish': 'Fish Master',
+                'fish-master': 'Fish Master',
                 'slot': 'Slot Machine',
+                'slot-machine': 'Slot Machine',
                 'g1': 'Star Voyage',
                 'g2': 'Abyss Dungeon'
             };

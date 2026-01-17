@@ -240,7 +240,8 @@ export class RoomManager {
                 if (socketsMap) {
                     socketsMap.forEach((socket) => {
                         if (String(socket.currentRoomId) === roomIdStr) {
-                            socket.emit('build_fish_reply', fishList);
+                            // [FORMAT FIX] Use consistent format: { detail: fishList }
+                            socket.emit('build_fish_reply', { detail: fishList });
                             sentCount++;
                         }
                     });
