@@ -77,11 +77,32 @@ export const translateBatch = async (
   // const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const universalCompressionRules = `
-    [TIERED COMPRESSION PROTOCOL]
-    Goal: Meet "maxLen" without destroying meaning.
-    1. LEVEL 1: Simplify grammar, remove redundancy (articles, soft words).
-    2. LEVEL 2: Use standard abbreviations for ${targetLangName}.
-    3. LEVEL 3: Extreme compression, keywords only.
+    [UNIVERSAL TIERED COMPRESSION PROTOCOL]
+    Status: ACTIVE for ${targetLangName}.
+    Trigger: Apply strictly ONLY if "maxLen" is present and translation length > maxLen.
+    Goal: Meet "maxLen" constraint while retaining semantic core.
+
+    1. LEVEL 1 (Syntactic Reduction):
+       - Drop optional articles (a, an, the, le, la), pronouns, and copula verbs.
+       - CJK (Chinese/Japanese/Korean): Remove non-essential particles (e.g., 的, の) to save space.
+       - Romance/Slavic: Remove reflexive pronouns/infinitive verbs where context allows.
+
+    2. LEVEL 2 (Standard Abbreviation):
+       - Use standard UI abbreviations common in ${targetLangName} (e.g., Lvl., Exp., DMG, HP, Atk., Def.).
+       - Use symbols (&, /, +) instead of conjunctions (and, or, plus).
+       - Abbreviate time units (sec, min, hr) and directions (N, S, E, W).
+
+    3. LEVEL 3 (Extreme Compression - "Keyword Mode"):
+       - Drop non-critical adjectives/adverbs.
+       - Convert sentences to Command/Noun phrases (e.g., "Press Button to Start" -> "Start").
+       - Drop vowels (Latin scripts) ONLY if text remains readable (e.g., Rtrn, Cncl) and absolutely necessary.
+
+    4. GRACEFUL DEGRADATION (CRITICAL):
+       - If keeping the core meaning is IMPOSSIBLE within "maxLen" (e.g. maxLen=2 but word needs 4):
+       - DO NOT output garbage or cut off words halfway.
+       - Output the shortest POSSIBLY readable version.
+       - Set "isOverLimit" to TRUE.
+       - Priority: Readability > Strict Length limit in extreme cases.
   `;
 
   const inputList = items.map(item => ({

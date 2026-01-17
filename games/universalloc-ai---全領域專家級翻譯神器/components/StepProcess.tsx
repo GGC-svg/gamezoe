@@ -24,6 +24,7 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
   const [isProcessing, setIsProcessing] = useState(true);
   const [currentAction, setCurrentAction] = useState("Initializing Engine...");
   const [progress, setProgress] = useState(0);
+  const [auditCount, setAuditCount] = useState(0); // 即時追蹤需要審核的數量
 
   // Global State for Consistency
   const [globalVocab, setGlobalVocab] = useState<Record<string, string>>({});
@@ -84,6 +85,7 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
 
     let isCancelled = false;
     let currentCompleted = 0;
+    let totalIssues = 0; // 追蹤超標項目總數
 
     const process = async () => {
       const workingItems = internalItemsRef.current;
@@ -161,19 +163,26 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
               setLockedPatterns(prev => ({ ...prev, [langCode]: currentPattern }));
             }
 
-            // 3. Update Items
+            // 3. Update Items (包含 isOverLimit 標記)
+            let batchIssues = 0;
             res.translations.forEach((val, id) => {
               const idx = workingItems.findIndex(w => w.id === id);
               if (idx !== -1) {
+                const isOver = res.overLimitFlags?.get(id) || false;
                 workingItems[idx] = {
                   ...workingItems[idx],
                   status: 'completed',
-                  translations: { ...workingItems[idx].translations, [langCode]: val }
+                  translations: { ...workingItems[idx].translations, [langCode]: val },
+                  isOverLimit: { ...workingItems[idx].isOverLimit, [langCode]: isOver }
                 };
                 wordsAdded += countWords(val);
+                if (isOver) batchIssues++;
               }
             });
+            totalIssues += batchIssues;
           });
+
+          setAuditCount(totalIssues); // 更新 UI 計數器
 
           if (newVocabFound) {
             setGlobalVocab(prev => ({ ...prev, ...currentLangVocab }));
@@ -294,6 +303,19 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
                 </div>
               </div>
             )}
+
+            {/* Audit Count Indicator - 待審閱計數器 */}
+            <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border relative group cursor-help transition-all ${auditCount > 0 ? 'bg-red-900/30 border-red-500/50' : 'bg-black/40 border-white/5'}`}>
+              <i className={`fas fa-exclamation-triangle ${auditCount > 0 ? 'text-red-400 animate-pulse' : 'text-gray-500'}`}></i>
+              <div>
+                <div className="text-[8px] text-gaming-muted uppercase font-black">待審閱 (Audit)</div>
+                <div className={`text-sm font-black font-mono ${auditCount > 0 ? 'text-red-400' : 'text-gray-500'}`}>{auditCount}</div>
+              </div>
+              <div className="absolute top-full left-0 mt-2 w-64 bg-black/90 text-white text-xs p-4 rounded-xl border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                <p className="font-bold mb-2 text-red-400">長度超標項目</p>
+                <p className="text-gray-400">這些翻譯超過了參照長度限制，AI 已盡力壓縮但仍無法達標。匯出 Excel 後可篩選 [LENGTH_OVER] 欄位進行人工審閱。</p>
+              </div>
+            </div>
           </div>
 
           <div className="hidden xl:block text-right">
@@ -343,12 +365,21 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
                 <td className="p-4 text-sm font-medium text-white max-w-md">{item.original}</td>
                 <td className="p-4">
                   <div className="flex flex-wrap gap-2">
-                    {config.targetLangs.map(code => (
-                      <div key={code} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-mono transition-all ${item.translations[code] ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-black/30 border-white/5 text-gray-500'}`}>
-                        <span className="text-[9px] font-black uppercase opacity-50">{code}</span>
-                        <span className="truncate max-w-[200px]">{item.translations[code] || 'Processing...'}</span>
-                      </div>
-                    ))}
+                    {config.targetLangs.map(code => {
+                      const isOver = item.isOverLimit && item.isOverLimit[code];
+                      const hasTranslation = item.translations[code];
+                      return (
+                        <div key={code} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-mono transition-all ${
+                          isOver ? 'bg-red-500/20 border-red-500/50 text-red-300' :
+                          hasTranslation ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' :
+                          'bg-black/30 border-white/5 text-gray-500'
+                        }`}>
+                          <span className={`text-[9px] font-black uppercase ${isOver ? 'text-red-400' : 'opacity-50'}`}>{code}</span>
+                          {isOver && <i className="fas fa-exclamation-circle text-[10px] text-red-400"></i>}
+                          <span className="truncate max-w-[200px]">{item.translations[code] || 'Processing...'}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </td>
               </tr>
