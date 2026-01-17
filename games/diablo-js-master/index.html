@@ -2,6 +2,8 @@
 <html>
 
 <head>
+	<!-- GameZoe Save SDK -->
+	<script src="/games/gamezoe-save-sdk.js"></script>
 	<style>
 		html,
 		body,
@@ -29,10 +31,85 @@
 			margin: 0 auto;
 			width: 980px;
 		}
+
+		.save-controls {
+			position: fixed;
+			top: 10px;
+			right: 10px;
+			z-index: 1000;
+		}
+
+		.save-btn {
+			background: rgba(100, 65, 0, 0.9);
+			color: #ffd700;
+			border: 2px solid #8B4513;
+			padding: 8px 15px;
+			cursor: pointer;
+			font-family: inherit;
+			font-size: 12px;
+			border-radius: 3px;
+		}
+
+		.save-btn:hover {
+			background: rgba(139, 69, 19, 0.9);
+		}
+
+		.save-status {
+			position: fixed;
+			bottom: 10px;
+			right: 10px;
+			background: rgba(0, 0, 0, 0.8);
+			color: #4CAF50;
+			padding: 5px 15px;
+			border-radius: 5px;
+			font-size: 12px;
+			display: none;
+			z-index: 1000;
+		}
+
+		.load-prompt {
+			position: fixed;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			background: rgba(20, 10, 0, 0.95);
+			border: 3px solid #8B4513;
+			padding: 30px;
+			z-index: 2000;
+			text-align: center;
+			display: none;
+		}
+
+		.load-prompt h2 {
+			color: #ffd700;
+			margin: 0 0 20px 0;
+		}
+
+		.load-prompt p {
+			color: #d4a574;
+			margin-bottom: 20px;
+		}
+
+		.load-prompt button {
+			margin: 5px;
+			padding: 10px 25px;
+			font-size: 14px;
+		}
 	</style>
 </head>
 
 <body>
+	<div class="save-controls">
+		<button class="save-btn" onclick="saveGame()">💾 保存遊戲</button>
+	</div>
+	<div id="saveStatus" class="save-status">✓ 已保存</div>
+	<div id="loadPrompt" class="load-prompt">
+		<h2>⚔️ 發現存檔</h2>
+		<p id="saveInfo">生命值: -- | 位置: --</p>
+		<button class="save-btn" onclick="loadSavedGame()">繼續冒險</button>
+		<button class="save-btn" onclick="startNewGame()">重新開始</button>
+	</div>
+
 	<div class="page">
 		<canvas id="floor" width="980" height="661"></canvas>
 		<p>HTML5 Canvas 和 JavaScript 製作的等距極簡風格遊戲。</p>
@@ -40,6 +117,97 @@
 	</div>
 	<script>/*window.onerror=alert*/</script>
 	<script src="diablo.js"></script>
+	<script>
+	// ========== GameZoe 存檔系統 ==========
+	const GAME_ID = 'diablo-js';
+	let saveSystemReady = false;
+	let pendingSave = null;
+
+	async function initDiabloSave() {
+		await GameZoeSave.init(GAME_ID);
+		const cloudSave = await GameZoeSave.load();
+
+		if (cloudSave && cloudSave.hero) {
+			pendingSave = cloudSave;
+			// 顯示載入提示
+			document.getElementById('saveInfo').innerText =
+				`生命值: ${cloudSave.hero.health}/${cloudSave.hero.origin_health}`;
+			document.getElementById('loadPrompt').style.display = 'block';
+			console.log('[Diablo] 發現存檔:', cloudSave);
+		}
+		saveSystemReady = true;
+	}
+
+	function loadSavedGame() {
+		document.getElementById('loadPrompt').style.display = 'none';
+		if (pendingSave && typeof hero !== 'undefined') {
+			const save = pendingSave;
+			hero.x = save.hero.x || hero.x;
+			hero.y = save.hero.y || hero.y;
+			hero.health = save.hero.health || hero.health;
+			hero.currentDamage = save.hero.currentDamage || hero.currentDamage;
+			hero.criticalDamage = save.hero.criticalDamage || hero.criticalDamage;
+			// 復原物品欄
+			if (save.hero.belt && save.hero.belt.items) {
+				hero.belt.items = save.hero.belt.items;
+			}
+			console.log('[Diablo] 存檔已載入');
+		}
+		pendingSave = null;
+	}
+
+	function startNewGame() {
+		document.getElementById('loadPrompt').style.display = 'none';
+		GameZoeSave.delete();
+		pendingSave = null;
+		console.log('[Diablo] 開始新遊戲');
+	}
+
+	async function saveGame() {
+		if (!saveSystemReady || typeof hero === 'undefined') return;
+
+		const saveData = {
+			hero: {
+				x: hero.x,
+				y: hero.y,
+				health: hero.health,
+				origin_health: hero.origin_health,
+				currentDamage: hero.currentDamage,
+				criticalDamage: hero.criticalDamage,
+				belt: {
+					items: hero.belt ? hero.belt.items.map(item => item ? item.constructor.name : null) : [],
+					size: hero.belt ? hero.belt.size : 10
+				}
+			},
+			timestamp: Date.now()
+		};
+
+		await GameZoeSave.save(saveData);
+
+		// 顯示保存狀態
+		const status = document.getElementById('saveStatus');
+		status.style.display = 'block';
+		setTimeout(() => { status.style.display = 'none'; }, 1500);
+		console.log('[Diablo] 遊戲已保存:', saveData);
+	}
+
+	// 每 30 秒自動保存
+	setInterval(function() {
+		if (saveSystemReady && typeof hero !== 'undefined' && hero.health > 0) {
+			saveGame();
+		}
+	}, 30000);
+
+	// 頁面關閉時保存
+	window.addEventListener('beforeunload', function() {
+		if (typeof hero !== 'undefined' && hero.health > 0) {
+			saveGame();
+		}
+	});
+
+	// 初始化
+	initDiabloSave();
+	</script>
 </body>
 
 </html>

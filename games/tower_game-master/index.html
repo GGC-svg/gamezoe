@@ -6,6 +6,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,minimal-ui">
   <title>堆塔遊戲</title>
   <link rel="icon" type="image/x-icon" href="./assets/favicon.png">
+  <!-- GameZoe Save SDK -->
+  <script src="/games/gamezoe-save-sdk.js"></script>
   <style>
     * {
       margin: 0;
@@ -328,6 +330,35 @@
       text-shadow: -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 2px 0 #fff
     }
 
+    .high-score-display {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.6);
+      color: #FFD700;
+      padding: 8px 15px;
+      border-radius: 5px;
+      font-size: 14px;
+      z-index: 100;
+    }
+
+    .modal .high-score-info {
+      font-size: .18rem;
+      color: #FFD700;
+      margin-top: .1rem;
+    }
+
+    .modal .new-record {
+      color: #FF4500;
+      font-size: .2rem;
+      animation: pulse 0.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes pulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.1); }
+    }
+
     .modal .tip {
       font-size: .16rem;
       color: #9b724e
@@ -368,6 +399,8 @@
 </head>
 
 <body><canvas id="canvas" class="hide"></canvas>
+  <!-- 最高分顯示 -->
+  <div id="highScoreDisplay" class="high-score-display hide">最高分: <span id="highScoreValue">0</span></div>
   <div class="content">
     <div class="loading">
       <div class="main"><img src="./assets/main-loading.gif">
@@ -394,6 +427,8 @@
             <div class="modal-main">
               <div id="over-modal" class="hide js-modal-card"><img src="./assets/main-modal-over.png" class="over-img">
                 <div id="score" class="over-score font-wenxue"></div>
+                <div id="newRecordBadge" class="new-record hide">🏆 新紀錄!</div>
+                <div id="highScoreModal" class="high-score-info">最高分: <span id="highScoreModalValue">0</span></div>
                 <div id="over-zero" class="hide">
                   <div class="tip">
                     <p>再試一次!</p><img src="./assets/main-modal-again-b.png" class="over-button-b js-reload"><img
@@ -410,7 +445,46 @@
   </div>
   <script src="./dist/main.js"></script>
   <script src="./assets/zepto-1.1.6.min.js"></script>
-  <script>var domReady, loadFinish, canvasReady, loadError, gameStart, game, score, successCount
+  <script>
+    // ========== GameZoe 存檔系統 ==========
+    const GAME_ID = 'tower-game';
+    var highScore = 0;
+
+    async function initSaveSystem() {
+      await GameZoeSave.init(GAME_ID);
+      const savedData = await GameZoeSave.load();
+      if (savedData && savedData.highScore) {
+        highScore = savedData.highScore;
+        updateHighScoreDisplay();
+        console.log('[TowerGame] 載入最高分:', highScore);
+      }
+    }
+
+    function updateHighScoreDisplay() {
+      $('#highScoreValue').text(highScore);
+      $('#highScoreModalValue').text(highScore);
+    }
+
+    async function saveHighScore(newScore) {
+      if (newScore > highScore) {
+        highScore = newScore;
+        await GameZoeSave.save({
+          highScore: highScore,
+          timestamp: Date.now()
+        });
+        updateHighScoreDisplay();
+        $('#newRecordBadge').show();
+        console.log('[TowerGame] 新紀錄:', highScore);
+        return true; // 新紀錄
+      }
+      return false;
+    }
+
+    // 初始化存檔系統
+    initSaveSystem();
+
+    // ========== 原有遊戲邏輯 ==========
+    var domReady, loadFinish, canvasReady, loadError, gameStart, game, score, successCount
     // init window height and width
     var gameWidth = window.innerWidth
     var gameHeight = window.innerHeight
@@ -451,6 +525,11 @@
     }
 
     function overShowOver() {
+      // [存檔] 嘗試保存最高分
+      $('#newRecordBadge').hide(); // 先隱藏，如果是新紀錄會在 saveHighScore 中顯示
+      saveHighScore(score);
+      updateHighScoreDisplay();
+
       $('#modal').show()
       $('#over-modal').show()
       $('#over-zero').show()
@@ -506,6 +585,8 @@
     $('#start').on('click', function () {
       if (gameStart) return
       gameStart = true
+      // [存檔] 顯示最高分
+      $('#highScoreDisplay').show();
       setTimeout(function () {
         game.playBgm()
       })

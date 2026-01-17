@@ -3,6 +3,8 @@
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 	<meta id="viewport" name="viewport" content="width=540,user-scalable=no,target-densitydpi=high-dpi">
+	<!-- GameZoe Save SDK -->
+	<script src="/games/gamezoe-save-sdk.js"></script>
 	<script src="js/require.js"></script>
 	<title>一个都不能死</title>
 	<style type="text/css">
@@ -11,10 +13,90 @@
 		padding:0px;
 		overflow: hidden;
 	}
+	.cloud-sync-status {
+		position: fixed;
+		bottom: 10px;
+		right: 10px;
+		background: rgba(0,0,0,0.7);
+		color: #4CAF50;
+		padding: 5px 15px;
+		border-radius: 5px;
+		font-size: 12px;
+		display: none;
+		z-index: 9999;
+	}
 	</style>
+	<script>
+	// ========== GameZoe 雲端存檔同步 ==========
+	(async function() {
+		const GAME_ID = 'stickman-adventure';
+		const SAVE_PREFIX = 'NotDieAnyoneBestTime';
+
+		// 初始化 SDK
+		await GameZoeSave.init(GAME_ID);
+
+		// 從雲端載入存檔並同步到 localStorage
+		const cloudSave = await GameZoeSave.load();
+		if (cloudSave && cloudSave.bestTimes) {
+			console.log('[Stickman] 從雲端載入存檔:', cloudSave);
+			Object.keys(cloudSave.bestTimes).forEach(module => {
+				const localKey = SAVE_PREFIX + module;
+				const cloudValue = cloudSave.bestTimes[module];
+				const localValue = parseInt(localStorage.getItem(localKey) || '0');
+
+				// 使用較高的分數
+				if (cloudValue > localValue) {
+					localStorage.setItem(localKey, cloudValue.toString());
+					console.log('[Stickman] 雲端分數較高，同步到本地:', localKey, cloudValue);
+				}
+			});
+		}
+
+		// 監聽 localStorage 變化，自動同步到雲端
+		const originalSetItem = localStorage.setItem.bind(localStorage);
+		localStorage.setItem = function(key, value) {
+			originalSetItem(key, value);
+
+			// 如果是遊戲存檔 key，同步到雲端
+			if (key.startsWith(SAVE_PREFIX)) {
+				syncToCloud();
+			}
+		};
+
+		// 同步到雲端 (防抖)
+		let syncTimeout = null;
+		async function syncToCloud() {
+			if (syncTimeout) clearTimeout(syncTimeout);
+			syncTimeout = setTimeout(async () => {
+				const bestTimes = {};
+				for (let i = 0; i < localStorage.length; i++) {
+					const key = localStorage.key(i);
+					if (key && key.startsWith(SAVE_PREFIX)) {
+						const module = key.replace(SAVE_PREFIX, '');
+						bestTimes[module] = parseInt(localStorage.getItem(key) || '0');
+					}
+				}
+
+				await GameZoeSave.save({
+					bestTimes: bestTimes,
+					timestamp: Date.now()
+				});
+
+				// 顯示同步狀態
+				const statusEl = document.getElementById('cloudSyncStatus');
+				if (statusEl) {
+					statusEl.style.display = 'block';
+					setTimeout(() => { statusEl.style.display = 'none'; }, 1500);
+				}
+				console.log('[Stickman] 已同步到雲端:', bestTimes);
+			}, 1000);
+		}
+	})();
+	</script>
 	<script type="text/javascript" src="js/main.js"></script>
 </head>
 <body>
+    <div id="cloudSyncStatus" class="cloud-sync-status">☁️ 已同步到雲端</div>
     <div style="text-align:center;">
 		<canvas id="linkScreen" width="1366" height="621" style="width: 1366px; height: 621px;">
 			很遗憾，您的浏览器不支持HTML5，请使用支持HTML5的浏览器。

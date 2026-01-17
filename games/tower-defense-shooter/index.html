@@ -6,10 +6,134 @@
 <meta name="apple-touch-fullscreen" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
+<!-- GameZoe Save SDK -->
+<script src="/games/gamezoe-save-sdk.js"></script>
 <script type="text/javascript" src="js/game.js"></script>
+<script>
+// ========== GameZoe 雲端存檔同步 ==========
+const GAME_ID_SHOOTER = 'tower-defense-shooter';
+let saveSystemReady = false;
+let lastSavedState = null;
+
+async function initShooterSave() {
+	await GameZoeSave.init(GAME_ID_SHOOTER);
+	const cloudSave = await GameZoeSave.load();
+
+	if (cloudSave && cloudSave.UP) {
+		console.log('[Shooter] 從雲端載入存檔:', cloudSave);
+		// 存檔載入會在遊戲初始化後套用
+		window._shooterCloudSave = cloudSave;
+	}
+	saveSystemReady = true;
+}
+
+// 載入存檔到遊戲 (在遊戲 resetData 後呼叫)
+function applyCloudSave() {
+	if (window._shooterCloudSave && typeof UP !== 'undefined' && typeof Game !== 'undefined') {
+		const save = window._shooterCloudSave;
+		// 恢復升級
+		if (save.UP) {
+			UP.hp = save.UP.hp || 0;
+			UP.force = save.UP.force || 0;
+			UP.dexterity = save.UP.dexterity || 0;
+			UP.damage = save.UP.damage || 0;
+		}
+		// 恢復金錢和擊殺數
+		if (save.data && Game.data) {
+			Game.data.money = save.data.money || 0;
+			Game.data.points = save.data.points || 0;
+			if (save.data.killed) {
+				Game.data.killed = save.data.killed;
+			}
+		}
+		// 恢復波數
+		if (save.waveReached && Game.wave) {
+			// 從已達到的波數開始
+		}
+		console.log('[Shooter] 已套用雲端存檔');
+		window._shooterCloudSave = null; // 清除，避免重複套用
+	}
+}
+
+// 保存遊戲狀態
+async function saveShooterGame() {
+	if (!saveSystemReady || typeof UP === 'undefined' || typeof Game === 'undefined') return;
+
+	const saveData = {
+		UP: {
+			hp: UP.hp,
+			force: UP.force,
+			dexterity: UP.dexterity,
+			damage: UP.damage
+		},
+		data: Game.data ? {
+			money: Game.data.money,
+			points: Game.data.points,
+			killed: Game.data.killed
+		} : null,
+		waveReached: Game.wave ? Game.wave.n : 0,
+		timestamp: Date.now()
+	};
+
+	// 避免重複存檔
+	const stateStr = JSON.stringify(saveData);
+	if (stateStr === lastSavedState) return;
+	lastSavedState = stateStr;
+
+	await GameZoeSave.save(saveData);
+	showSyncStatus();
+	console.log('[Shooter] 遊戲已保存:', saveData);
+}
+
+function showSyncStatus() {
+	const status = document.getElementById('shooterSyncStatus');
+	if (status) {
+		status.style.display = 'block';
+		setTimeout(() => { status.style.display = 'none'; }, 1500);
+	}
+}
+
+// 監聽遊戲狀態變化
+setInterval(function() {
+	if (typeof Game !== 'undefined' && Game.state !== undefined) {
+		// 在升級畫面或遊戲結束時保存
+		if (Game.state === 3 || Game.state === 4) { // STATE_UPGRADE or STATE_LOST
+			saveShooterGame();
+		}
+		// 在遊戲開始時套用存檔
+		if (Game.state === 2 && window._shooterCloudSave) { // STATE_GAME
+			setTimeout(applyCloudSave, 500);
+		}
+	}
+}, 2000);
+
+// 頁面關閉時保存
+window.addEventListener('beforeunload', function() {
+	saveShooterGame();
+});
+
+// 初始化
+initShooterSave();
+</script>
+<style>
+.shooter-sync-status {
+	position: fixed;
+	bottom: 10px;
+	right: 10px;
+	background: rgba(0,0,0,0.7);
+	color: #4CAF50;
+	padding: 5px 15px;
+	border-radius: 5px;
+	font-size: 12px;
+	display: none;
+	z-index: 9999;
+}
+</style>
 <meta name="viewport" content="target-densitydpi=device-dpi, user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1">
 </head>
 <body style="margin: 0px; padding: 0px; background-color: rgb(0, 0, 0); overflow: hidden; background-position: initial initial; background-repeat: initial initial;">
+
+<div id="shooterSyncStatus" class="shooter-sync-status">☁️ 已同步</div>
 
 
 <div id="main_container">
