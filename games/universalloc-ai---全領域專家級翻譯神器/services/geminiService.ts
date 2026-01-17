@@ -91,12 +91,25 @@ export const translateBatch = async (
     maxLen: item.maxLen
   }));
 
+  // 根據模式動態切換核心指令
+  const modeInstruction = config.isProofreadMode
+    ? `Mission: Proofreading & Length Audit (LQA Mode).
+       Logic:
+       - Use "src" as the ground truth for meaning.
+       - CRITIQUE and IMPROVE "cur" (current translation) for tone, grammar, and consistency.
+       - If "cur" is empty, translate from "src".
+       - If final text length > maxLen, set isOverLimit to true.`
+    : `Mission: Creative Game Translation (Production Mode).
+       Logic:
+       - Translate "src" into immersive, high-quality ${targetLangName}.
+       - Adapt idioms and gaming terminology naturally.
+       - "cur" is provided as reference context only; ignore it if it looks like a placeholder.
+       - If final text length > maxLen, set isOverLimit to true.`;
+
   let systemInstruction = `
     Role: Elite Localization Expert for ${targetLangName}.
-    Mission: Proofreading & Length Audit.
-    Logic:
-    - Use "src" for meaning.
-    - If final text length > maxLen, set isOverLimit to true.
+    ${modeInstruction}
+
     - [DYNAMIC LEARNING]: For every batch, you MUST identify 1-3 key terms (nouns/verbs) you translated. Return them in "termDecisions".
       e.g. { "source": "Floor", "target": "Этаж" }
     - [PATTERN DETECTION]: Identify the dominant structural pattern (e.g. "Level #", "Item: %s", "I, II, III"). Return it in "detectedPattern".
