@@ -1179,26 +1179,12 @@ ports.forEach(port => {
                         }
                     });
 
-                    // [SYNC FIX] Send existing fish with serverTime for position calculation
-                    // Client should calculate: elapsed = serverTime - activeTime
-                    // Then position fish at the correct point along its trace
-                    const serverTime = Date.now();
-                    const existingFishList = [];
-                    if (room.aliveFish) {
-                        Object.values(room.aliveFish).forEach(f => {
-                            // Only send fish that haven't expired (120s lifetime)
-                            if (serverTime - f.activeTime < 120000) {
-                                existingFishList.push({
-                                    ...f,
-                                    serverTime: serverTime  // Client uses this to calculate elapsed time
-                                });
-                            }
-                        });
-                    }
-                    console.log(`[SYNC] Sending ${existingFishList.length} existing fish to new user ${userId} (serverTime: ${serverTime})`);
-                    if (existingFishList.length > 0) {
-                        socket.emit('build_fish_reply', existingFishList);
-                    }
+                    // [SYNC FIX] Do NOT send existing fish to new players
+                    // This ensures ALL players receive fish at the EXACT same time via live broadcasts
+                    // Sending existing fish causes desync because client doesn't calculate current position
+                    // New fish spawn every 2 seconds, so new player won't wait long
+                    const existingFishCount = room.aliveFish ? Object.keys(room.aliveFish).length : 0;
+                    console.log(`[SYNC] New user ${userId} joined. NOT sending ${existingFishCount} existing fish (sync via live broadcasts only)`);
 
                 }, 500);
 
