@@ -243,31 +243,30 @@ export class RoomManager {
         if (fishList.length > 0 && this.ioInstances) {
             const roomIdStr = String(roomId);
             let sentCount = 0;
-            let socketInfo = [];
+            const sentTo = [];
+
+            // Log ioInstances count for diagnostics
+            const ioCount = this.ioInstances.length;
+
             this.ioInstances.forEach((serverIO, ioIdx) => {
-                const socketsMap = serverIO.sockets.sockets;
-                if (socketsMap) {
-                    socketsMap.forEach((socket) => {
-                        const match = String(socket.currentRoomId) === roomIdStr;
-                        socketInfo.push({
-                            io: ioIdx,
-                            sid: socket.id.slice(-6),
-                            uid: socket.userId,
-                            room: socket.currentRoomId,
-                            match
-                        });
-                        if (match) {
-                            // Send fishList directly (client expects array format)
-                            socket.emit('build_fish_reply', fishList);
-                            sentCount++;
-                        }
-                    });
+                const socketsMap = serverIO.sockets?.sockets;
+                if (!socketsMap) {
+                    console.warn(`[SPAWN_WARN] ioInstances[${ioIdx}] has no sockets map!`);
+                    return;
                 }
+
+                socketsMap.forEach((socket) => {
+                    if (String(socket.currentRoomId) === roomIdStr) {
+                        socket.emit('build_fish_reply', fishList);
+                        sentTo.push(`${socket.userId}@io${ioIdx}`);
+                        sentCount++;
+                    }
+                });
             });
-            console.log(`[SPAWN] Room ${roomId} broadcasted ${fishList.length} fish to ${sentCount}/${socketInfo.length} sockets (Type ${intervalType})`);
-            if (sentCount === 0 && socketInfo.length > 0) {
-                console.log(`[SPAWN_DEBUG] No match! Sockets:`, JSON.stringify(socketInfo));
-            }
+
+            // Log fish IDs for tracking
+            const fishIds = fishList.map(f => f.fishId).join(',');
+            console.log(`[SPAWN] Room ${roomId} | Fish:[${fishIds}] Kind:${fishList[0]?.fishKind} | Sent to ${sentCount} sockets (${ioCount} io instances): [${sentTo.join(', ')}]`);
         }
     }
 
