@@ -1177,31 +1177,12 @@ ports.forEach(port => {
                         }
                     });
 
-                    // [SYNC FIX] Only send RECENTLY spawned fish (< 10s old) to avoid position desync
-                    // Old fish would be at different positions on different clients
-                    // Players will get remaining fish via live spawn broadcasts
-                    const now = Date.now();
-                    const recentFishList = [];
-                    const oldFishCount = { recent: 0, old: 0 };
-                    if (room.aliveFish) {
-                        Object.values(room.aliveFish).forEach(f => {
-                            const age = now - f.activeTime;
-                            if (age < 10000) {  // Only fish < 10 seconds old
-                                // Add elapsedTime for client to calculate current position
-                                recentFishList.push({
-                                    ...f,
-                                    elapsedTime: age  // Time since spawn in ms
-                                });
-                                oldFishCount.recent++;
-                            } else {
-                                oldFishCount.old++;
-                            }
-                        });
-                    }
-                    console.log(`[SYNC] Fish for new user ${userId}: ${oldFishCount.recent} recent, ${oldFishCount.old} old (skipped)`);
-                    if (recentFishList.length > 0) {
-                        socket.emit('build_fish_reply', recentFishList);
-                    }
+                    // [SYNC FIX] Do NOT send existing fish to new players
+                    // This ensures all players see fish at the SAME position via live broadcasts
+                    // Spawn happens every 2s (small fish), so new player won't wait long
+                    const existingFishCount = room.aliveFish ? Object.keys(room.aliveFish).length : 0;
+                    console.log(`[SYNC] New user ${userId} joined. Skipping ${existingFishCount} existing fish (will sync via live broadcasts)`);
+                    // Fish will arrive via RoomManager spawn broadcasts within 2 seconds
 
                 }, 500);
 
