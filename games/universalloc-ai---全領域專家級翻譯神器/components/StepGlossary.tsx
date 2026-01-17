@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { TranslationConfig, GlossaryTerm, SUPPORTED_LANGUAGES, UILang } from '../types';
 import { generateGlossarySuggestions } from '../services/geminiService';
@@ -19,8 +19,10 @@ export const StepGlossary: React.FC<StepGlossaryProps> = ({ config, allTexts, on
   const [generationStatus, setGenerationStatus] = useState("");
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Debug: 追蹤 isPremiumUnlocked
-  console.log('[StepGlossary] isPremiumUnlocked prop:', isPremiumUnlocked, '| config.isPremiumUnlocked:', config.isPremiumUnlocked);
+  // Debug: 追蹤 isPremiumUnlocked (使用 useEffect 避免被 tree-shaking)
+  useEffect(() => {
+    console.log('[GLOSSARY_DEBUG] isPremiumUnlocked prop:', isPremiumUnlocked, '| config.isPremiumUnlocked:', config.isPremiumUnlocked);
+  }, [isPremiumUnlocked, config.isPremiumUnlocked]);
 
   // 匯出術語庫為 Excel
   const handleExport = () => {
