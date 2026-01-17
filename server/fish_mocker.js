@@ -813,10 +813,17 @@ ports.forEach(port => {
         const broadcastToRoom = (roomId, eventName, data, excludeSocketId = null) => {
             const roomIdStr = String(roomId);
             let sentCount = 0;
-            ioInstances.forEach(serverIO => {
+            let socketDetails = [];
+            ioInstances.forEach((serverIO, ioIndex) => {
                 const socketsMap = serverIO.sockets.sockets;
                 if (socketsMap) {
                     socketsMap.forEach((s) => {
+                        socketDetails.push({
+                            ioIndex,
+                            socketId: s.id,
+                            userId: s.userId,
+                            currentRoomId: s.currentRoomId
+                        });
                         if (String(s.currentRoomId) === roomIdStr) {
                             if (excludeSocketId && s.id === excludeSocketId) return; // Skip sender
                             s.emit(eventName, data);
@@ -825,7 +832,7 @@ ports.forEach(port => {
                     });
                 }
             });
-            // console.log(`[BROADCAST] ${eventName} to room ${roomId}: ${sentCount} sockets`);
+            console.log(`[BROADCAST] ${eventName} to room ${roomId}: ${sentCount} sockets sent. All sockets:`, JSON.stringify(socketDetails));
             return sentCount;
         };
 
@@ -1170,21 +1177,30 @@ ports.forEach(port => {
                         }
                     });
 
-                    // [SYNC FIX] Send existing fish to the new user!
-                    // Otherwise client generates random fish or sees nothing while server has different fish.
-                    const existingFishList = [];
+                    // [SYNC FIX] Only send RECENTLY spawned fish (< 10s old) to avoid position desync
+                    // Old fish would be at different positions on different clients
+                    // Players will get remaining fish via live spawn broadcasts
+                    const now = Date.now();
+                    const recentFishList = [];
+                    const oldFishCount = { recent: 0, old: 0 };
                     if (room.aliveFish) {
                         Object.values(room.aliveFish).forEach(f => {
-                            // Must verify if fish is still valid/active
-                            if (Date.now() - f.activeTime < 120000) {
-                                existingFishList.push(f);
+                            const age = now - f.activeTime;
+                            if (age < 10000) {  // Only fish < 10 seconds old
+                                // Add elapsedTime for client to calculate current position
+                                recentFishList.push({
+                                    ...f,
+                                    elapsedTime: age  // Time since spawn in ms
+                                });
+                                oldFishCount.recent++;
+                            } else {
+                                oldFishCount.old++;
                             }
                         });
                     }
-                    if (existingFishList.length > 0) {
-                        console.log(`[SYNC] Sending ${existingFishList.length} existing fish to new user ${userId}`);
-                        // Send array directly (client expects array format)
-                        socket.emit('build_fish_reply', existingFishList);
+                    console.log(`[SYNC] Fish for new user ${userId}: ${oldFishCount.recent} recent, ${oldFishCount.old} old (skipped)`);
+                    if (recentFishList.length > 0) {
+                        socket.emit('build_fish_reply', recentFishList);
                     }
 
                 }, 500);

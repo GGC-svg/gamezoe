@@ -84,16 +84,24 @@ export class RoomManager {
      * No grace period - prevents stale fish accumulation when user re-enters
      */
     checkAndDeleteEmptyRoom(roomId) {
+        console.log(`[ROOM_CHECK] checkAndDeleteEmptyRoom called for room ${roomId}`);
         const room = this.getRoom(roomId);
-        if (!room) return;
+        if (!room) {
+            console.log(`[ROOM_CHECK] Room ${roomId} not found in RoomManager`);
+            return;
+        }
 
         const userCount = Object.keys(room.users).length;
+        const fishCount = Object.keys(room.aliveFish || {}).length;
+        console.log(`[ROOM_CHECK] Room ${roomId}: ${userCount} users, ${fishCount} fish`);
+
         if (userCount === 0) {
             // [FIX] Delete immediately like Go server does
             // Go: if len(client.Room.Users) == 0 { delete(RoomMgr.Rooms, ...) }
             // This prevents spawn timers from running and fish from accumulating
             console.log(`[ROOM] Room ${roomId} is empty, deleting immediately (Go-aligned behavior)`);
             this.deleteRoom(roomId);
+            console.log(`[ROOM] Room ${roomId} deleted. Total rooms now: ${this.rooms.size}`);
         }
     }
 
@@ -235,11 +243,20 @@ export class RoomManager {
         if (fishList.length > 0 && this.ioInstances) {
             const roomIdStr = String(roomId);
             let sentCount = 0;
-            this.ioInstances.forEach(serverIO => {
+            let socketInfo = [];
+            this.ioInstances.forEach((serverIO, ioIdx) => {
                 const socketsMap = serverIO.sockets.sockets;
                 if (socketsMap) {
                     socketsMap.forEach((socket) => {
-                        if (String(socket.currentRoomId) === roomIdStr) {
+                        const match = String(socket.currentRoomId) === roomIdStr;
+                        socketInfo.push({
+                            io: ioIdx,
+                            sid: socket.id.slice(-6),
+                            uid: socket.userId,
+                            room: socket.currentRoomId,
+                            match
+                        });
+                        if (match) {
                             // Send fishList directly (client expects array format)
                             socket.emit('build_fish_reply', fishList);
                             sentCount++;
@@ -247,13 +264,10 @@ export class RoomManager {
                     });
                 }
             });
-            // Old loop effectively removed by not including it in replacement but commenting out original lines
-            /*
-            const roomName = `room_${roomId}`;
-            this.ioInstances.forEach(serverIO => {
-            */
-            // [CLEANUP] Removed old broadcast code
-            console.log(`[SPAWN] Room ${roomId} DIRECTLY broadcasted ${fishList.length} fish (Type ${intervalType})`);
+            console.log(`[SPAWN] Room ${roomId} broadcasted ${fishList.length} fish to ${sentCount}/${socketInfo.length} sockets (Type ${intervalType})`);
+            if (sentCount === 0 && socketInfo.length > 0) {
+                console.log(`[SPAWN_DEBUG] No match! Sockets:`, JSON.stringify(socketInfo));
+            }
         }
     }
 
