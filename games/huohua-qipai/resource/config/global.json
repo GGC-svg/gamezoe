@@ -2,7 +2,7 @@
     "IsDebug":false,
     "GoldMode": false,
     "HttpSerever":"https://gamezoe.com",
-    "SocketUrl":"wss://gamezoe.com:5014/websocket",
-    "SocketServer":"gamezoe.com:5014/websocket",
-    "SocketPort": 5014
+    "SocketUrl":"wss://gamezoe.com/huohua-ws/websocket",
+    "SocketServer":"gamezoe.com/huohua-ws/websocket",
+    "SocketPort": 443
 }
