@@ -19,6 +19,9 @@ export const StepGlossary: React.FC<StepGlossaryProps> = ({ config, allTexts, on
   const [generationStatus, setGenerationStatus] = useState("");
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Debug: 追蹤 isPremiumUnlocked
+  console.log('[StepGlossary] isPremiumUnlocked prop:', isPremiumUnlocked, '| config.isPremiumUnlocked:', config.isPremiumUnlocked);
+
   // 匯出術語庫為 Excel
   const handleExport = () => {
     if (terms.length === 0) {

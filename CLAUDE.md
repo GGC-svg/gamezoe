@@ -344,5 +344,6 @@ node modify_file.js
 | 文檔 | 說明 |
 |------|------|
 | [SKILL_P99PAY.md](./SKILL_P99PAY.md) | P99PAY 金流整合 - ERQC 公式、TripleDES 加解密、回調處理 |
+| [SKILL_ADMIN_UNLOCK.md](./SKILL_ADMIN_UNLOCK.md) | Admin 自動解鎖付費功能 - 管理員免費使用付費服務的實作模式 |
 
 > 如需新增 SKILL 文檔，請使用 `SKILL_[主題].md` 命名格式。
