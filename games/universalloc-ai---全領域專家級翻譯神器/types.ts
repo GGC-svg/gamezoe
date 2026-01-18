@@ -39,6 +39,7 @@ export interface TranslationConfig {
   workMode?: 'translate' | 'proofread' | 'clean';  // 工作模式
   isProofreadMode?: boolean;
   isPremiumUnlocked?: boolean;
+  // Note: contentType 已改為自動檢測 (geminiService.ts detectContentType)
 
   // Sheet Selection
   availableSheets?: string[];                      // 可用工作表列表

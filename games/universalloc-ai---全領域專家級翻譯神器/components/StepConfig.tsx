@@ -110,6 +110,7 @@ export const StepConfig = forwardRef<StepConfigHandle, StepConfigProps>(({
       sourceColumn,
       contextColumn: contextColumn || undefined,
       lengthReferenceColumn: lengthReferenceColumn || undefined, // Pass to config
+      // contentType 已改為自動檢測，不需要手動設定
       gameContext,
       namingTemplate,
       columnMapping: {},

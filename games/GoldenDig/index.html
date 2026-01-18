@@ -42,7 +42,8 @@
 
 </head> 
  
-<body> 
+<body>
+	<div id="goldenSyncStatus" style="position:fixed;bottom:10px;right:10px;background:rgba(0,0,0,0.8);color:#4CAF50;padding:8px 15px;border-radius:5px;font-size:12px;display:none;z-index:9999;">☁️ 已同步</div>
 	<div id="fb-root"></div>
 	
 	<script>
@@ -129,37 +130,39 @@
         // GameZoe 雲端存檔整合 (Construct 2)
         (function() {
             const GAME_ID = 'golden-dig';
-            const C2_PREFIX = '__c2save_';
+            let lastSaveTime = 0;
 
-            // 收集所有 C2 存檔
-            function collectC2Saves() {
+            function showSync() {
+                const el = document.getElementById('goldenSyncStatus');
+                if (el) { el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 2000); }
+            }
+
+            // 收集所有可能的遊戲存檔 (不限前綴)
+            function collectAllSaves() {
                 const saves = {};
                 for (let i = 0; i < localStorage.length; i++) {
                     const key = localStorage.key(i);
-                    if (key && key.startsWith(C2_PREFIX)) {
+                    if (key && !key.startsWith('gamezoe_')) {
                         saves[key] = localStorage.getItem(key);
                     }
                 }
+                console.log('[GoldenDig] 本地存檔:', Object.keys(saves));
                 return Object.keys(saves).length > 0 ? saves : null;
             }
 
-            // 恢復 C2 存檔
-            function restoreC2Saves(saves) {
+            function restoreSaves(saves) {
                 if (!saves) return;
-                for (const key in saves) {
-                    localStorage.setItem(key, saves[key]);
-                }
+                for (const key in saves) { localStorage.setItem(key, saves[key]); }
             }
 
             GameZoeSave.init(GAME_ID).then(async () => {
+                console.log('[GoldenDig] SDK初始化, 登入:', GameZoeSave.isUserLoggedIn());
                 if (GameZoeSave.isUserLoggedIn()) {
                     const cloudSave = await GameZoeSave.load();
-                    if (cloudSave) {
-                        const localSaves = collectC2Saves();
-                        if (!localSaves) {
-                            restoreC2Saves(cloudSave);
-                            console.log('[GoldenDig] 已從雲端恢復存檔');
-                        }
+                    if (cloudSave && Object.keys(cloudSave).length > 0) {
+                        console.log('[GoldenDig] 載入雲端存檔:', Object.keys(cloudSave));
+                        restoreSaves(cloudSave);
+                        showSync();
                     }
                 }
             });
@@ -168,11 +171,14 @@
             const originalSetItem = localStorage.setItem.bind(localStorage);
             localStorage.setItem = function(key, value) {
                 originalSetItem(key, value);
-                if (key.startsWith(C2_PREFIX) && GameZoeSave.isUserLoggedIn()) {
-                    const allSaves = collectC2Saves();
-                    if (allSaves) {
-                        GameZoeSave.save(allSaves);
-                    }
+                console.log('[GoldenDig] localStorage:', key);
+                if (key.startsWith('gamezoe_')) return;
+                const now = Date.now();
+                if (now - lastSaveTime < 3000) return;
+                if (GameZoeSave.isUserLoggedIn()) {
+                    lastSaveTime = now;
+                    const allSaves = collectAllSaves();
+                    if (allSaves) { GameZoeSave.save(allSaves); showSync(); console.log('[GoldenDig] 雲端同步'); }
                 }
             };
         })();

@@ -131,9 +131,17 @@ export const translateBatch = async (
     Role: Elite Localization Expert for ${targetLangName}.
     ${modeInstruction}
 
-    - [DYNAMIC LEARNING]: For every batch, you MUST identify 1-3 key terms (nouns/verbs) you translated. Return them in "termDecisions".
-      e.g. { "source": "Floor", "target": "Этаж" }
+    - [DYNAMIC LEARNING - CRITICAL]: For EVERY batch, you MUST extract 3-8 key terms (nouns, verbs, recurring UI labels). Return ALL of them in "termDecisions".
+      IMPORTANT: This is MANDATORY. Do NOT skip this step. Even if terms seem obvious, you MUST report them.
+      e.g. { "source": "Floor", "target": "Этаж" }, { "source": "Stage", "target": "Этап" }, { "source": "Level", "target": "Уровень" }
     - [PATTERN DETECTION]: Identify the dominant structural pattern (e.g. "Level #", "Item: %s", "I, II, III"). Return it in "detectedPattern".
+
+    [VOCABULARY EXTRACTION - ABSOLUTELY MANDATORY]
+    You MUST return "termDecisions" array with AT LEAST 3 entries for EVERY batch. Examples of what to extract:
+    - Nouns: Floor, Level, Stage, Room, Battle, Item, Skill, Enemy, Boss, Quest
+    - Verbs: Complete, Clear, Unlock, Obtain, Defeat, Collect
+    - UI Labels: Settings, Confirm, Cancel, Back, Next, Start
+    If you fail to return termDecisions, the translation consistency WILL break. This is CRITICAL.
     ${universalCompressionRules}
 
     [CONSISTENCY & STYLE PROTOCOL]
@@ -240,6 +248,60 @@ export const translateBatch = async (
     return targetTerm ? `"${g.term}" -> "${targetTerm}"` : null;
   }).filter(Boolean).join('\n');
 
+  // [AUTO-DETECT CONTENT TYPE] 自動檢測內容類型，動態調整 Temperature
+  const detectContentType = (texts: string[]): 'ui' | 'story' | 'mixed' => {
+    if (texts.length === 0) return 'mixed';
+
+    // 計算特徵
+    const avgLength = texts.reduce((sum, t) => sum + t.length, 0) / texts.length;
+
+    // UI 特徵：變數佔位符
+    const variablePattern = /%[sd@]|\{[0-9]+\}|\{\{[^}]+\}\}|<[^>]+>|\$[a-zA-Z_]+/;
+    const hasVariables = texts.filter(t => variablePattern.test(t)).length / texts.length;
+
+    // UI 特徵：數字列表 (Floor 1, Level 2, 第1層 等)
+    const numberPattern = /[0-9]+|[一二三四五六七八九十百千萬]+|[IVX]+$/;
+    const hasNumbers = texts.filter(t => numberPattern.test(t)).length / texts.length;
+
+    // Story 特徵：對話引號
+    const dialoguePattern = /[""「」『』《》【】""'']/;
+    const hasDialogue = texts.filter(t => dialoguePattern.test(t)).length / texts.length;
+
+    // Story 特徵：情感標點或完整句子
+    const emotionPattern = /[!?！？…。、，]/;
+    const hasEmotion = texts.filter(t => emotionPattern.test(t)).length / texts.length;
+
+    // 判斷邏輯
+    // UI: 短文本 + 高變數/數字比例
+    if (avgLength < 25 && (hasVariables > 0.3 || hasNumbers > 0.5)) {
+      return 'ui';
+    }
+    // Story: 長文本 + 對話/情感標點
+    if (avgLength > 50 && (hasDialogue > 0.2 || hasEmotion > 0.5)) {
+      return 'story';
+    }
+    // UI: 非常短的文本 (按鈕、標籤)
+    if (avgLength < 15) {
+      return 'ui';
+    }
+    // Story: 較長文本有情感
+    if (avgLength > 40 && hasEmotion > 0.3) {
+      return 'story';
+    }
+
+    return 'mixed';
+  };
+
+  // 從當前批次內容自動檢測類型
+  const batchTexts = items.map(item => item.original);
+  const detectedType = detectContentType(batchTexts);
+
+  // Temperature 對應表
+  const temperatureMap = { ui: 0.1, story: 0.4, mixed: 0.25 };
+  const temperature = temperatureMap[detectedType];
+
+  console.log(`[AutoDetect] Batch type: ${detectedType}, Temperature: ${temperature}, AvgLen: ${Math.round(batchTexts.reduce((s, t) => s + t.length, 0) / batchTexts.length)}`);
+
   try {
     const response = await callWithRetry(async () => {
       // Wait for user to be available (handles timing issues)
@@ -256,7 +318,7 @@ export const translateBatch = async (
           contents: `LOCALIZATION TASK: ${JSON.stringify(inputList)}\n\nGLOSSARY:\n${glossaryLines}`,
           config: {
             systemInstruction: systemInstruction,
-            temperature: 0.3, // 降低溫度以減少隨機性，提高一致性
+            temperature: temperature, // 動態溫度：ui=0.1, story=0.4, mixed=0.25
             responseMimeType: "application/json",
             responseSchema: {
               type: Type.OBJECT,
@@ -308,6 +370,13 @@ export const translateBatch = async (
       resultMap.set(String(t.id), String(t.translatedText || ""));
       flagsMap.set(String(t.id), !!t.isOverLimit);
     });
+
+    // Debug: Log raw termDecisions from AI
+    if (parsed.termDecisions && parsed.termDecisions.length > 0) {
+      console.log(`[TermDecisions] AI returned ${parsed.termDecisions.length} terms:`, parsed.termDecisions);
+    } else {
+      console.warn(`[TermDecisions] ⚠️ AI returned NO terms! Raw response:`, parsed.termDecisions);
+    }
 
     parsed.termDecisions?.forEach((d: any) => {
       if (d.source && d.target) newDecisions[d.source] = d.target;

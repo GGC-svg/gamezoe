@@ -131,10 +131,12 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
             );
 
             // 立即更新詞彙鏈和模式（在並行處理前）
-            if (res.termDecisions) {
+            if (res.termDecisions && Object.keys(res.termDecisions).length > 0) {
               Object.assign(currentLangVocab, res.termDecisions);
               setGlobalVocab(prev => ({ ...prev, ...res.termDecisions }));
-              console.log(`[Phase1] Locked ${Object.keys(res.termDecisions).length} terms for ${langCode}`);
+              console.log(`[Phase1] Locked ${Object.keys(res.termDecisions).length} terms for ${langCode}:`, res.termDecisions);
+            } else {
+              console.warn(`[Phase1] ⚠️ No termDecisions returned for ${langCode}! This may cause inconsistency.`);
             }
             if (!currentPattern && res.detectedPattern) {
               currentPattern = res.detectedPattern;
@@ -209,14 +211,16 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
           // Process Results & Update Global State
           let newVocabFound = false;
           let wordsAdded = 0;
+          let batchVocabCount = 0;
 
           results.forEach(result => {
             if (!result) return;
             const { res, batch } = result;
 
             // 1. Update Vocab Chain immediately
-            if (res.termDecisions) {
+            if (res.termDecisions && Object.keys(res.termDecisions).length > 0) {
               Object.assign(currentLangVocab, res.termDecisions);
+              batchVocabCount += Object.keys(res.termDecisions).length;
               newVocabFound = true;
             }
 
@@ -249,6 +253,7 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
 
           if (newVocabFound) {
             setGlobalVocab(prev => ({ ...prev, ...currentLangVocab }));
+            console.log(`[Phase2] Batch group ${Math.floor(i / CONCURRENT_REQUESTS) + 1}: +${batchVocabCount} terms, Total: ${Object.keys(currentLangVocab).length} for ${langCode}`);
           }
 
           addSessionUsage(wordsAdded);
@@ -276,6 +281,14 @@ export const StepProcess: React.FC<StepProcessProps> = ({ items: initialItems, c
       setVisibleItems(internalItemsRef.current.slice(0, 100)); // Show beginning on finish
       setCurrentAction("Mission Accomplished");
       setProgress(100);
+
+      // 輸出詞彙鎖定總結
+      console.log(`[Summary] ========================================`);
+      console.log(`[Summary] Total items processed: ${itemsToProc.length}`);
+      console.log(`[Summary] Total vocabulary locked: ${Object.keys(globalVocab).length} terms`);
+      console.log(`[Summary] Locked patterns:`, lockedPatterns);
+      console.log(`[Summary] Sample vocabulary:`, Object.entries(globalVocab).slice(0, 10));
+      console.log(`[Summary] ========================================`);
 
       // Auto-save result to server when translation completes
       if (orderId) {
