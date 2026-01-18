@@ -456,7 +456,7 @@ public class PlayerController {
       playerBo.setLoginTime(new java.util.Date());
       playerBo.setLoginCount(0);
       playerBo.setLocked(false);
-      playerBo.initGold(0);
+      playerBo.setGold(new java.util.concurrent.atomic.AtomicLong(0));
       playerBo.setType((byte) 1);
       playerBo.setTransferReward(0L);
       playerBo.setSuperId(0L);
@@ -472,7 +472,7 @@ public class PlayerController {
       playerService.updateById(playerBo);
     }
 
-    Result result = new Result(ErrorCode.SUCCESS);
+    Result result = new Result(ErrorCode.OK);
     // 檢查是否在線
     Player player = playerMgr.getPlayer(playerBo.getId());
 
