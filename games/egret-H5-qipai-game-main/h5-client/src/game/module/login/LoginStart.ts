@@ -157,29 +157,39 @@ class LoginStart {
 		App.Socket.connect();
 		App.MessageCenter.addListener(SocketConst.SOCKET_CONNECT, () => {
 			GameApp.HeartMgr.init();
-			console.log('[LoginStart] Socket connected, checking for existing session...');
+			console.log('[LoginStart] Socket connected, platform user:', platformUser.id);
 
-			// 檢查是否有舊的 session
+			// 平台用戶 code
+			const platformCode = "GZ_" + platformUser.id;
+
+			// 檢查是否有舊的 session，且是否匹配當前平台用戶
 			let reloginCode = egret.localStorage.getItem('reloginCode');
 			let reloginType = parseInt(egret.localStorage.getItem('reloginType'));
+			let storedPlatformUserId = egret.localStorage.getItem('platformUserId');
 
-			if (reloginCode && reloginType) {
-				// 有舊 session，嘗試重連
-				this.reLogin(reloginCode, reloginType);
-			} else {
-				// 無舊 session，使用平台用戶 ID 登入（綁定平台帳號與遊戲帳號）
-				console.log('[LoginStart] No existing session, platform login with userId:', platformUser.id);
-				LoginReq.send_loginByTourist((success, msg) => {
-					if (success) {
-						console.log('[LoginStart] Platform login success, userId:', platformUser.id);
-						GameApp.PlayerInfo.loginType = LoginType.Tourist;
-						egret.localStorage.setItem('reloginType', LoginType.Tourist + '');
-					} else {
-						console.error('[LoginStart] Tourist login failed');
-						App.ViewManager.open(ViewConst.Login);
-					}
-				}, this, platformUser.id);  // 傳入平台用戶 ID
+			// 如果舊的 platformUserId 與當前不匹配，清除舊 session
+			if (storedPlatformUserId && storedPlatformUserId !== platformUser.id) {
+				console.log('[LoginStart] Platform user changed, clearing old session. Old:', storedPlatformUserId, 'New:', platformUser.id);
+				egret.localStorage.removeItem('reloginCode');
+				egret.localStorage.removeItem('reloginType');
+				reloginCode = null;
+				reloginType = null;
 			}
+
+			// 平台用戶始終使用 GZ_ 帳號登入，不使用舊的 reloginCode
+			// 因為 reloginCode 可能是之前遊客登入的，與平台帳號不匹配
+			console.log('[LoginStart] Platform login with code:', platformCode);
+			LoginReq.send_loginByTourist((success, msg) => {
+				if (success) {
+					console.log('[LoginStart] Platform login success, userId:', platformUser.id);
+					GameApp.PlayerInfo.loginType = LoginType.Tourist;
+					egret.localStorage.setItem('reloginType', LoginType.Tourist + '');
+					egret.localStorage.setItem('platformUserId', platformUser.id);
+				} else {
+					console.error('[LoginStart] Tourist login failed');
+					App.ViewManager.open(ViewConst.Login);
+				}
+			}, this, platformUser.id);  // 傳入平台用戶 ID
 		}, this);
 
 		// 斷線重連監聽
