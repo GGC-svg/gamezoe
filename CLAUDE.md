@@ -17,12 +17,18 @@
 
 2. **Server 端 (用戶在 SSH 執行)**
    ```bash
+   cd ~/gamezoe && git pull origin master && pm2 restart all
+   ```
+
+   **如果有衝突或需要強制同步：**
+   ```bash
    cd ~/gamezoe && git fetch origin && git reset --hard origin/master && pm2 restart all
    ```
 
 ### 為什麼這樣做？
 - Server 有 PM2 託管，build 過程容易被中斷
 - 本機 build 完成後推送 dist 資料夾，Server 只需 pull 即可
+- 優先使用 `git pull`，避免意外覆蓋 Server 本地修改
 
 ---
 
@@ -52,7 +58,7 @@ npm run build && git add -f dist/ && git commit -m "Build: update" && git push o
 
 ### Server 更新
 ```bash
-cd ~/gamezoe && git fetch origin && git reset --hard origin/master && pm2 restart all
+cd ~/gamezoe && git pull origin master && pm2 restart all
 ```
 
 ---
@@ -242,9 +248,9 @@ WT45CYT8NJ7V8NVH, UF3JT8TFNNRC4KRF, NYGJPNVBLCS9SCFD, 1CWA4TR2YE9YX0T2
    git push origin master
    ```
 
-3. **Server：拉取並更新資料庫**
+3. **Server：拉取更新**
    ```bash
-   cd ~/gamezoe && git fetch origin && git reset --hard origin/master
+   cd ~/gamezoe && git pull origin master
    ```
 
 4. **Server：查詢遊戲 ID**
