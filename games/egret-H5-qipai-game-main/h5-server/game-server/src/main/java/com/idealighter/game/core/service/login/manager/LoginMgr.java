@@ -196,10 +196,16 @@ public class LoginMgr {
 
     // PlayerDomain playerDom = null;
     if (playerDom == null) {
-      code = TimeUtil.format("yyMMddHHmmss", TimeUtil.now())
-          + UUID.randomUUID().toString().replace("-", "");
-      String userName = code; // 游客的账号为code
-      String playerName = "游客" + touristIdSeed.incrementAndGet();
+      // 如果客戶端傳入了 GZ_ 開頭的 platformCode，保留它；否則生成新的 code
+      if (code == null || code.trim().length() == 0 || !code.startsWith("GZ_")) {
+        code = TimeUtil.format("yyMMddHHmmss", TimeUtil.now())
+            + UUID.randomUUID().toString().replace("-", "");
+      }
+      String userName = code; // 游客的账号为code (或平台 platformCode)
+      // 如果是平台用戶，使用更友好的暱稱
+      String playerName = code.startsWith("GZ_")
+          ? "玩家" + code.substring(code.length() - 8)
+          : "游客" + touristIdSeed.incrementAndGet();
       String sex = RandCodeUtil.randomBoolean() ? "女" : "男";
       // 必须设置PlayerDomain，PlayerDomain才是数据
       player.setPlayerBo(new PlayerBo());
