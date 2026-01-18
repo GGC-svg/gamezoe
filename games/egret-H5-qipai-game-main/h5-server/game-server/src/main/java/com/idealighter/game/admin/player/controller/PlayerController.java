@@ -442,30 +442,59 @@ public class PlayerController {
 
     PlayerBo playerBo = playerMgr.selectPlayer(code);
 
-    Result result = new Result(ErrorCode.USER_NOT_EXIST);
-    if (playerBo != null) {
-      // 檢查是否在線
-      Player player = playerMgr.getPlayer(playerBo.getId());
+    // 如果玩家不存在，自動創建 (平台用戶首次存入)
+    if (playerBo == null) {
+      playerBo = new PlayerBo();
+      playerBo.setUserName(code);
+      playerBo.setPlayerName("GZ_" + code.substring(Math.max(0, code.length() - 8)));
+      playerBo.setPassword("");
+      playerBo.setRegisterType((byte) 5); // H5 平台登入
+      playerBo.setIcon(1);
+      playerBo.setSex("男");
+      playerBo.setRegisterIp("platform");
+      playerBo.setRegisterTime(new java.util.Date());
+      playerBo.setLoginTime(new java.util.Date());
+      playerBo.setLoginCount(0);
+      playerBo.setLocked(false);
+      playerBo.initGold(0);
+      playerBo.setType((byte) 1);
+      playerBo.setTransferReward(0L);
+      playerBo.setSuperId(0L);
 
-      if (player != null) {
-        // 在線玩家
-        playerMgr.addGold(player, gold, LogReason.BACKEND_ADD_GOLD);
-        playerMgr.updatePlayer(player.playerBo());
-      } else {
-        // 離線玩家
-        playerMgr.addGold(playerBo, gold, LogReason.BACKEND_ADD_GOLD);
-        playerMgr.updatePlayer(playerBo);
+      int insertResult = playerService.insert(playerBo);
+      if (insertResult <= 0) {
+        Result result = new Result(ErrorCode.INTERNAL_SERVER_ERROR);
+        result.getMap().put("message", "Failed to create platform player");
+        return result;
       }
-
-      result.successMg();
-      result.getMap().put("playerId", playerBo.getId());
-      result.getMap().put("gold", playerBo.getGold().get());
-      result.getMap().put("message", "Successfully added " + gold + " gold");
-
-      // 記錄日誌
-      DbLogService.log(new BackendAddGoldLog(0, "GameZoe_Platform",
-          playerBo.getId(), playerBo.getSuperId(), playerBo.getPlayerName(), gold));
+      // 設置 superId 為玩家 ID
+      playerBo.setSuperId(playerBo.getId());
+      playerService.updateById(playerBo);
     }
+
+    Result result = new Result(ErrorCode.SUCCESS);
+    // 檢查是否在線
+    Player player = playerMgr.getPlayer(playerBo.getId());
+
+    if (player != null) {
+      // 在線玩家
+      playerMgr.addGold(player, gold, LogReason.BACKEND_ADD_GOLD);
+      playerMgr.updatePlayer(player.playerBo());
+    } else {
+      // 離線玩家
+      playerMgr.addGold(playerBo, gold, LogReason.BACKEND_ADD_GOLD);
+      playerMgr.updatePlayer(playerBo);
+    }
+
+    result.successMg();
+    result.getMap().put("playerId", playerBo.getId());
+    result.getMap().put("gold", playerBo.getGold().get());
+    result.getMap().put("message", "Successfully added " + gold + " gold");
+
+    // 記錄日誌
+    DbLogService.log(new BackendAddGoldLog(0, "GameZoe_Platform",
+        playerBo.getId(), playerBo.getSuperId(), playerBo.getPlayerName(), gold));
+
     return result;
   }
 
