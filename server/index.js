@@ -1263,15 +1263,17 @@ app.get('/api/game-balance/:userId/:gameId', async (req, res) => {
                     gameConfig.game_api_token
                 );
 
-                if (result.success) {
+                // h5-server returns { code: 200, map: { gold, safeGold, playerName, playerId }, msg }
+                if (result.code === 200 && result.map) {
+                    console.log(`[GameBalance] h5-server balance for ${platformCode}: gold=${result.map.gold}`);
                     res.json({
                         success: true,
                         user_id: userId,
                         game_id: gameId,
-                        balance: result.gold || 0,
-                        safeGold: result.safeGold || 0,
-                        playerName: result.playerName,
-                        playerId: result.playerId,
+                        balance: result.map.gold || 0,
+                        safeGold: result.map.safeGold || 0,
+                        playerName: result.map.playerName,
+                        playerId: result.map.playerId,
                         source: 'game_server',
                         total_deposited: 0,
                         total_consumed: 0,
@@ -1279,8 +1281,8 @@ app.get('/api/game-balance/:userId/:gameId', async (req, res) => {
                     });
                     return;
                 } else {
-                    // Player not found in game server - return 0 balance
-                    console.log(`[GameBalance] Player not found in h5-server for ${platformCode}`);
+                    // Player not found or error (code != 200) - return 0 balance
+                    console.log(`[GameBalance] Player not found in h5-server for ${platformCode}, code: ${result.code}, msg: ${result.msg}`);
                     res.json({
                         success: true,
                         user_id: userId,
@@ -1395,18 +1397,21 @@ app.post('/api/game-balance/deposit', async (req, res) => {
                     gameConfig.game_api_token
                 );
 
-                if (!apiResult.success) {
-                    // Player might not exist in game server yet
-                    if (apiResult.errorCode === 'USER_NOT_EXIST') {
+                // h5-server returns { code: 200, map: {...}, msg } on success
+                if (apiResult.code !== 200) {
+                    // Player might not exist or other error
+                    // h5-server returns code 501 for USER_NOT_EXIST
+                    if (apiResult.code === 501 || apiResult.msg === 'USER_NOT_EXIST') {
                         res.status(400).json({
                             error: "Player not registered in game yet. Please enter the game first.",
                             details: "玩家尚未在遊戲中註冊，請先進入遊戲"
                         });
                         return;
                     }
+                    console.error('[Deposit] h5-server error:', apiResult);
                     res.status(500).json({
                         error: "Failed to add gold in game server",
-                        details: apiResult
+                        details: apiResult.msg || apiResult
                     });
                     return;
                 }
@@ -1603,10 +1608,12 @@ app.post('/api/game-balance/withdraw', async (req, res) => {
                     gameConfig.game_api_token
                 );
 
-                if (!apiResult.success) {
+                // h5-server returns { code: 200, map: {...}, msg } on success
+                if (apiResult.code !== 200) {
+                    console.error('[Withdraw] h5-server error:', apiResult);
                     res.status(500).json({
                         error: "Failed to deduct gold from game server",
-                        details: apiResult
+                        details: apiResult.msg || apiResult
                     });
                     return;
                 }
