@@ -59,13 +59,33 @@
          */
         _getUserFromParent: function() {
             return new Promise((resolve) => {
+                // 方法0: 從 URL 參數讀取 (遊戲頁面會帶 userId)
+                try {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const urlUserId = urlParams.get('userId');
+                    if (urlUserId) {
+                        console.log('[GameZoeSave] Found userId in URL:', urlUserId);
+                        resolve({ id: urlUserId });
+                        return;
+                    }
+                } catch (e) {}
+
                 // 方法1: 檢查 window.gameZoeUser (由平台注入)
                 if (window.gameZoeUser && window.gameZoeUser.id) {
                     resolve(window.gameZoeUser);
                     return;
                 }
 
-                // 方法2: 透過 postMessage 向 parent 請求
+                // 方法2: 從 localStorage 讀取 (平台會存儲)
+                try {
+                    const stored = localStorage.getItem('gamezoe_user');
+                    if (stored) {
+                        resolve(JSON.parse(stored));
+                        return;
+                    }
+                } catch (e) {}
+
+                // 方法3: 透過 postMessage 向 parent 請求 (iframe)
                 if (window.parent !== window) {
                     const timeout = setTimeout(() => {
                         resolve(null);
@@ -82,14 +102,6 @@
                     window.addEventListener('message', handler);
                     window.parent.postMessage({ type: 'GAMEZOE_GET_USER' }, '*');
                 } else {
-                    // 方法3: 從 localStorage 讀取 (平台會存儲)
-                    try {
-                        const stored = localStorage.getItem('gamezoe_user');
-                        if (stored) {
-                            resolve(JSON.parse(stored));
-                            return;
-                        }
-                    } catch (e) {}
                     resolve(null);
                 }
             });
