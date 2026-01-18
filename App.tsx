@@ -121,12 +121,25 @@ function App() {
       (window as any).currentUser = userWithStringId;
       // Also expose via GameZoe namespace for consistency
       (window as any).GameZoe = { currentUser: userWithStringId };
+      // [GameZoeSave SDK] Set gameZoeUser for SDK detection
+      (window as any).gameZoeUser = userWithStringId;
+      // [GameZoeSave SDK] Store in localStorage for game pages to access
+      try {
+        localStorage.setItem('gamezoe_user', JSON.stringify(userWithStringId));
+      } catch (e) {
+        console.warn('[App] Failed to store user in localStorage:', e);
+      }
 
       console.log('[App] Exposed user to window, ID:', String(user.id), '(type: string)');
     } else if (window && !user) {
       // Clear when logged out
       (window as any).currentUser = null;
       (window as any).GameZoe = { currentUser: null };
+      (window as any).gameZoeUser = null;
+      // [GameZoeSave SDK] Clear localStorage
+      try {
+        localStorage.removeItem('gamezoe_user');
+      } catch (e) {}
     }
   }, [user]);
 
